@@ -42,8 +42,9 @@ export function Navigation() {
       case 'company':
         return [
           ...commonItems,
-          { href: '/mis-ofertas', label: 'Mis Ofertas', icon: Building },
-          { href: '/candidatos', label: 'Candidatos', icon: Users },
+          { href: '/empresa/ofertas', label: 'Mis Ofertas', icon: Building },
+          { href: '/empresa/aplicaciones', label: 'Aplicaciones', icon: Users },
+          { href: '/empresa/buscador-alumnos', label: 'Buscar Alumnos', icon: Search },
         ];
       case 'scenter':
         return [

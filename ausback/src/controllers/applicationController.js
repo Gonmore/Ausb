@@ -309,6 +309,68 @@ async function getOfferApplications(req, res) {
 
 /**
  * @swagger
+ * /api/applications/company:
+ *   get:
+ *     summary: Obtener todas las aplicaciones de las ofertas de una empresa
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de aplicaciones de la empresa
+ *       404:
+ *         description: Empresa no encontrada
+ *       500:
+ *         description: Error interno del servidor
+ */
+async function getCompanyApplications(req, res) {
+    const { userId } = req.user;
+
+    try {
+        // Buscar la empresa del usuario
+        const company = await Company.findOne({
+            where: { userId }
+        });
+
+        if (!company) {
+            return res.status(404).json({ mensaje: 'Empresa no encontrada' });
+        }
+
+        // Obtener todas las aplicaciones a ofertas de esta empresa
+        const applications = await Application.findAll({
+            where: { companyId: company.id },
+            include: [
+                {
+                    model: Offer,
+                    attributes: ['id', 'name', 'location', 'type', 'mode', 'description', 'sector']
+                },
+                {
+                    model: Student,
+                    attributes: ['id', 'grade', 'course', 'car', 'tag'],
+                    include: [
+                        {
+                            model: User,
+                            attributes: ['id', 'name', 'surname', 'email', 'phone']
+                        },
+                        {
+                            model: Profamily,
+                            attributes: ['id', 'name', 'description']
+                        }
+                    ]
+                }
+            ],
+            order: [['appliedAt', 'DESC']]
+        });
+
+        res.json(applications);
+    } catch (error) {
+        logger.error('Error getCompanyApplications: ' + error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+}
+
+/**
+ * @swagger
  * /api/applications/{applicationId}/status:
  *   put:
  *     summary: Actualizar estado de una aplicación
@@ -468,6 +530,7 @@ export default {
     applyToOffer,
     getUserApplications,
     getOfferApplications,
+    getCompanyApplications,
     updateApplicationStatus,
     withdrawApplication
 };

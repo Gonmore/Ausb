@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { UserRole } from '@/types';
 import { useAuthStore } from '@/stores/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -164,18 +165,24 @@ function CompanyDashboard() {
             <CardTitle>Acciones Rápidas</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-              <span className="font-medium">Crear Nueva Oferta</span>
-              <Target className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-              <span className="font-medium">Buscar Estudiantes</span>
-              <Users className="w-5 h-5 text-green-600" />
-            </div>
-            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-              <span className="font-medium">Ver Aplicaciones</span>
-              <BarChart3 className="w-5 h-5 text-purple-600" />
-            </div>
+            <Link href="/empresa/ofertas" className="block">
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer">
+                <span className="font-medium">Crear Nueva Oferta</span>
+                <Target className="w-5 h-5 text-blue-600" />
+              </div>
+            </Link>
+            <Link href="/empresa/buscador-alumnos" className="block">
+              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors cursor-pointer">
+                <span className="font-medium">Buscar Estudiantes</span>
+                <Users className="w-5 h-5 text-green-600" />
+              </div>
+            </Link>
+            <Link href="/empresa/aplicaciones" className="block">
+              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors cursor-pointer">
+                <span className="font-medium">Ver Aplicaciones</span>
+                <BarChart3 className="w-5 h-5 text-purple-600" />
+              </div>
+            </Link>
           </CardContent>
         </Card>
 

@@ -11,6 +11,9 @@ router.route('/')
 router.route('/user')
     .get(authenticateJWT, applicationController.getUserApplications);  // Obtener aplicaciones del usuario
 
+router.route('/company')
+    .get(authenticateJWT, applicationController.getCompanyApplications);  // Obtener aplicaciones de la empresa
+
 router.route('/offer/:offerId')
     .get(authenticateJWT, applicationController.getOfferApplications);  // Obtener aplicaciones de una oferta
 

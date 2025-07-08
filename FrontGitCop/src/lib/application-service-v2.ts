@@ -192,10 +192,15 @@ class APIBackend implements ApplicationBackend {
     try {
       debugLog('API: Applying to offer', { offerId: offer.id, userId: user.id });
       
+      const token = this.getToken();
+      if (!token) {
+        return { success: false, message: 'No se encontró token de autenticación. Por favor, inicia sesión nuevamente.' };
+      }
+      
       const response = await fetch(`${this.baseURL}/api/applications`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.getToken()}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -204,15 +209,22 @@ class APIBackend implements ApplicationBackend {
         }),
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        debugLog('API: Application submitted successfully');
-        return { success: true, message: data.message || 'Aplicación enviada exitosamente' };
-      } else {
-        debugLog('API: Application failed', data);
-        return { success: false, message: data.message || 'Error al enviar la aplicación' };
+      if (!response.ok) {
+        // Si la respuesta no es OK, verificar si es JSON antes de parsear
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json();
+          return { success: false, message: data.message || `Error ${response.status}: ${response.statusText}` };
+        } else {
+          // Si no es JSON, usar el texto de la respuesta
+          const errorText = await response.text();
+          return { success: false, message: errorText || `Error ${response.status}: ${response.statusText}` };
+        }
       }
+
+      const data = await response.json();
+      debugLog('API: Application submitted successfully');
+      return { success: true, message: data.message || 'Aplicación enviada exitosamente' };
     } catch (error) {
       console.error('API apply error:', error);
       return { success: false, message: 'Error de conexión al enviar la aplicación' };
@@ -265,8 +277,9 @@ class APIBackend implements ApplicationBackend {
 
   private getToken(): string {
     try {
-      const authStore = JSON.parse(localStorage.getItem(config.auth.tokenStorageKey) || '{}');
-      return authStore.state?.token || '';
+      // Usar la misma lógica que tokenUtils para consistencia
+      const token = localStorage.getItem('authToken');
+      return token || '';
     } catch (error) {
       console.error('Error getting auth token:', error);
       return '';
