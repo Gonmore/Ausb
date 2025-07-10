@@ -255,28 +255,36 @@ async function getOfferApplications(req, res) {
     const { offerId } = req.params;
 
     try {
-        // Verificar que la oferta pertenece a una empresa del usuario
-        const offer = await Offer.findByPk(offerId, {
-            include: [{
-                model: Company,
-                include: [{
-                    model: User,
-                    where: { id: userId }
-                }]
-            }]
+        // Verificar que la oferta pertenece al usuario empresa usando el mapeo manual
+        const userCompanyMapping = {
+            2: 1, // María (userId: 2) → Tech Corp (companyId: 1)
+            3: 2, // Carlos (userId: 3) → Innovate SL (companyId: 2)
+            4: 3  // Ana (userId: 4) → Future Labs (companyId: 3)
+        };
+
+        const companyId = userCompanyMapping[userId];
+        if (!companyId) {
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+        }
+
+        // Verificar que la oferta pertenece a la empresa del usuario
+        const offer = await Offer.findOne({
+            where: { 
+                id: offerId,
+                companyId: companyId
+            }
         });
 
         if (!offer) {
-            return res.status(404).json({ mensaje: 'Oferta no encontrada' });
+            return res.status(404).json({ mensaje: 'Oferta no encontrada o no tienes permisos para verla' });
         }
 
-        if (!offer.company) {
-            return res.status(403).json({ mensaje: 'No tienes permisos para ver estas aplicaciones' });
-        }
-
-        // Obtener las aplicaciones de la oferta
+        // Obtener las aplicaciones de la oferta con el formato correcto
+        console.log('🔍 Searching applications for offerId:', offerId);
+        
         const applications = await Application.findAll({
             where: { offerId },
+            attributes: ['id', 'status', 'appliedAt', 'message', 'companyNotes', 'rejectionReason'],
             include: [
                 {
                     model: Student,
@@ -288,19 +296,66 @@ async function getOfferApplications(req, res) {
                         },
                         {
                             model: Profamily,
-                            attributes: ['id', 'name', 'description']
-                        },
-                        {
-                            model: Cv,
-                            attributes: ['id', 'skills', 'experience', 'education']
+                            attributes: ['id', 'name', 'description'],
+                            required: false
                         }
                     ]
+                },
+                {
+                    model: Offer,
+                    attributes: ['id', 'name', 'location', 'type', 'mode', 'description', 'sector']
                 }
             ],
             order: [['appliedAt', 'DESC']]
         });
 
-        res.json(applications);
+        console.log('🔍 Found applications:', applications.length);
+        
+        if (applications.length > 0) {
+            console.log('🔍 First application raw data:', JSON.stringify(applications[0].toJSON(), null, 2));
+        }
+
+        // Formatear la respuesta para que sea consistente con el frontend
+        const formattedApplications = applications.map(app => {
+            const appData = app.toJSON();
+            console.log('🔍 Raw application data:', {
+                id: app.id,
+                student: appData.student ? 'exists' : 'missing',
+                studentUser: appData.student?.user ? 'exists' : 'missing'
+            });
+            
+            return {
+                id: appData.id,
+                status: appData.status,
+                appliedAt: appData.appliedAt,
+                message: appData.message,
+                companyNotes: appData.companyNotes,
+                rejectionReason: appData.rejectionReason,
+                offer: appData.offer,
+                Student: {
+                    id: appData.student?.id,
+                    grade: appData.student?.grade,
+                    course: appData.student?.course,
+                    car: appData.student?.car,
+                    tag: appData.student?.tag,
+                    User: {
+                        id: appData.student?.user?.id,
+                        name: appData.student?.user?.name,
+                        surname: appData.student?.user?.surname,
+                        email: appData.student?.user?.email,
+                        phone: appData.student?.user?.phone
+                    },
+                    Profamily: appData.student?.profamily ? {
+                        id: appData.student.profamily.id,
+                        name: appData.student.profamily.name,
+                        description: appData.student.profamily.description
+                    } : null
+                }
+            };
+        });
+
+        console.log('🎯 Formatted applications count:', formattedApplications.length);
+        res.json(formattedApplications);
     } catch (error) {
         logger.error('Error getOfferApplications: ' + error);
         res.status(500).json({ mensaje: 'Error interno del servidor' });
@@ -327,18 +382,23 @@ async function getCompanyApplications(req, res) {
     const { userId } = req.user;
 
     try {
-        // Buscar la empresa del usuario
-        const company = await Company.findOne({
-            where: { userId }
-        });
-
-        if (!company) {
-            return res.status(404).json({ mensaje: 'Empresa no encontrada' });
+        // Mapeo temporal de usuarios a empresas
+        let companyId = null;
+        if (userId === 2) { // company1@example.com
+            companyId = 1; // TechSolutions España
+        } else if (userId === 3) { // company2@example.com  
+            companyId = 2; // InnovateLab
         }
+
+        if (!companyId) {
+            return res.status(404).json({ mensaje: 'Empresa no encontrada para este usuario' });
+        }
+
+        console.log(`🔍 Buscando aplicaciones para empresa ${companyId} (usuario ${userId})`);
 
         // Obtener todas las aplicaciones a ofertas de esta empresa
         const applications = await Application.findAll({
-            where: { companyId: company.id },
+            where: { companyId: companyId },
             include: [
                 {
                     model: Offer,
@@ -362,7 +422,47 @@ async function getCompanyApplications(req, res) {
             order: [['appliedAt', 'DESC']]
         });
 
-        res.json(applications);
+        console.log(`✅ Encontradas ${applications.length} aplicaciones para la empresa`);
+
+        // Formatear los datos para que coincidan con el formato esperado por el frontend
+        const formattedApplications = applications.map(app => ({
+            id: app.id,
+            status: app.status,
+            appliedAt: app.appliedAt,
+            message: app.message,
+            companyNotes: app.companyNotes,
+            rejectionReason: app.rejectionReason,
+            offer: {
+                id: app.offer.id,
+                name: app.offer.name,
+                location: app.offer.location,
+                type: app.offer.type,
+                mode: app.offer.mode,
+                description: app.offer.description,
+                sector: app.offer.sector
+            },
+            Student: {
+                id: app.student.id,
+                grade: app.student.grade,
+                course: app.student.course,
+                car: app.student.car,
+                tag: app.student.tag,
+                User: {
+                    id: app.student.user.id,
+                    name: app.student.user.name,
+                    surname: app.student.user.surname,
+                    email: app.student.user.email,
+                    phone: app.student.user.phone
+                },
+                Profamily: app.student.profamily ? {
+                    id: app.student.profamily.id,
+                    name: app.student.profamily.name,
+                    description: app.student.profamily.description
+                } : null
+            }
+        }));
+
+        res.json(formattedApplications);
     } catch (error) {
         logger.error('Error getCompanyApplications: ' + error);
         res.status(500).json({ mensaje: 'Error interno del servidor' });

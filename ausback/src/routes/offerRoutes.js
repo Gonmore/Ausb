@@ -9,12 +9,10 @@ router.route('/')
     .get(offerController.listOffers)  // Listar todas las ofertas (público)
     .post(authenticateJWT, offerController.createOffer);  // Crear nueva oferta (autenticado)
 
-router.route('/:id')
-    .get(offerController.getOffer)  // Obtener oferta específica (público)
-    .put(authenticateJWT, offerController.updateOffer)  // Actualizar oferta (autenticado)
-    .delete(authenticateJWT, offerController.deleteOffer);  // Eliminar oferta (autenticado)
+// Rutas específicas ANTES de las rutas con parámetros
+router.route('/company')
+    .get(authenticateJWT, offerController.getMyCompanyOffers);  // Obtener ofertas de mi empresa
 
-// Rutas adicionales para relaciones
 router.route('/company/:companyId')
     .get(offerController.getOffersByCompany);  // Obtener ofertas por empresa
 
@@ -24,5 +22,11 @@ router.route('/profamily/:profamilyId')
 // Nueva ruta para obtener ofertas con aplicaciones
 router.route('/my-offers/applications')
     .get(authenticateJWT, offerController.getCompanyOffersWithApplications);  // Obtener ofertas de la empresa con aplicaciones
+
+// Rutas con parámetros /:id DEBEN IR AL FINAL
+router.route('/:id')
+    .get(offerController.getOffer)  // Obtener oferta específica (público)
+    .put(authenticateJWT, offerController.updateOffer)  // Actualizar oferta (autenticado)
+    .delete(authenticateJWT, offerController.deleteOffer);  // Eliminar oferta (autenticado)
 
 export default router

@@ -193,7 +193,10 @@ export default function OfertasPage() {
             </p>
             {!user && (
               <div className="mt-4">
-                <Button onClick={() => window.location.href = '/login'}>
+                <Button 
+                  onClick={() => window.location.href = '/login'}
+                  className="btn-fprax-primary"
+                >
                   Iniciar sesión para ver más detalles
                 </Button>
               </div>
@@ -205,23 +208,32 @@ export default function OfertasPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--fprax-light-gray)' }}>
       {/* <ConditionalHeader /> */}
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="fprax-nav bg-white shadow-lg border-b-4" style={{ borderBottomColor: 'var(--fprax-blue)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="py-6">
             <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">
-                  Ofertas de Prácticas
+                <h1 className="text-3xl font-bold" style={{ 
+                  background: 'var(--fprax-gradient-primary)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  fontFamily: 'var(--fprax-font-primary)'
+                }}>
+                  Ofertas de Prácticas FPRAX
                 </h1>
-                <p className="text-gray-600 mt-2">
+                <p className="mt-2" style={{ 
+                  color: 'var(--fprax-medium-gray)',
+                  fontFamily: 'var(--fprax-font-primary)'
+                }}>
                   Descubre oportunidades de prácticas profesionales
                 </p>
               </div>
               {user?.role === 'company' && (
-                <Button>
+                <Button className="btn-fprax-secondary">
                   <Users className="h-4 w-4 mr-2" />
                   Publicar Oferta
                 </Button>
@@ -244,7 +256,7 @@ export default function OfertasPage() {
                 className="pl-10"
               />
             </div>
-            <Button variant="outline">
+            <Button variant="outline" className="btn-fprax-outline">
               Filtros
             </Button>
           </div>
@@ -349,6 +361,7 @@ export default function OfertasPage() {
                           variant="outline" 
                           size="sm"
                           onClick={() => handleViewDetails(offer)}
+                          className="btn-fprax-outline"
                         >
                           Ver detalles
                         </Button>
@@ -359,6 +372,7 @@ export default function OfertasPage() {
                             handleApplyToOffer(offer);
                           }}
                           disabled={!!user && user.role !== 'student'}
+                          className="btn-fprax-primary"
                         >
                           {!user ? 'Iniciar sesión' : 
                            user.role !== 'student' ? 'Solo estudiantes' : 

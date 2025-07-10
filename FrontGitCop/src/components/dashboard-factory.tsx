@@ -33,60 +33,66 @@ function StudentDashboard() {
   const { user } = useAuthStore();
   
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fprax-fade-in">
       <div className="flex items-center gap-3">
-        <div className="p-3 bg-blue-500 text-white rounded-lg">
+        <div className="p-3 text-white rounded-lg" style={{ background: 'var(--fprax-gradient-primary)' }}>
           <GraduationCap className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Dashboard Estudiante</h1>
-          <p className="text-muted-foreground">
-            Bienvenido/a {user?.name || 'Estudiante'}
+          <h1 className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-dark-gray)' }}>
+            Dashboard Estudiante
+          </h1>
+          <p className="text-muted-foreground font-fprax">
+            Bienvenido/a <span style={{ color: 'var(--fprax-blue)' }}>{user?.name || 'Estudiante'}</span>
           </p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Aplicaciones</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
+        <Card className="fprax-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2" 
+                     style={{ background: 'var(--fprax-blue)', color: 'white', borderRadius: '12px 12px 0 0' }}>
+            <CardTitle className="text-sm font-medium text-white">Aplicaciones</CardTitle>
+            <Target className="h-4 w-4 text-white" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">12</div>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-blue)' }}>12</div>
             <p className="text-xs text-muted-foreground">+2 esta semana</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ofertas Vistas</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+        <Card className="fprax-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"
+                     style={{ background: 'var(--fprax-purple)', color: 'white', borderRadius: '12px 12px 0 0' }}>
+            <CardTitle className="text-sm font-medium text-white">Ofertas Vistas</CardTitle>
+            <BarChart3 className="h-4 w-4 text-white" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">47</div>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-purple)' }}>47</div>
             <p className="text-xs text-muted-foreground">+12 esta semana</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Perfil Completado</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        <Card className="fprax-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"
+                     style={{ background: 'var(--fprax-pink)', color: 'white', borderRadius: '12px 12px 0 0' }}>
+            <CardTitle className="text-sm font-medium text-white">Perfil Completado</CardTitle>
+            <TrendingUp className="h-4 w-4 text-white" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">85%</div>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-pink)' }}>85%</div>
             <p className="text-xs text-muted-foreground">Muy bueno</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Última Actividad</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+        <Card className="fprax-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"
+                     style={{ background: 'var(--fprax-orange)', color: 'white', borderRadius: '12px 12px 0 0' }}>
+            <CardTitle className="text-sm font-medium text-white">Última Actividad</CardTitle>
+            <Clock className="h-4 w-4 text-white" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">2h</div>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-orange)' }}>2h</div>
             <p className="text-xs text-muted-foreground">Hace 2 horas</p>
           </CardContent>
         </Card>
@@ -102,13 +108,15 @@ function CompanyDashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="p-3 bg-green-500 text-white rounded-lg">
+        <div className="p-3 text-white rounded-lg" style={{ background: 'var(--fprax-gradient-primary)' }}>
           <Building2 className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Dashboard Empresa</h1>
-          <p className="text-muted-foreground">
-            Bienvenido/a {user?.name || 'Empresa'}
+          <h1 className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-dark-gray)' }}>
+            Dashboard Empresa
+          </h1>
+          <p className="text-muted-foreground font-fprax">
+            Bienvenido/a <span style={{ color: 'var(--fprax-blue)' }}>{user?.name || 'Empresa'}</span>
           </p>
         </div>
       </div>

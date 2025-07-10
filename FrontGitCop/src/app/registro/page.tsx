@@ -15,6 +15,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { authService } from '@/lib/services';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@/types';
+import { FpraxLogo } from '@/components/ui/logos/FpraxLogo';
+import Link from 'next/link';
 
 const registrationSchema = z.object({
   username: z.string().min(3, 'El nombre de usuario debe tener al menos 3 caracteres'),
@@ -104,15 +106,22 @@ export default function RegistroPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold text-gray-900">
-            Registro en Ausbildung
-          </CardTitle>
-          <CardDescription>
-            Crea tu cuenta para acceder a la plataforma
-          </CardDescription>
-        </CardHeader>
+      <div className="w-full max-w-2xl">
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-flex items-center justify-center">
+            <FpraxLogo size="lg" variant="negative" />
+          </Link>
+        </div>
+        
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="text-3xl font-bold text-gray-900">
+              Registro en FPRAX
+            </CardTitle>
+            <CardDescription>
+              Crea tu cuenta para acceder a la plataforma
+            </CardDescription>
+          </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {/* Tipo de usuario */}
@@ -346,6 +355,7 @@ export default function RegistroPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

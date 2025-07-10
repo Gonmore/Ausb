@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { UserRole } from '@/types';
 import { useAuthStore } from '@/stores/auth';
+import { FpraxLogo } from '@/components/ui/logos/FpraxLogo';
 import { 
   GraduationCap, 
   Building2, 
@@ -87,11 +88,9 @@ export function ConditionalHeader() {
 
   const getNavigationItems = () => {
     if (!user) {
-      // Navegación para usuarios no logueados
+      // Navegación para usuarios no logueados - solo ofertas públicas
       return [
         { href: '/ofertas', label: 'Ver Ofertas', icon: Search },
-        { href: '/login', label: 'Iniciar Sesión', icon: User },
-        { href: '/registro', label: 'Registrarse', icon: Users },
       ];
     }
 
@@ -139,14 +138,11 @@ export function ConditionalHeader() {
   const navigationItems = getNavigationItems();
 
   return (
-    <header className="border-b bg-white/80 backdrop-blur-sm">
-      <div className="container mx-auto px-4 py-4">
+    <header className="fprax-nav shadow-lg border-b-4" style={{ backgroundColor: '#0092DB', borderBottomColor: '#851B87' }}>
+      <div className="container mx-auto px-4 py-2">
         <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-              A
-            </div>
-            <h1 className="text-xl font-bold text-gray-900">Ausbildung</h1>
+          <Link href="/" className="flex items-center">
+            <FpraxLogo size="sm" variant="negative" />
           </Link>
           
           <nav className="hidden md:flex items-center space-x-4">
@@ -157,11 +153,15 @@ export function ConditionalHeader() {
                   key={item.href}
                   href={item.href} 
                   className={cn(
-                    'flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                    'fprax-nav-link flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-300',
                     pathname === item.href
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                      ? 'bg-white text-blue-600 shadow-md'
+                      : 'text-white hover:bg-blue-700 hover:text-white'
                   )}
+                  style={pathname === item.href ? { 
+                    backgroundColor: 'var(--fprax-blue)',
+                    boxShadow: 'var(--fprax-shadow-md)'
+                  } : {}}
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>
@@ -227,16 +227,16 @@ export function ConditionalHeader() {
                 )}
                 
                 <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">
-                    Hola, {user.username || user.name || 'Usuario'}
+                  <span className="text-sm font-medium text-white">
+                    Hola, <span className="text-orange-300">{user.username || user.name || 'Usuario'}</span>
                   </span>
                   <Button 
                     variant="ghost" 
                     size="sm" 
                     onClick={handleLogout}
-                    className="text-gray-600 hover:text-gray-900"
+                    className="p-2 border-2 border-white text-white hover:bg-white hover:text-blue-600"
                   >
-                    Cerrar Sesión
+                    <LogOut className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -244,12 +244,12 @@ export function ConditionalHeader() {
               // Usuario no logueado - mostrar login y registro
               <div className="flex items-center space-x-4">
                 <Link href="/login">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className="border-2 border-white text-white hover:bg-white hover:text-blue-600 bg-transparent">
                     Iniciar Sesión
                   </Button>
                 </Link>
                 <Link href="/registro">
-                  <Button size="sm">
+                  <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white border-orange-500">
                     Registrarse
                   </Button>
                 </Link>
@@ -257,12 +257,13 @@ export function ConditionalHeader() {
             )}
           </nav>
 
-          {/* Mobile menu */}
           <div className="md:hidden">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2"
+              style={{ color: 'var(--fprax-blue)' }}
             >
               {isMobileMenuOpen ? (
                 <X className="h-6 w-6" />
@@ -275,8 +276,8 @@ export function ConditionalHeader() {
 
         {/* Mobile Navigation Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden">
-            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t">
+          <div className="md:hidden fprax-fade-in">
+            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t" style={{ backgroundColor: 'var(--fprax-light-gray)', borderColor: 'var(--fprax-blue)' }}>
               {navigationItems.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -284,11 +285,15 @@ export function ConditionalHeader() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium',
+                      'fprax-nav-link flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium transition-all duration-300',
                       pathname === item.href
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        ? 'bg-blue-500 text-white shadow-md'
+                        : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
                     )}
+                    style={pathname === item.href ? { 
+                      backgroundColor: 'var(--fprax-blue)',
+                      boxShadow: 'var(--fprax-shadow-md)'
+                    } : {}}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <Icon className="h-5 w-5" />
@@ -297,11 +302,11 @@ export function ConditionalHeader() {
                 );
               })}
               
-              {user && (
-                <div className="px-3 py-2 border-t border-gray-200 mt-3">
+              {user ? (
+                <div className="px-3 py-2 border-t mt-3" style={{ borderColor: 'var(--fprax-blue)' }}>
                   <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-600">
-                      Hola, {user.username || user.name || 'Usuario'}
+                    <div className="text-sm font-medium" style={{ color: 'var(--fprax-dark-gray)' }}>
+                      Hola, <span style={{ color: 'var(--fprax-blue)' }}>{user.username || user.name || 'Usuario'}</span>
                     </div>
                     <Button
                       variant="ghost"
@@ -310,7 +315,11 @@ export function ConditionalHeader() {
                         handleLogout();
                         setIsMobileMenuOpen(false);
                       }}
-                      className="text-gray-600 hover:text-gray-900"
+                      className="btn-fprax-outline p-2 border-2"
+                      style={{ 
+                        color: 'var(--fprax-blue)',
+                        borderColor: 'var(--fprax-blue)'
+                      }}
                     >
                       <LogOut className="h-4 w-4" />
                     </Button>
@@ -352,6 +361,26 @@ export function ConditionalHeader() {
                       </div>
                     </div>
                   )}
+                </div>
+              ) : (
+                // Usuario no autenticado en móvil - mostrar botones de login y registro
+                <div className="px-3 py-2 border-t mt-3 space-y-2" style={{ borderColor: 'var(--fprax-blue)' }}>
+                  <Link href="/login" className="block">
+                    <Button variant="outline" size="sm" className="w-full btn-fprax-outline border-2" style={{ 
+                      color: 'var(--fprax-blue)',
+                      borderColor: 'var(--fprax-blue)'
+                    }} onClick={() => setIsMobileMenuOpen(false)}>
+                      Iniciar Sesión
+                    </Button>
+                  </Link>
+                  <Link href="/registro" className="block">
+                    <Button size="sm" className="w-full btn-fprax-primary" style={{ 
+                      backgroundColor: 'var(--fprax-blue)',
+                      color: 'white'
+                    }} onClick={() => setIsMobileMenuOpen(false)}>
+                      Registrarse
+                    </Button>
+                  </Link>
                 </div>
               )}
             </div>

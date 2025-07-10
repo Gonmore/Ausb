@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="fprax-favicon-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0092DB" />
+      <stop offset="100%" stop-color="#851B87" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.2" />
+    </filter>
+  </defs>
+  
+  <!-- Background with FPRAX official gradient -->
+  <rect width="48" height="48" rx="8" fill="url(#fprax-favicon-gradient)" filter="url(#shadow)" />
+  
+  <!-- FPRAX Logo - Simplified F based on official logo -->
+  <g fill="white">
+    <!-- Vertical bar of F -->
+    <rect x="12" y="12" width="4" height="24" rx="1" />
+    <!-- Top horizontal bar -->
+    <rect x="12" y="12" width="20" height="4" rx="1" />
+    <!-- Middle horizontal bar -->
+    <rect x="12" y="22" width="16" height="3.5" rx="1" />
+  </g>
+  
+  <!-- FPRAX accent dot in corporate orange -->
+  <circle cx="36" cy="32" r="3" fill="#FF9800" opacity="0.95" />
+</svg>

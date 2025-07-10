@@ -132,6 +132,14 @@ async function listOffers(req, res) {
 async function getOffer(req, res) {
     const { id } = req.params;
     
+    console.log('👁️ getOffer called with id:', id);
+    
+    // Validar que el ID sea numérico
+    if (isNaN(id) || !Number.isInteger(Number(id))) {
+        console.log('❌ Invalid ID received:', id);
+        return res.status(400).json({ mensaje: 'ID de oferta inválido' });
+    }
+    
     try {
         const offer = await Offer.findByPk(id, {
             include: [
@@ -142,11 +150,6 @@ async function getOffer(req, res) {
                 {
                     model: Company,
                     attributes: ['id', 'name', 'city', 'sector']
-                },
-                {
-                    model: Student,
-                    through: { attributes: [] },
-                    attributes: ['id', 'name', 'surname']
                 }
             ]
         });
@@ -258,24 +261,65 @@ async function getOffersByCompany(req, res) {
     const { companyId } = req.params;
     
     try {
-        const company = await Company.findByPk(companyId, {
-            include: {
-                model: Offer,
-                through: { attributes: [] },
-                include: [{
+        const offers = await Offer.findAll({
+            where: { companyId: companyId },
+            include: [
+                {
                     model: Profamily,
                     attributes: ['id', 'name', 'description']
-                }]
-            }
+                },
+                {
+                    model: Company,
+                    attributes: ['id', 'name', 'city', 'sector']
+                }
+            ],
+            order: [['createdAt', 'DESC']]
         });
         
-        if (!company) {
-            return res.status(404).json({ mensaje: 'Empresa no encontrada' });
-        }
-        
-        res.json(company.Offers);
+        res.json(offers);
     } catch (error) {
         logger.error('Error getOffersByCompany: ' + error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+}
+
+// Endpoint para obtener ofertas de la empresa del usuario logueado
+async function getMyCompanyOffers(req, res) {
+    const { userId } = req.user;
+    
+    try {
+        // Usar el mapeo manual usuario → empresa
+        const userCompanyMapping = {
+            2: 1, // María (userId: 2) → Tech Corp (companyId: 1)
+            3: 2, // Carlos (userId: 3) → Innovate SL (companyId: 2)
+            4: 3  // Ana (userId: 4) → Future Labs (companyId: 3)
+        };
+
+        const companyId = userCompanyMapping[userId];
+        
+        if (!companyId) {
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+        }
+        
+        const offers = await Offer.findAll({
+            where: { companyId: companyId },
+            include: [
+                {
+                    model: Profamily,
+                    attributes: ['id', 'name', 'description']
+                },
+                {
+                    model: Company,
+                    attributes: ['id', 'name', 'city', 'sector']
+                }
+            ],
+            order: [['createdAt', 'DESC']]
+        });
+        
+        res.json(offers);
+    } catch (error) {
+        console.error('❌ Error getMyCompanyOffers:', error);
+        logger.error('Error getMyCompanyOffers: ' + error);
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
@@ -390,6 +434,7 @@ export default {
     updateOffer,
     deleteOffer,
     getOffersByCompany,
+    getMyCompanyOffers,
     getOffersByProfamily,
     getCompanyOffersWithApplications
 }

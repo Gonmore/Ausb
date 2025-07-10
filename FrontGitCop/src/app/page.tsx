@@ -1,33 +1,34 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-// import { ConditionalHeader } from '@/components/conditional-header'
+import { FpraxLogo } from '@/components/ui/logos/FpraxLogo'
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      {/* <ConditionalHeader /> */}
-
+    <div className="min-h-screen fprax-theme">
+      
       {/* Hero Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
-            Conectamos talento con
-            <span className="text-blue-600"> oportunidades</span>
+      <section className="py-20" style={{ background: 'linear-gradient(135deg, #0092DB 0%, #851B87 100%)' }}>
+        <div className="container mx-auto px-4 text-center fprax-fade-in">
+          <div className="mb-8 flex justify-center">
+            <FpraxLogo size="xl" variant="negative" />
+          </div>
+          <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 font-fprax">
+            Donde el talento encuentra
+            <span className="block mt-2 text-orange-300"> su camino</span>
           </h2>
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            La plataforma que une estudiantes, centros educativos y empresas para facilitar 
-            las prácticas profesionales y el desarrollo del talento.
+          <p className="text-xl text-white mb-8 max-w-3xl mx-auto opacity-90 font-fprax">
+            Conectando talento, construyendo futuro. La plataforma líder que une estudiantes, 
+            centros educativos y empresas para facilitar las prácticas profesionales.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/ofertas">
-              <Button size="lg" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full sm:w-auto bg-white hover:bg-gray-100 font-fprax text-blue-600 border-2 border-white">
                 Ver Ofertas de Prácticas
               </Button>
             </Link>
             <Link href="/registro">
-              <Button size="lg" variant="outline" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white font-fprax border-2 border-orange-500">
                 Únete a la Plataforma
               </Button>
             </Link>
@@ -38,11 +39,11 @@ export default function HomePage() {
       {/* Features Section */}
       <section className="py-16 bg-white">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h3 className="text-3xl font-bold text-gray-900 mb-4">
-              ¿Cómo funciona Ausbildung?
+          <div className="text-center mb-12 fprax-fade-in">
+            <h3 className="text-3xl font-bold mb-4 font-fprax" style={{ color: 'var(--fprax-dark-gray)' }}>
+              ¿Cómo funciona <span style={{ color: 'var(--fprax-blue)' }}>FPRAX</span>?
             </h3>
-            <p className="text-lg text-gray-600">
+            <p className="text-lg font-fprax" style={{ color: 'var(--fprax-medium-gray)' }}>
               Una plataforma integral para gestionar prácticas profesionales
             </p>
           </div>
@@ -130,11 +131,8 @@ export default function HomePage() {
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-4 gap-8">
             <div>
-              <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-                  A
-                </div>
-                <h4 className="text-lg font-bold">Ausbildung</h4>
+              <div className="flex items-center space-x-3 mb-4">
+                <FpraxLogo size="sm" variant="horizontal" />
               </div>
               <p className="text-gray-400">
                 Conectando talento con oportunidades desde 2025
@@ -170,7 +168,7 @@ export default function HomePage() {
           </div>
           
           <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2025 Ausbildung. Todos los derechos reservados.</p>
+            <p>&copy; 2025 FPRAX. Todos los derechos reservados.</p>
           </div>
         </div>
       </footer>

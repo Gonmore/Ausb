@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuthStore } from '@/stores/auth'
 import { SimpleSocialButton } from '@/components/auth/simple-social-button'
 import { AuthGuard } from '@/components/auth/auth-guard'
+import { FpraxLogo } from '@/components/ui/logos/FpraxLogo'
 
 function LoginForm() {
   const [formData, setFormData] = useState({
@@ -78,25 +79,22 @@ function LoginForm() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center space-x-2">
-            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-              A
-            </div>
-            <span className="text-2xl font-bold text-gray-900">Ausbildung</span>
+          <Link href="/" className="inline-flex items-center justify-center">
+            <FpraxLogo size="lg" variant="negative" />
           </Link>
         </div>
 
-        <Card>
+        <Card className="backdrop-blur-sm bg-white/90 shadow-2xl border-0">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-2xl text-gray-800">Iniciar Sesión</CardTitle>
+            <CardDescription className="text-gray-600">
               Accede a tu cuenta para gestionar prácticas profesionales
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-gray-700 font-medium">Email</Label>
                 <Input
                   id="email"
                   name="email"
@@ -105,11 +103,12 @@ function LoginForm() {
                   value={formData.email}
                   onChange={handleChange}
                   required
+                  className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
+                <Label htmlFor="password" className="text-gray-700 font-medium">Contraseña</Label>
                 <Input
                   id="password"
                   name="password"
@@ -118,26 +117,29 @@ function LoginForm() {
                   value={formData.password}
                   onChange={handleChange}
                   required
+                  className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
 
               {error && (
-                <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+                <div className="text-sm text-red-700 bg-red-50 p-3 rounded-md border border-red-200">
                   {error}
                 </div>
               )}
               
               {socialError && (
-                <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+                <div className="text-sm text-red-700 bg-red-50 p-3 rounded-md border border-red-200">
                   {socialError}
                 </div>
-              )}            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading}
-            >
-              {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-            </Button>
+              )}
+              
+              <Button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5"
+                disabled={isLoading}
+              >
+                {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+              </Button>
 
             {/* Divider */}
             <div className="relative my-6">
@@ -159,8 +161,8 @@ function LoginForm() {
           </form>
 
             <div className="mt-6 text-center text-sm">
-              <span className="text-gray-600">¿No tienes cuenta? </span>
-              <Link href="/registro" className="text-blue-600 hover:underline font-medium">
+              <span className="text-gray-700">¿No tienes cuenta? </span>
+              <Link href="/registro" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
                 Regístrate aquí
               </Link>
             </div>

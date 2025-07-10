@@ -51,6 +51,32 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Colores FPRAX
+        fprax: {
+          blue: '#0092DB',
+          purple: '#851B87',
+          pink: '#FF4081',
+          orange: '#FF9800',
+          darkGray: '#333333',
+          mediumGray: '#999999',
+          lightGray: '#F5F5F5',
+          white: '#FFFFFF',
+        },
+      },
+      fontFamily: {
+        'fprax': ['Calibri', 'Roboto', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        'fprax-secondary': ['Roboto', 'Calibri', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+      },
+      backgroundImage: {
+        'fprax-gradient': 'linear-gradient(135deg, #0092DB 0%, #851B87 100%)',
+        'fprax-gradient-accent': 'linear-gradient(135deg, #FF4081 0%, #FF9800 100%)',
+        'fprax-gradient-hero': 'linear-gradient(135deg, #0092DB 0%, #851B87 50%, #FF4081 100%)',
+      },
+      boxShadow: {
+        'fprax-sm': '0 1px 3px rgba(0, 146, 219, 0.1)',
+        'fprax-md': '0 4px 12px rgba(0, 146, 219, 0.15)',
+        'fprax-lg': '0 8px 32px rgba(0, 146, 219, 0.2)',
+        'fprax-xl': '0 16px 48px rgba(0, 146, 219, 0.25)',
       },
       borderRadius: {
         lg: "var(--radius)",

@@ -34,3 +34,6 @@ build/
 *.ntvs*  
 *.njsproj  
 *.sln  
+
+# Imagen corporativa
+lineamientodeimagencorporativafprax/

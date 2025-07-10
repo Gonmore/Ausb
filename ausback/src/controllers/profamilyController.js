@@ -8,22 +8,12 @@ import logger from '../logs/logger.js'
 
 async function listProfamilies(req, res) {
     try {
-        const profamilies = await Profamily.findAll({
-            include: [
-                {
-                    model: Offer,
-                    attributes: ['id', 'name', 'location', 'sector']
-                },
-                {
-                    model: Student,
-                    attributes: ['id', 'name', 'surname']
-                },
-                {
-                    model: Tutor,
-                    attributes: ['id', 'name', 'surname']
-                }
-            ]
-        });
+        console.log('🔍 Obteniendo familias profesionales...');
+        
+        // Primero intentar consulta simple sin includes
+        const profamilies = await Profamily.findAll();
+        
+        console.log(`📋 Familias profesionales encontradas: ${profamilies.length}`);
         
         if (!profamilies || profamilies.length === 0) {
             return res.status(404).json({ mensaje: 'No hay familias profesionales disponibles' });
@@ -31,7 +21,8 @@ async function listProfamilies(req, res) {
         
         return res.json(profamilies);
     } catch (error) {
-        console.error('Error obteniendo familias profesionales:', error);
+        console.error('❌ Error obteniendo familias profesionales:', error);
+        console.error('Stack:', error.stack);
         return res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }

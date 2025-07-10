@@ -1,0 +1,263 @@
+/* FPRAX Corporate Theme */
+/* Basado en el lineamiento de imagen corporativa FPRAX 2025 */
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Colores principales FPRAX */
+  --fprax-blue: #0092DB;          /* Azul FPRAX - Color principal (60%) */
+  --fprax-purple: #851B87;        /* Púrpura */
+  --fprax-pink: #FF4081;          /* Rosa/Fucsia */
+  --fprax-orange: #FF9800;        /* Naranja */
+  
+  /* Colores neutros */
+  --fprax-dark-gray: #333333;     /* Gris oscuro */
+  --fprax-medium-gray: #999999;   /* Gris medio */
+  --fprax-light-gray: #F5F5F5;   /* Gris claro */
+  --fprax-white: #FFFFFF;         /* Blanco */
+  
+  /* Gradientes corporativos */
+  --fprax-gradient-primary: linear-gradient(135deg, var(--fprax-blue) 0%, var(--fprax-purple) 100%);
+  --fprax-gradient-accent: linear-gradient(135deg, var(--fprax-pink) 0%, var(--fprax-orange) 100%);
+  --fprax-gradient-hero: linear-gradient(135deg, var(--fprax-blue) 0%, var(--fprax-purple) 50%, var(--fprax-pink) 100%);
+  
+  /* Tipografía corporativa */
+  --fprax-font-primary: 'Calibri', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --fprax-font-secondary: 'Roboto', 'Calibri', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  
+  /* Shadows corporativas */
+  --fprax-shadow-sm: 0 1px 3px rgba(0, 146, 219, 0.1);
+  --fprax-shadow-md: 0 4px 12px rgba(0, 146, 219, 0.15);
+  --fprax-shadow-lg: 0 8px 32px rgba(0, 146, 219, 0.2);
+}
+
+/* Aplicar tipografía FPRAX globalmente */
+* {
+  font-family: var(--fprax-font-primary) !important;
+}
+
+body {
+  font-family: var(--fprax-font-primary) !important;
+  background-color: var(--fprax-white);
+  color: var(--fprax-dark-gray);
+}
+
+/* Botones corporativos FPRAX */
+.btn-fprax-primary {
+  background: var(--fprax-blue) !important;
+  color: var(--fprax-white) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-family: var(--fprax-font-primary) !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: var(--fprax-shadow-sm);
+  text-decoration: none !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-fprax-primary:hover {
+  background: #007BB8 !important;
+  transform: translateY(-1px);
+  box-shadow: var(--fprax-shadow-md);
+  color: var(--fprax-white) !important;
+  text-decoration: none !important;
+}
+
+.btn-fprax-secondary {
+  background: var(--fprax-purple) !important;
+  color: var(--fprax-white) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-family: var(--fprax-font-primary) !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: var(--fprax-shadow-sm);
+  text-decoration: none !important;
+}
+
+.btn-fprax-secondary:hover {
+  background: #6D1669 !important;
+  color: var(--fprax-white) !important;
+  text-decoration: none !important;
+}
+
+.btn-fprax-outline {
+  background: transparent !important;
+  color: var(--fprax-blue) !important;
+  border: 2px solid var(--fprax-blue) !important;
+  border-radius: 8px !important;
+  padding: 10px 22px !important;
+  font-family: var(--fprax-font-primary) !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none !important;
+}
+
+.btn-fprax-outline:hover {
+  background: var(--fprax-blue) !important;
+  color: var(--fprax-white) !important;
+  text-decoration: none !important;
+}
+
+/* Cards corporativas */
+.fprax-card {
+  background: var(--fprax-white);
+  border-radius: 12px;
+  box-shadow: var(--fprax-shadow-md);
+  padding: 24px;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(0, 146, 219, 0.1);
+}
+
+.fprax-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--fprax-shadow-lg);
+}
+
+.fprax-card-header {
+  background: var(--fprax-gradient-primary);
+  color: var(--fprax-white);
+  padding: 24px;
+  border-radius: 12px 12px 0 0;
+  margin: -24px -24px 24px -24px;
+}
+
+/* Navegación corporativa */
+.fprax-nav {
+  background: var(--fprax-white);
+  box-shadow: var(--fprax-shadow-md);
+  border-bottom: 3px solid var(--fprax-blue);
+}
+
+.fprax-nav-brand {
+  font-family: var(--fprax-font-primary) !important;
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--fprax-blue);
+  text-decoration: none;
+}
+
+.fprax-nav-link {
+  font-family: var(--fprax-font-primary) !important;
+  font-weight: 500;
+  color: var(--fprax-dark-gray);
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.fprax-nav-link:hover {
+  background: rgba(0, 146, 219, 0.1);
+  color: var(--fprax-blue);
+  text-decoration: none;
+}
+
+.fprax-nav-link.active {
+  background: var(--fprax-blue);
+  color: var(--fprax-white);
+}
+
+/* Gradientes de fondo */
+.fprax-bg-gradient {
+  background: var(--fprax-gradient-primary) !important;
+}
+
+.fprax-bg-accent {
+  background: var(--fprax-gradient-accent) !important;
+}
+
+/* Text utilities */
+.fprax-text-primary {
+  color: var(--fprax-blue) !important;
+}
+
+.fprax-text-secondary {
+  color: var(--fprax-purple) !important;
+}
+
+/* Badges */
+.fprax-badge {
+  background: var(--fprax-blue) !important;
+  color: var(--fprax-white) !important;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fprax-badge-success {
+  background: #4CAF50 !important;
+}
+
+.fprax-badge-warning {
+  background: var(--fprax-orange) !important;
+}
+
+.fprax-badge-error {
+  background: #F44336 !important;
+}
+
+.fprax-badge-accent {
+  background: var(--fprax-gradient-accent) !important;
+}
+
+/* Animaciones */
+@keyframes fprax-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fprax-fade-in {
+  animation: fprax-fade-in 0.6s ease-out;
+}
+
+/* Sobrescribir estilos de shadcn/ui */
+.bg-primary {
+  background-color: var(--fprax-blue) !important;
+}
+
+.bg-secondary {
+  background-color: var(--fprax-purple) !important;
+}
+
+.text-primary {
+  color: var(--fprax-blue) !important;
+}
+
+.border-primary {
+  border-color: var(--fprax-blue) !important;
+}
+
+/* Personalización específica para botones */
+button[class*="bg-blue"], .bg-blue-500, .bg-blue-600 {
+  background-color: var(--fprax-blue) !important;
+}
+
+button[class*="bg-blue"]:hover, .bg-blue-500:hover, .bg-blue-600:hover {
+  background-color: #007BB8 !important;
+}
+
+/* Headers y títulos */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--fprax-font-primary) !important;
+  font-weight: 600;
+  color: var(--fprax-dark-gray);
+}

@@ -1,52 +1,97 @@
+/* Importar tema corporativo FPRAX */
+@import '../styles/fprax-theme.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    /* Colores FPRAX adaptados a Tailwind CSS */
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 200 20% 20%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 200 20% 20%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 200 20% 20%;
+    --primary: 200 100% 43%;          /* FPRAX Blue #0092DB */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 295 68% 31%;         /* FPRAX Purple #851B87 */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 320 100% 63%;           /* FPRAX Pink #FF4081 */
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 200 100% 43% / 0.2;
+    --input: 200 100% 43% / 0.2;
+    --ring: 200 100% 43%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --background: 200 20% 20%;
+    --foreground: 0 0% 100%;
+    --card: 200 20% 15%;
+    --card-foreground: 0 0% 100%;
+    --popover: 200 20% 15%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 200 100% 43%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 295 68% 31%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 200 20% 25%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 320 100% 63%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
+    --border: 200 20% 25%;
+    --input: 200 20% 25%;
+    --ring: 200 100% 43%;
   }
+}
+
+/* Aplicar tipografía FPRAX globalmente */
+* {
+  font-family: var(--fprax-font-primary);
+}
+
+body {
+  font-family: var(--fprax-font-primary);
+  background-color: var(--fprax-white);
+  color: var(--fprax-dark-gray);
+}
+
+/* Sobrescribir estilos de botones de shadcn/ui con tema FPRAX */
+.bg-primary {
+  background-color: var(--fprax-blue) !important;
+}
+
+.bg-secondary {
+  background-color: var(--fprax-purple) !important;
+}
+
+.text-primary {
+  color: var(--fprax-blue) !important;
+}
+
+.text-secondary {
+  color: var(--fprax-purple) !important;
+}
+
+.border-primary {
+  border-color: var(--fprax-blue) !important;
+}
+
+/* Aplicar colores FPRAX a componentes específicos */
+.bg-gradient-to-r {
+  background: var(--fprax-gradient-primary) !important;
+}
+
+.bg-gradient-to-br {
+  background: var(--fprax-gradient-hero) !important;
 }
 
 @layer base {
