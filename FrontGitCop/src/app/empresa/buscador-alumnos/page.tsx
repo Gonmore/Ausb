@@ -1,567 +1,404 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuthStore } from '@/stores/auth';
-import { AuthGuard } from '@/components/auth/auth-guard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Search, 
-  Filter, 
-  Users, 
-  MapPin, 
-  Calendar, 
-  GraduationCap, 
-  Star, 
-  Building2,
-  Eye,
-  Heart,
-  MessageSquare,
-  ChevronDown,
-  X
-} from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Eye, Mail, Phone, Search, Filter, User, MapPin, Calendar, Car, GraduationCap, Briefcase, X, Send } from 'lucide-react';
+import { useAuthStore } from '@/stores/auth';
+import { AuthGuard } from '@/components/auth-guard';
 
-interface Student {
-  id: number;
-  name: string;
-  email: string;
-  age: number;
-  location: string;
-  program: string;
-  studyCenter: string;
-  skills: string[];
-  experience: string;
-  graduationYear: number;
-  gpa: number;
-  languages: string[];
-  portfolio?: string;
-  linkedin?: string;
-  github?: string;
-  availability: 'immediate' | 'within_month' | 'within_3_months' | 'flexible';
-  jobPreferences: string[];
-  avatar?: string;
-  isVisible: boolean;
-  lastActive: string;
-  completedProjects: number;
-  rating: number;
-}
-
-function StudentSearchContent() {
-  const { user, canAccessRole } = useAuthStore();
-  const [students, setStudents] = useState<Student[]>([]);
-  const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
+function CandidateSearchContent() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [savedStudents, setSavedStudents] = useState<number[]>([]);
-  
-  // Filtros
-  const [filters, setFilters] = useState({
-    location: '',
-    program: '',
-    skills: [] as string[],
-    ageRange: [18, 35] as [number, number],
-    gpaRange: [0, 10] as [number, number],
-    availability: '',
-    graduationYear: '',
-    experience: '',
-    languages: [] as string[]
+  const [applications, setApplications] = useState<any[]>([]);
+  const [filteredApplications, setFilteredApplications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCVModal, setShowCVModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [contactForm, setContactForm] = useState({
+    subject: '',
+    message: ''
   });
 
-  // Verificar que el usuario puede acceder como empresa
-  if (!canAccessRole('company')) {
+  const { token } = useAuthStore();
+
+  // Cargar aplicaciones de la empresa
+  useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        setLoading(true);
+        console.log('🔍 Llamando a /api/applications/company...');
+        
+        const response = await fetch('http://localhost:5000/api/applications/company', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('✅ Aplicaciones cargadas:', data);
+        setApplications(data);
+        setFilteredApplications(data);
+      } catch (error) {
+        console.error('❌ Error fetching applications:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (token) {
+      fetchApplications();
+    }
+  }, [token]);
+
+  // Filtrar aplicaciones
+  useEffect(() => {
+    let filtered = applications;
+
+    if (searchTerm) {
+      filtered = filtered.filter(app =>
+        app.Student?.User?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.Student?.User?.surname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.Student?.User?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.Student?.grade?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.Student?.course?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.Offer?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    setFilteredApplications(filtered);
+  }, [searchTerm, applications]);
+
+  const handleViewCV = (student: any) => {
+    setSelectedStudent(student);
+    setShowCVModal(true);
+  };
+
+  const handleContactStudent = (student: any, offerName: string) => {
+    setSelectedStudent(student);
+    setContactForm({
+      subject: `Oferta: ${offerName} - ${student.User.name} ${student.User.surname}`,
+      message: `Estimado/a ${student.User.name},\n\nNos ha interesado mucho su aplicación para la oferta "${offerName}".\n\nNos gustaría ponernos en contacto con usted para conocer más detalles sobre su experiencia y habilidades.\n\n¿Podríamos agendar una entrevista?\n\nSaludos cordiales,\n[Tu nombre]\n[Tu empresa]`
+    });
+    setShowContactModal(true);
+  };
+
+  const handleSendEmail = () => {
+    if (!selectedStudent) return;
+
+    const emailBody = encodeURIComponent(contactForm.message);
+    const emailSubject = encodeURIComponent(contactForm.subject);
+    const emailUrl = `mailto:${selectedStudent.User.email}?subject=${emailSubject}&body=${emailBody}`;
+    
+    window.open(emailUrl);
+    setShowContactModal(false);
+    setContactForm({ subject: '', message: '' });
+  };
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="p-6 text-center">
-            <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Acceso Denegado</h3>
-            <p className="text-gray-600">No tienes permisos para acceder al buscador de estudiantes.</p>
-          </CardContent>
-        </Card>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+        </div>
       </div>
     );
   }
 
-  useEffect(() => {
-    // Simular carga de estudiantes
-    const mockStudents: Student[] = [
-      {
-        id: 1,
-        name: 'Ana García López',
-        email: 'ana.garcia@email.com',
-        age: 24,
-        location: 'Madrid',
-        program: 'Desarrollo Web Full Stack',
-        studyCenter: 'IES Tecnológico Madrid',
-        skills: ['React', 'TypeScript', 'Node.js', 'MongoDB', 'Docker'],
-        experience: '2 años',
-        graduationYear: 2022,
-        gpa: 8.5,
-        languages: ['Español', 'Inglés', 'Francés'],
-        portfolio: 'https://anagarcia.dev',
-        linkedin: 'https://linkedin.com/in/anagarcia',
-        github: 'https://github.com/anagarcia',
-        availability: 'immediate',
-        jobPreferences: ['Frontend', 'Full Stack', 'Remoto'],
-        isVisible: true,
-        lastActive: '2024-12-15',
-        completedProjects: 8,
-        rating: 4.8
-      },
-      {
-        id: 2,
-        name: 'Carlos Martínez Ruiz',
-        email: 'carlos.martinez@email.com',
-        age: 26,
-        location: 'Barcelona',
-        program: 'Desarrollo de Aplicaciones Multiplataforma',
-        studyCenter: 'Centro Formativo Barcelona',
-        skills: ['Java', 'Spring Boot', 'Angular', 'MySQL', 'Git'],
-        experience: '1 año',
-        graduationYear: 2023,
-        gpa: 7.8,
-        languages: ['Español', 'Inglés'],
-        portfolio: 'https://carlosmartinez.dev',
-        linkedin: 'https://linkedin.com/in/carlosmartinez',
-        availability: 'within_month',
-        jobPreferences: ['Backend', 'Full Stack', 'Presencial'],
-        isVisible: true,
-        lastActive: '2024-12-14',
-        completedProjects: 5,
-        rating: 4.5
-      },
-      {
-        id: 3,
-        name: 'María López Santos',
-        email: 'maria.lopez@email.com',
-        age: 22,
-        location: 'Valencia',
-        program: 'Marketing Digital',
-        studyCenter: 'Universidad Politécnica Valencia',
-        skills: ['Google Analytics', 'SEO', 'SEM', 'Social Media', 'Photoshop'],
-        experience: 'Estudiante',
-        graduationYear: 2024,
-        gpa: 9.2,
-        languages: ['Español', 'Inglés', 'Italiano'],
-        portfolio: 'https://marialopez.com',
-        linkedin: 'https://linkedin.com/in/marialopez',
-        availability: 'within_3_months',
-        jobPreferences: ['Marketing', 'Community Manager', 'Remoto'],
-        isVisible: true,
-        lastActive: '2024-12-13',
-        completedProjects: 12,
-        rating: 4.9
-      },
-      {
-        id: 4,
-        name: 'David Rodríguez Pérez',
-        email: 'david.rodriguez@email.com',
-        age: 28,
-        location: 'Sevilla',
-        program: 'Diseño Gráfico y Web',
-        studyCenter: 'Escuela de Arte Sevilla',
-        skills: ['Figma', 'Adobe Creative Suite', 'HTML/CSS', 'JavaScript', 'UX/UI'],
-        experience: '3 años',
-        graduationYear: 2021,
-        gpa: 8.7,
-        languages: ['Español', 'Inglés'],
-        portfolio: 'https://davidrodriguez.design',
-        linkedin: 'https://linkedin.com/in/davidrodriguez',
-        availability: 'flexible',
-        jobPreferences: ['Diseño', 'UX/UI', 'Freelance'],
-        isVisible: true,
-        lastActive: '2024-12-12',
-        completedProjects: 15,
-        rating: 4.7
-      },
-      {
-        id: 5,
-        name: 'Laura Fernández Gil',
-        email: 'laura.fernandez@email.com',
-        age: 23,
-        location: 'Bilbao',
-        program: 'Administración de Sistemas',
-        studyCenter: 'Instituto Vasco de Tecnología',
-        skills: ['Linux', 'Docker', 'Kubernetes', 'AWS', 'Python'],
-        experience: '1 año',
-        graduationYear: 2023,
-        gpa: 8.1,
-        languages: ['Español', 'Euskera', 'Inglés'],
-        github: 'https://github.com/laurafernandez',
-        availability: 'immediate',
-        jobPreferences: ['DevOps', 'Cloud', 'Remoto'],
-        isVisible: true,
-        lastActive: '2024-12-11',
-        completedProjects: 6,
-        rating: 4.6
-      }
-    ];
-
-    setStudents(mockStudents);
-    setFilteredStudents(mockStudents);
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [searchTerm, filters, students]);
-
-  const applyFilters = () => {
-    let filtered = [...students];
-
-    // Búsqueda por texto
-    if (searchTerm) {
-      filtered = filtered.filter(student =>
-        student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.skills.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        student.program.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.location.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    // Filtros específicos
-    if (filters.location) {
-      filtered = filtered.filter(student => student.location === filters.location);
-    }
-
-    if (filters.program) {
-      filtered = filtered.filter(student => student.program === filters.program);
-    }
-
-    if (filters.skills.length > 0) {
-      filtered = filtered.filter(student =>
-        filters.skills.some(skill => 
-          student.skills.some(studentSkill => 
-            studentSkill.toLowerCase().includes(skill.toLowerCase())
-          )
-        )
-      );
-    }
-
-    if (filters.availability) {
-      filtered = filtered.filter(student => student.availability === filters.availability);
-    }
-
-    // Filtros de rango
-    filtered = filtered.filter(student => 
-      student.age >= filters.ageRange[0] && student.age <= filters.ageRange[1]
-    );
-
-    filtered = filtered.filter(student => 
-      student.gpa >= filters.gpaRange[0] && student.gpa <= filters.gpaRange[1]
-    );
-
-    setFilteredStudents(filtered);
-  };
-
-  const handleSaveStudent = (studentId: number) => {
-    if (savedStudents.includes(studentId)) {
-      setSavedStudents(savedStudents.filter(id => id !== studentId));
-    } else {
-      setSavedStudents([...savedStudents, studentId]);
-    }
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      location: '',
-      program: '',
-      skills: [],
-      ageRange: [18, 35],
-      gpaRange: [0, 10],
-      availability: '',
-      graduationYear: '',
-      experience: '',
-      languages: []
-    });
-    setSearchTerm('');
-  };
-
-  const getAvailabilityText = (availability: string) => {
-    switch (availability) {
-      case 'immediate': return 'Inmediata';
-      case 'within_month': return 'En 1 mes';
-      case 'within_3_months': return 'En 3 meses';
-      case 'flexible': return 'Flexible';
-      default: return 'No especificada';
-    }
-  };
-
-  const getAvailabilityColor = (availability: string) => {
-    switch (availability) {
-      case 'immediate': return 'bg-green-100 text-green-800';
-      case 'within_month': return 'bg-blue-100 text-blue-800';
-      case 'within_3_months': return 'bg-orange-100 text-orange-800';
-      case 'flexible': return 'bg-purple-100 text-purple-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const uniqueLocations = Array.from(new Set(students.map(s => s.location)));
-  const uniquePrograms = Array.from(new Set(students.map(s => s.program)));
-  const uniqueSkills = Array.from(new Set(students.flatMap(s => s.skills)));
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-green-500 text-white rounded-lg">
-              <Users className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">Buscador de Estudiantes</h1>
-              <p className="text-muted-foreground">Encuentra el talento perfecto para tu empresa</p>
-            </div>
-          </div>
+    <div className="container mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Candidatos</h1>
+        <p className="text-gray-600">Estudiantes que han aplicado a tus ofertas ({filteredApplications.length})</p>
+      </div>
+
+      {/* Filtros */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Buscar candidatos por nombre, email, curso u oferta..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
         </div>
+      </div>
 
-        {/* Search and Filter Bar */}
-        <Card className="mb-6">
-          <CardContent className="p-4">
-            <div className="flex flex-col lg:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Buscar por nombre, habilidades, programa..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsFilterOpen(!isFilterOpen)}
-                  className="flex items-center gap-2"
-                >
-                  <Filter className="w-4 h-4" />
-                  Filtros
-                  <ChevronDown className={`w-4 h-4 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
-                </Button>
-                
-                <Button variant="outline" onClick={clearFilters}>
-                  <X className="w-4 h-4 mr-2" />
-                  Limpiar
-                </Button>
-              </div>
-            </div>
-            
-            {/* Advanced Filters */}
-            <Collapsible open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-              <CollapsibleContent className="mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <Label htmlFor="location-filter">Ubicación</Label>
-                    <Select value={filters.location} onValueChange={(value: string) => setFilters({...filters, location: value})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todas las ubicaciones" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Todas las ubicaciones</SelectItem>
-                        {uniqueLocations.map(location => (
-                          <SelectItem key={location} value={location}>{location}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="program-filter">Programa</Label>
-                    <Select value={filters.program} onValueChange={(value: string) => setFilters({...filters, program: value})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos los programas" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Todos los programas</SelectItem>
-                        {uniquePrograms.map(program => (
-                          <SelectItem key={program} value={program}>{program}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="availability-filter">Disponibilidad</Label>
-                    <Select value={filters.availability} onValueChange={(value: string) => setFilters({...filters, availability: value})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Cualquier disponibilidad" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Cualquier disponibilidad</SelectItem>
-                        <SelectItem value="immediate">Inmediata</SelectItem>
-                        <SelectItem value="within_month">En 1 mes</SelectItem>
-                        <SelectItem value="within_3_months">En 3 meses</SelectItem>
-                        <SelectItem value="flexible">Flexible</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label>Rango de Edad: {filters.ageRange[0]} - {filters.ageRange[1]} años</Label>
-                    <Slider
-                      value={filters.ageRange}
-                      onValueChange={(value: number[]) => setFilters({...filters, ageRange: value as [number, number]})}
-                      max={50}
-                      min={18}
-                      step={1}
-                      className="mt-2"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label>Nota Media: {filters.gpaRange[0]} - {filters.gpaRange[1]}</Label>
-                    <Slider
-                      value={filters.gpaRange}
-                      onValueChange={(value: number[]) => setFilters({...filters, gpaRange: value as [number, number]})}
-                      max={10}
-                      min={0}
-                      step={0.1}
-                      className="mt-2"
-                    />
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </CardContent>
-        </Card>
+      {/* Lista de candidatos */}
+      <div className="grid gap-6">
+        {filteredApplications.map((application) => {
+          const student = application.Student;
+          if (!student || !student.User) return null;
 
-        {/* Results Header */}
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-gray-600">
-            {filteredStudents.length} estudiante{filteredStudents.length !== 1 ? 's' : ''} encontrado{filteredStudents.length !== 1 ? 's' : ''}
-          </p>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Guardados: {savedStudents.length}</span>
-          </div>
-        </div>
-
-        {/* Students Grid */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredStudents.map((student) => (
-            <Card key={student.id} className="hover:shadow-md transition-shadow">
+          return (
+            <Card key={application.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-12 h-12">
-                      <AvatarImage src={student.avatar} />
-                      <AvatarFallback>
-                        {student.name.split(' ').map(n => n[0]).join('')}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <h3 className="font-semibold text-lg">{student.name}</h3>
-                      <p className="text-sm text-gray-600">{student.age} años</p>
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        {student.User.name?.charAt(0)}{student.User.surname?.charAt(0)}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">{student.User.name} {student.User.surname}</h3>
+                        <p className="text-gray-600">{student.User.email}</p>
+                        {student.User.phone && (
+                          <p className="text-gray-500 text-sm">{student.User.phone}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleSaveStudent(student.id)}
-                    className={savedStudents.includes(student.id) ? 'text-red-600' : 'text-gray-400'}
-                  >
-                    <Heart className={`w-4 h-4 ${savedStudents.includes(student.id) ? 'fill-current' : ''}`} />
-                  </Button>
-                </div>
-                
-                <div className="space-y-3 mb-4">
-                  <div className="flex items-center gap-2">
-                    <GraduationCap className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm">{student.program}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm">{student.studyCenter}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm">{student.location}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Star className="w-4 h-4 text-yellow-400" />
-                    <span className="text-sm">Nota: {student.gpa}/10</span>
-                  </div>
-                </div>
-                
-                <div className="mb-4">
-                  <Badge className={getAvailabilityColor(student.availability)}>
-                    {getAvailabilityText(student.availability)}
-                  </Badge>
-                </div>
-                
-                <div className="mb-4">
-                  <h4 className="text-sm font-medium mb-2">Habilidades:</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {student.skills.slice(0, 3).map((skill, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
-                        {skill}
-                      </Badge>
-                    ))}
-                    {student.skills.length > 3 && (
-                      <Badge variant="secondary" className="text-xs">
-                        +{student.skills.length - 3} más
-                      </Badge>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div className="flex items-center text-sm text-gray-600">
+                        <GraduationCap className="w-4 h-4 mr-2" />
+                        {student.grade} - {student.course}
+                      </div>
+                      <div className="flex items-center text-sm text-gray-600">
+                        <Car className="w-4 h-4 mr-2" />
+                        {student.car ? 'Con vehículo' : 'Sin vehículo'}
+                      </div>
+                      {student.profamily && (
+                        <div className="flex items-center text-sm text-gray-600">
+                          <Briefcase className="w-4 h-4 mr-2" />
+                          {student.profamily.name}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Información de la aplicación */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline">
+                          Aplicó a: {application.Offer?.name || 'Oferta desconocida'}
+                        </Badge>
+                        <Badge 
+                          variant="outline"
+                          className={application.status === 'pending' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                                   application.status === 'accepted' ? 'bg-green-100 text-green-800 border-green-300' :
+                                   application.status === 'rejected' ? 'bg-red-100 text-red-800 border-red-300' : 
+                                   'bg-gray-100 text-gray-800 border-gray-300'}
+                        >
+                          {application.status === 'pending' ? 'Pendiente' :
+                           application.status === 'accepted' ? 'Aceptado' :
+                           application.status === 'rejected' ? 'Rechazado' :
+                           application.status}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        Aplicó el: {new Date(application.appliedAt).toLocaleDateString('es-ES')}
+                      </p>
+                      {application.message && (
+                        <p className="text-sm text-gray-700 mt-2 italic">
+                          "{application.message}"
+                        </p>
+                      )}
+                    </div>
+
+                    {student.tag && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {student.tag.split(',').map((tag: string, index: number) => (
+                          <Badge key={index} variant="outline">{tag.trim()}</Badge>
+                        ))}
+                      </div>
                     )}
                   </div>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-500">
-                      Activo: {new Date(student.lastActive).toLocaleDateString()}
-                    </span>
-                  </div>
-                  
-                  <div className="flex gap-1">
-                    <Button variant="outline" size="sm" className="flex items-center gap-1">
-                      <Eye className="w-3 h-3" />
+
+                  <div className="flex flex-col gap-2 ml-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleViewCV(student)}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
                       Ver CV
                     </Button>
-                    <Button variant="outline" size="sm" className="flex items-center gap-1">
-                      <MessageSquare className="w-3 h-3" />
+                    <Button
+                      size="sm"
+                      onClick={() => handleContactStudent(student, application.Offer?.name || 'Oferta')}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <Mail className="w-4 h-4 mr-1" />
                       Contactar
                     </Button>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          ))}
-        </div>
-
-        {filteredStudents.length === 0 && (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No se encontraron estudiantes</h3>
-              <p className="text-gray-600">
-                Intenta ajustar los filtros o términos de búsqueda
-              </p>
-            </CardContent>
-          </Card>
-        )}
+          );
+        })}
       </div>
+
+      {filteredApplications.length === 0 && !loading && (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No se encontraron candidatos</h3>
+            <p className="text-gray-600">
+              {searchTerm ? 'Intenta con otros términos de búsqueda' : 'Aún no hay estudiantes que hayan aplicado a tus ofertas'}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Modal CV */}
+      <Dialog open={showCVModal} onOpenChange={setShowCVModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-5 h-5" />
+              CV de {selectedStudent?.User?.name} {selectedStudent?.User?.surname}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedStudent && (
+            <div className="space-y-6">
+              {/* Información personal */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-lg mb-3">Información Personal</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Nombre completo</p>
+                    <p className="font-medium">{selectedStudent.User.name} {selectedStudent.User.surname}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Email</p>
+                    <p className="font-medium">{selectedStudent.User.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Teléfono</p>
+                    <p className="font-medium">{selectedStudent.User.phone || 'No especificado'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Vehículo propio</p>
+                    <p className="font-medium">{selectedStudent.car ? 'Sí' : 'No'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Formación académica */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-lg mb-3">Formación Académica</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Grado</p>
+                    <p className="font-medium">{selectedStudent.grade}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Curso</p>
+                    <p className="font-medium">{selectedStudent.course}</p>
+                  </div>
+                  {selectedStudent.profamily && (
+                    <div className="col-span-2">
+                      <p className="text-sm text-gray-600">Familia Profesional</p>
+                      <p className="font-medium">{selectedStudent.profamily.name}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Habilidades */}
+              {selectedStudent.tag && (
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-lg mb-3">Habilidades y Tecnologías</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedStudent.tag.split(',').map((tag: string, index: number) => (
+                      <Badge key={index} variant="secondary">{tag.trim()}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Descripción */}
+              {selectedStudent.description && (
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-lg mb-3">Descripción Personal</h3>
+                  <p className="text-gray-700">{selectedStudent.description}</p>
+                </div>
+              )}
+
+              {/* Disponibilidad */}
+              <div className="bg-orange-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-lg mb-3">Disponibilidad</h3>
+                <p className="text-gray-700">
+                  Disponible desde: {selectedStudent.disp ? new Date(selectedStudent.disp).toLocaleDateString('es-ES') : 'No especificado'}
+                </p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Contactar */}
+      <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5" />
+              Contactar a {selectedStudent?.User?.name} {selectedStudent?.User?.surname}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="subject">Asunto</Label>
+              <Input
+                id="subject"
+                value={contactForm.subject}
+                onChange={(e) => setContactForm(prev => ({ ...prev, subject: e.target.value }))}
+                placeholder="Asunto del email"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="message">Mensaje</Label>
+              <Textarea
+                id="message"
+                value={contactForm.message}
+                onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
+                placeholder="Escribe tu mensaje aquí..."
+                rows={8}
+              />
+            </div>
+
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <p className="text-sm text-gray-600">
+                <strong>Para:</strong> {selectedStudent?.User?.email}
+              </p>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowContactModal(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSendEmail} className="bg-blue-600 hover:bg-blue-700">
+                <Send className="w-4 h-4 mr-2" />
+                Enviar Email
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-export default function StudentSearchPage() {
+export default function CandidateSearchPage() {
   return (
-    <AuthGuard requireAuth>
-      <StudentSearchContent />
+    <AuthGuard allowedRoles={['company']}>
+      <CandidateSearchContent />
     </AuthGuard>
   );
 }

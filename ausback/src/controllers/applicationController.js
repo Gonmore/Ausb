@@ -518,47 +518,110 @@ async function updateApplicationStatus(req, res) {
     const { applicationId } = req.params;
     const { status, companyNotes, rejectionReason } = req.body;
 
+    const transaction = await sequelize.transaction();
+    
     try {
-        // Buscar la aplicación y verificar permisos
+        // Buscar la aplicación
         const application = await Application.findByPk(applicationId, {
-            include: [
-                {
-                    model: Company,
-                    include: [{
-                        model: User,
-                        where: { id: userId }
-                    }]
-                }
-            ]
+            include: [{
+                model: Student,
+                include: [{ model: User }]
+            }, {
+                model: Offer,
+                include: [{ model: Company }]
+            }],
+            transaction
         });
 
         if (!application) {
+            await transaction.rollback();
             return res.status(404).json({ mensaje: 'Aplicación no encontrada' });
         }
 
-        if (!application.company || !application.company.user) {
-            return res.status(403).json({ mensaje: 'No tienes permisos para actualizar esta aplicación' });
+        // Verificar que la aplicación pertenece a la empresa del usuario
+        if (application.Offer.companyId !== userId) {
+            await transaction.rollback();
+            return res.status(403).json({ mensaje: 'No tienes permisos para modificar esta aplicación' });
         }
 
-        // Actualizar la aplicación
+        // Actualizar el estado de la aplicación actual
         await application.update({
             status,
-            companyNotes: companyNotes || application.companyNotes,
-            rejectionReason: rejectionReason || application.rejectionReason,
-            reviewedAt: new Date()
+            companyNotes,
+            rejectionReason
+        }, { transaction });
+
+        // Si se acepta un estudiante, rechazar automáticamente todas sus otras aplicaciones
+        if (status === 'accepted') {
+            const { Op } = require('sequelize');
+            
+            // Buscar todas las otras aplicaciones del mismo estudiante que están pendientes o en revisión
+            const otherApplications = await Application.findAll({
+                where: {
+                    studentId: application.studentId,
+                    id: { [Op.ne]: applicationId }, // Excluir la aplicación actual
+                    status: { [Op.in]: ['pending', 'reviewed'] } // Solo las pendientes o en revisión
+                },
+                include: [{
+                    model: Offer,
+                    include: [{ model: Company }]
+                }],
+                transaction
+            });
+
+            // Rechazar automáticamente las otras aplicaciones
+            if (otherApplications.length > 0) {
+                await Application.update(
+                    { 
+                        status: 'rejected',
+                        rejectionReason: 'Estudiante aceptado en otra empresa',
+                        companyNotes: 'Aplicación rechazada automáticamente - estudiante ya aceptado'
+                    },
+                    {
+                        where: {
+                            id: { [Op.in]: otherApplications.map(app => app.id) }
+                        },
+                        transaction
+                    }
+                );
+
+                logger.info({ 
+                    userId, 
+                    applicationId, 
+                    studentId: application.studentId,
+                    rejectedApplications: otherApplications.length
+                }, "Student accepted - other applications auto-rejected");
+
+                console.log(`✅ Estudiante ${application.Student.User.name} aceptado. Se rechazaron automáticamente ${otherApplications.length} aplicaciones.`);
+            }
+        }
+
+        await transaction.commit();
+        
+        // Obtener la aplicación actualizada con toda la información
+        const updatedApplication = await Application.findByPk(applicationId, {
+            include: [{
+                model: Student,
+                include: [{ model: User }]
+            }, {
+                model: Offer,
+                include: [{ model: Company }]
+            }]
         });
 
-        logger.info({ userId, applicationId }, `Application status updated to ${status}`);
+        logger.info({ userId, applicationId, newStatus: status }, "Application status updated successfully");
+        
         res.json({
-            mensaje: 'Estado de aplicación actualizado exitosamente',
-            application: {
-                id: application.id,
-                status: application.status,
-                reviewedAt: application.reviewedAt
-            }
+            mensaje: status === 'accepted' 
+                ? 'Estudiante aceptado exitosamente. Se han rechazado automáticamente sus otras aplicaciones.'
+                : 'Estado de aplicación actualizado exitosamente',
+            application: updatedApplication
         });
-    } catch (error) {
-        logger.error('Error updateApplicationStatus: ' + error);
+
+    } catch (err) {
+        await transaction.rollback();
+        logger.error('Error updateApplicationStatus: ' + err);
+        console.error('❌ Error en updateApplicationStatus:', err);
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }

@@ -120,18 +120,27 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       },
 
       logout: () => {
-        // Remove token from localStorage
+        // Limpiar localStorage de forma segura
         if (typeof window !== 'undefined') {
           localStorage.removeItem('authToken');
+          localStorage.removeItem('authUser');
         }
         
+        // Resetear estado
         set({
           user: null,
           token: null,
           isAuthenticated: false,
-          error: null,
-          activeRole: null,
+          activeRole: null, // Cambiar currentRole por activeRole
+          error: null
         });
+        
+        // Redirigir al home después de un pequeño delay para evitar conflictos de hooks
+        if (typeof window !== 'undefined') {
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 100);
+        }
       },
 
       // Check for expired tokens on load

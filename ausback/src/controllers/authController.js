@@ -31,54 +31,9 @@ async function login (req, res, next) {
         }
         const secret = process.env.JWT_SECRET
         const seconds = process.env.JWT_EXPIRES_SECONDS
-        const token = jwt.sign({userId: user.id}, secret, {expiresIn: eval(seconds)});
-        
-        // Preparar datos del usuario para la respuesta
-        let userData = {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            role: user.role,
-            name: user.name,
-            surname: user.surname,
-            phone: user.phone,
-            active: user.active
-        };
-        
-        // Si el usuario es una empresa, obtener la información de la empresa
-        if (user.role === 'company') {
-            try {
-                const company = await Company.findOne({ where: { userId: user.id } });
-                if (company) {
-                    userData.company = {
-                        id: company.id,
-                        name: company.name,
-                        code: company.code,
-                        city: company.city,
-                        sector: company.sector
-                    };
-                    userData.companyId = company.id; // Agregar companyId para fácil acceso
-                }
-            } catch (companyErr) {
-                logger.warn('Could not fetch company info for user:', companyErr);
-            }
-        }
-        
-        // Si el usuario es un estudiante, obtener la información del estudiante
-        if (user.role === 'student') {
-            try {
-                const student = await Student.findOne({ where: { userId: user.id } });
-                if (student) {
-                    userData.student = {
-                        id: student.id,
-                        profamilyId: student.profamilyId
-                    };
-                    userData.studentId = student.id; // Agregar studentId para fácil acceso
-                }
-            } catch (studentErr) {
-                logger.warn('Could not fetch student info for user:', studentErr);
-            }
-        }
+        const token = jwt.sign({userId: user.id}, secret, {expiresIn: eval(seconds)
+
+        });
         
         // Siempre devolver JSON para peticiones API
         // Solo redirigir si es una petición de formulario HTML
@@ -89,7 +44,16 @@ async function login (req, res, next) {
         if (isApiRequest) {
             res.json({ 
                 token, 
-                user: userData
+                user: {
+                    id: user.id,
+                    username: user.username,
+                    email: user.email,
+                    role: user.role,
+                    name: user.name,
+                    surname: user.surname,
+                    phone: user.phone,
+                    active: user.active
+                }
             });
         } else {
             res.cookie('jwt', token, { httpOnly: true, secure: true, sameSite: 'strict' });

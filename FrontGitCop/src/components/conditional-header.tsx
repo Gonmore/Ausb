@@ -64,7 +64,7 @@ const roleConfig = {
 export function ConditionalHeader() {
   const [mounted, setMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, activeRole, switchRole, getAvailableRoles } = useAuthStore();
+  const { user, activeRole, switchRole, getAvailableRoles, logout } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -72,9 +72,21 @@ export function ConditionalHeader() {
     setMounted(true);
   }, []);
 
-  const handleLogout = () => {
-    useAuthStore.getState().logout();
-    router.push('/'); // Redirigir al home después del logout
+  const handleLogout = async () => {
+    try {
+      // Mostrar confirmación
+      if (window.confirm('¿Estás seguro de que quieres cerrar sesión?')) {
+        // Ejecutar logout
+        logout();
+      }
+    } catch (error) {
+      console.error('Error during logout:', error);
+      // Forzar limpieza y redirección en caso de error
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        window.location.href = '/';
+      }
+    }
   };
 
   const handleRoleSwitch = (role: UserRole) => {

@@ -20,6 +20,7 @@ import {
   RefreshCw,
   User
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 interface ApplicationWithDetails {
   id: string;
@@ -114,41 +115,46 @@ function CompanyApplicationsContent() {
     }
   };
 
-  const updateApplicationStatus = async (applicationId: string, status: string, notes?: string, rejectionReason?: string) => {
+  const handleStatusChange = async (applicationId: string, newStatus: string, notes?: string, rejectionReason?: string) => {
     try {
+      setLoading(true);
+      
       const response = await fetch(`http://localhost:5000/api/applications/${applicationId}/status`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          status,
+          status: newStatus,
           companyNotes: notes,
           rejectionReason
-        }),
+        })
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error('Error al actualizar el estado');
       }
 
-      // Actualizar la lista local
-      setApplications(applications.map(app => 
-        app.id === applicationId 
-          ? { ...app, status: status as any, companyNotes: notes, rejectionReason }
-          : app
-      ));
-
-      // Si hay modal abierto, cerrarlo
-      if (showDetailsModal) {
-        setShowDetailsModal(false);
-        setSelectedApplication(null);
+      const result = await response.json();
+      
+      // Mostrar mensaje específico para aceptación
+      if (newStatus === 'accepted') {
+        toast.success('¡Estudiante aceptado exitosamente! Se han rechazado automáticamente sus otras aplicaciones.');
+      } else if (newStatus === 'rejected') {
+        toast.success('Aplicación rechazada');
+      } else {
+        toast.success('Estado actualizado exitosamente');
       }
 
-    } catch (err: any) {
-      console.error('Error updating application status:', err);
-      alert('Error al actualizar el estado de la aplicación');
+      // Recargar las aplicaciones
+      await fetchApplications();
+      
+    } catch (error) {
+      console.error('Error updating application status:', error);
+      toast.error('Error al actualizar el estado de la aplicación');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -320,7 +326,7 @@ function CompanyApplicationsContent() {
                       <>
                         <Button
                           size="sm"
-                          onClick={() => updateApplicationStatus(application.id, 'accepted')}
+                          onClick={() => handleStatusChange(application.id, 'accepted')}
                           className="bg-green-600 hover:bg-green-700"
                         >
                           <CheckCircle className="w-4 h-4 mr-1" />
@@ -329,7 +335,7 @@ function CompanyApplicationsContent() {
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => updateApplicationStatus(application.id, 'rejected')}
+                          onClick={() => handleStatusChange(application.id, 'rejected')}
                         >
                           <XCircle className="w-4 h-4 mr-1" />
                           Rechazar
@@ -433,7 +439,7 @@ function CompanyApplicationsContent() {
                 {selectedApplication.status === 'pending' && (
                   <div className="flex gap-3 pt-4 border-t">
                     <Button
-                      onClick={() => updateApplicationStatus(selectedApplication.id, 'accepted')}
+                      onClick={() => handleStatusChange(selectedApplication.id, 'accepted')}
                       className="bg-green-600 hover:bg-green-700"
                     >
                       <CheckCircle className="w-4 h-4 mr-2" />
@@ -441,7 +447,7 @@ function CompanyApplicationsContent() {
                     </Button>
                     <Button
                       variant="destructive"
-                      onClick={() => updateApplicationStatus(selectedApplication.id, 'rejected')}
+                      onClick={() => handleStatusChange(selectedApplication.id, 'rejected')}
                     >
                       <XCircle className="w-4 h-4 mr-2" />
                       Rechazar Candidato

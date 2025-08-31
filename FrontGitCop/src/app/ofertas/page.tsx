@@ -209,182 +209,174 @@ export default function OfertasPage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--fprax-light-gray)' }}>
-      {/* <ConditionalHeader /> */}
-      {/* Header */}
-      <div className="fprax-nav bg-white shadow-lg border-b-4" style={{ borderBottomColor: 'var(--fprax-blue)' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="py-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-3xl font-bold" style={{ 
-                  background: 'var(--fprax-gradient-primary)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                  fontFamily: 'var(--fprax-font-primary)'
-                }}>
-                  Ofertas de Prácticas FPRAX
-                </h1>
-                <p className="mt-2" style={{ 
-                  color: 'var(--fprax-medium-gray)',
-                  fontFamily: 'var(--fprax-font-primary)'
-                }}>
-                  Descubre oportunidades de prácticas profesionales
-                </p>
+      {/* Header duplicado eliminado */}
+      
+      <div className="container mx-auto px-4 py-8">
+        <div className="fprax-fade-in">
+          {/* Header Section - Sin botón "Publicar Oferta" para NINGÚN rol */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+            <div>
+              <h1 className="text-3xl font-bold" style={{ 
+                background: 'var(--fprax-gradient-primary)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                fontFamily: 'var(--fprax-font-primary)'
+              }}>
+                Ofertas de Prácticas FPRAX
+              </h1>
+              <p className="mt-2" style={{ 
+                color: 'var(--fprax-medium-gray)',
+                fontFamily: 'var(--fprax-font-primary)'
+              }}>
+                Descubre oportunidades de prácticas profesionales
+              </p>
+            </div>
+            {/* Botón "Publicar Oferta" eliminado para TODOS los roles */}
+          </div>
+
+          {/* Filters Section */}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar ofertas por título, descripción o empresa..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
               </div>
-              {user?.role === 'company' && (
-                <Button className="btn-fprax-secondary">
-                  <Users className="h-4 w-4 mr-2" />
-                  Publicar Oferta
-                </Button>
-              )}
+              <Button variant="outline" className="btn-fprax-outline">
+                Filtros
+              </Button>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Search and Filters */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-          <div className="flex items-center space-x-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Buscar ofertas por título, descripción o empresa..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+          {/* Results */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <p className="text-gray-600">
+                {filteredOffers.length} ofertas encontradas
+              </p>
             </div>
-            <Button variant="outline" className="btn-fprax-outline">
-              Filtros
-            </Button>
-          </div>
-        </div>
 
-        {/* Results */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <p className="text-gray-600">
-              {filteredOffers.length} ofertas encontradas
-            </p>
-          </div>
-
-          {filteredOffers.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Building className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No se encontraron ofertas
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  {searchTerm 
-                    ? 'Intenta con diferentes términos de búsqueda'
-                    : 'Aún no hay ofertas disponibles'
-                  }
-                </p>
-                {searchTerm && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setSearchTerm('')}
-                  >
-                    Limpiar búsqueda
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-6">
-              {filteredOffers.map((offer) => (
-                <Card key={offer.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <CardTitle className="text-xl mb-2">
-                          {offer.name}
-                        </CardTitle>
-                        <div className="text-base text-muted-foreground">
-                          {offer.sector && (
-                            <div className="flex items-center text-gray-600 mb-1">
-                              <Building className="h-4 w-4 mr-1" />
-                              {offer.sector}
+            {filteredOffers.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <Building className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    No se encontraron ofertas
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    {searchTerm 
+                      ? 'Intenta con diferentes términos de búsqueda'
+                      : 'Aún no hay ofertas disponibles'
+                    }
+                  </p>
+                  {searchTerm && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setSearchTerm('')}
+                    >
+                      Limpiar búsqueda
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-6">
+                {filteredOffers.map((offer) => (
+                  <Card key={offer.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <CardTitle className="text-xl mb-2">
+                            {offer.name}
+                          </CardTitle>
+                          <div className="text-base text-muted-foreground">
+                            {offer.sector && (
+                              <div className="flex items-center text-gray-600 mb-1">
+                                <Building className="h-4 w-4 mr-1" />
+                                {offer.sector}
+                              </div>
+                            )}
+                            {offer.location && (
+                              <div className="flex items-center text-gray-600 mb-1">
+                                <MapPin className="h-4 w-4 mr-1" />
+                                {offer.location}
+                              </div>
+                            )}
+                            <div className="flex items-center text-gray-600">
+                              <Calendar className="h-4 w-4 mr-1" />
+                              Publicado: {formatDate(offer.createdAt)}
                             </div>
-                          )}
-                          {offer.location && (
-                            <div className="flex items-center text-gray-600 mb-1">
-                              <MapPin className="h-4 w-4 mr-1" />
-                              {offer.location}
-                            </div>
-                          )}
-                          <div className="flex items-center text-gray-600">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            Publicado: {formatDate(offer.createdAt)}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex flex-col items-end space-y-2">
-                        <Badge className="bg-green-100 text-green-800">
-                          Disponible
-                        </Badge>
-                        {offer.min_hr && (
-                          <div className="text-sm font-medium text-gray-900">
-                            {offer.min_hr} horas mínimas
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-gray-700 mb-4 line-clamp-3">
-                      {offer.description}
-                    </p>
-                    <div className="flex justify-between items-center">
-                      <div className="flex space-x-2">
-                        {offer.requisites && (
-                          <Badge variant="outline">
-                            Requisitos disponibles
+                        <div className="flex flex-col items-end space-y-2">
+                          <Badge className="bg-green-100 text-green-800">
+                            Disponible
                           </Badge>
-                        )}
-                        {offer.period && (
-                          <Badge variant="outline">
-                            Duración: {offer.period}
-                          </Badge>
-                        )}
-                        {offer.mode && (
-                          <Badge variant="outline">
-                            Modalidad: {offer.mode}
-                          </Badge>
-                        )}
+                          {offer.min_hr && (
+                            <div className="text-sm font-medium text-gray-900">
+                              {offer.min_hr} horas mínimas
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex space-x-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleViewDetails(offer)}
-                          className="btn-fprax-outline"
-                        >
-                          Ver detalles
-                        </Button>
-                        <Button 
-                          size="sm"
-                          onClick={() => {
-                            console.log('🔥 Apply button clicked!');
-                            handleApplyToOffer(offer);
-                          }}
-                          disabled={!!user && user.role !== 'student'}
-                          className="btn-fprax-primary"
-                        >
-                          {!user ? 'Iniciar sesión' : 
-                           user.role !== 'student' ? 'Solo estudiantes' : 
-                           'Aplicar'}
-                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-700 mb-4 line-clamp-3">
+                        {offer.description}
+                      </p>
+                      <div className="flex justify-between items-center">
+                        <div className="flex space-x-2">
+                          {offer.requisites && (
+                            <Badge variant="outline">
+                              Requisitos disponibles
+                            </Badge>
+                          )}
+                          {offer.period && (
+                            <Badge variant="outline">
+                              Duración: {offer.period}
+                            </Badge>
+                          )}
+                          {offer.mode && (
+                            <Badge variant="outline">
+                              Modalidad: {offer.mode}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex space-x-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleViewDetails(offer)}
+                            className="btn-fprax-outline"
+                          >
+                            Ver detalles
+                          </Button>
+                          <Button 
+                            size="sm"
+                            onClick={() => {
+                              console.log('🔥 Apply button clicked!');
+                              handleApplyToOffer(offer);
+                            }}
+                            disabled={!!user && user.role !== 'student'}
+                            className="btn-fprax-primary"
+                          >
+                            {!user ? 'Iniciar sesión' : 
+                             user.role !== 'student' ? 'Solo estudiantes' : 
+                             'Aplicar'}
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

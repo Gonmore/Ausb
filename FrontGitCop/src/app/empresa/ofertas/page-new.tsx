@@ -41,6 +41,7 @@ interface NewOfferForm {
   sector: string;
   tag: string;
   jobs: string;
+  profamilyId: number;
 }
 
 function OfferManagementContent() {
@@ -66,7 +67,8 @@ function OfferManagementContent() {
     car: false,
     sector: 'Tecnología',
     tag: 'programacion',
-    jobs: ''
+    jobs: '',
+    profamilyId: 1 // Valor por defecto
   });
 
   // Verificar que el usuario puede acceder como empresa
@@ -137,7 +139,8 @@ function OfferManagementContent() {
         car: false,
         sector: 'Tecnología',
         tag: 'programacion',
-        jobs: ''
+        jobs: '',
+        profamilyId: 1
       });
       
       setIsCreateModalOpen(false);
@@ -257,6 +260,23 @@ function OfferManagementContent() {
                   className="col-span-3"
                   placeholder="Ej: Tecnología"
                 />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="profamily" className="text-right">Familia Profesional</Label>
+                <Select 
+                  value={newOffer.profamilyId.toString()} 
+                  onValueChange={(value) => setNewOffer({ ...newOffer, profamilyId: parseInt(value) })}
+                >
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Selecciona la familia profesional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Informática y Comunicaciones</SelectItem>
+                    <SelectItem value="2">Administración y Gestión</SelectItem>
+                    <SelectItem value="3">Sanidad</SelectItem>
+                    <SelectItem value="4">Servicios Socioculturales y a la Comunidad</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="description" className="text-right">Descripción</Label>
@@ -404,7 +424,7 @@ function OfferManagementContent() {
 
 export default function OfferManagementPage() {
   return (
-    <AuthGuard allowedRoles={['company']}>
+    <AuthGuard>
       <OfferManagementContent />
     </AuthGuard>
   );

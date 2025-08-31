@@ -98,6 +98,9 @@ app.use('/api/applications', applicationRouter);
 app.use('/api/tokens', tokenRouter);
 app.use('/api/admin-temp', adminTempRouter);
 app.use('/api/dev', seedRouter);
+app.use('/login', authRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/students', studentRouter); // Nueva ruta
 
 // Ruta de ejemplo 
 app.get('/', (req, res) => { 
