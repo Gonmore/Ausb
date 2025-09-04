@@ -8,6 +8,7 @@ import { CompanyToken, TokenUsage } from '../models/companyToken.js';
 import { User } from '../models/users.js';
 import sequelize from '../database/database.js';
 import logger from '../logs/logger.js';
+import { StudentToken } from '../models/studentToken.js';
 
 /**
  * @swagger
@@ -297,6 +298,7 @@ async function getOfferApplications(req, res) {
                         {
                             model: Profamily,
                             attributes: ['id', 'name', 'description'],
+                            as: 'profamily', // 🔥 AGREGAR EL ALIAS
                             required: false
                         }
                     ]
@@ -331,33 +333,40 @@ async function getOfferApplications(req, res) {
                 message: appData.message,
                 companyNotes: appData.companyNotes,
                 rejectionReason: appData.rejectionReason,
-                offer: appData.offer,
                 Student: {
-                    id: appData.student?.id,
-                    grade: appData.student?.grade,
-                    course: appData.student?.course,
-                    car: appData.student?.car,
-                    tag: appData.student?.tag,
+                    id: appData.student.id,
+                    grade: appData.student.grade,
+                    course: appData.student.course,
+                    car: appData.student.car,
+                    tag: appData.student.tag,
                     User: {
-                        id: appData.student?.user?.id,
-                        name: appData.student?.user?.name,
-                        surname: appData.student?.user?.surname,
-                        email: appData.student?.user?.email,
-                        phone: appData.student?.user?.phone
+                        id: appData.student.user.id,
+                        name: appData.student.user.name,
+                        surname: appData.student.user.surname,
+                        email: appData.student.user.email,
+                        phone: appData.student.user.phone
                     },
-                    Profamily: appData.student?.profamily ? {
+                    profamily: appData.student.profamily ? { // 🔥 USAR profamily (minúscula)
                         id: appData.student.profamily.id,
                         name: appData.student.profamily.name,
                         description: appData.student.profamily.description
                     } : null
+                },
+                Offer: {
+                    id: appData.offer.id,
+                    name: appData.offer.name,
+                    location: appData.offer.location,
+                    type: appData.offer.type,
+                    mode: appData.offer.mode,
+                    description: appData.offer.description,
+                    sector: appData.offer.sector
                 }
             };
         });
 
-        console.log('🎯 Formatted applications count:', formattedApplications.length);
         res.json(formattedApplications);
     } catch (error) {
-        logger.error('Error getOfferApplications: ' + error);
+        console.error('❌ Error getOfferApplications:', error);
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
@@ -380,18 +389,18 @@ async function getOfferApplications(req, res) {
  */
 async function getCompanyApplications(req, res) {
     const { userId } = req.user;
-
+    
     try {
-        // Mapeo temporal de usuarios a empresas
-        let companyId = null;
-        if (userId === 2) { // company1@example.com
-            companyId = 1; // TechSolutions España
-        } else if (userId === 3) { // company2@example.com  
-            companyId = 2; // InnovateLab
-        }
+        // Mapeo manual usuario → empresa
+        const userCompanyMapping = {
+            2: 1, // María → Tech Corp
+            3: 2, // Carlos → Innovate SL  
+            4: 3  // Ana → Future Labs
+        };
 
+        const companyId = userCompanyMapping[userId];
         if (!companyId) {
-            return res.status(404).json({ mensaje: 'Empresa no encontrada para este usuario' });
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
         }
 
         console.log(`🔍 Buscando aplicaciones para empresa ${companyId} (usuario ${userId})`);
@@ -414,7 +423,9 @@ async function getCompanyApplications(req, res) {
                         },
                         {
                             model: Profamily,
-                            attributes: ['id', 'name', 'description']
+                            attributes: ['id', 'name', 'description'],
+                            as: 'profamily', // 🔥 AGREGAR EL ALIAS
+                            required: false
                         }
                     ]
                 }
@@ -424,7 +435,7 @@ async function getCompanyApplications(req, res) {
 
         console.log(`✅ Encontradas ${applications.length} aplicaciones para la empresa`);
 
-        // Formatear los datos para que coincidan con el formato esperado por el frontend
+        // Formatear la respuesta manteniendo la estructura esperada por el frontend
         const formattedApplications = applications.map(app => ({
             id: app.id,
             status: app.status,
@@ -432,7 +443,7 @@ async function getCompanyApplications(req, res) {
             message: app.message,
             companyNotes: app.companyNotes,
             rejectionReason: app.rejectionReason,
-            offer: {
+            Offer: {
                 id: app.offer.id,
                 name: app.offer.name,
                 location: app.offer.location,
@@ -454,7 +465,7 @@ async function getCompanyApplications(req, res) {
                     email: app.student.user.email,
                     phone: app.student.user.phone
                 },
-                Profamily: app.student.profamily ? {
+                profamily: app.student.profamily ? { // 🔥 USAR profamily (minúscula)
                     id: app.student.profamily.id,
                     name: app.student.profamily.name,
                     description: app.student.profamily.description
@@ -464,7 +475,7 @@ async function getCompanyApplications(req, res) {
 
         res.json(formattedApplications);
     } catch (error) {
-        logger.error('Error getCompanyApplications: ' + error);
+        console.error('❌ Error getCompanyApplications:', error);
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
@@ -689,11 +700,127 @@ async function withdrawApplication(req, res) {
     }
 }
 
+/**
+ * @swagger
+ * /api/applications/{applicationId}/hire:
+ *   put:
+ *     summary: Marcar estudiante como contratado (genera cobro)
+ */
+async function hireStudent(req, res) {
+    const { userId } = req.user;
+    const { applicationId } = req.params;
+    const { contractDetails = {} } = req.body; // salary, startDate, etc.
+
+    try {
+        await sequelize.transaction(async (t) => {
+            // Verificar que la aplicación pertenece a la empresa del usuario
+            const userCompanyMapping = {
+                2: 1, 3: 2, 4: 3
+            };
+
+            const companyId = userCompanyMapping[userId];
+            if (!companyId) {
+                return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+            }
+
+            const application = await Application.findOne({
+                where: { 
+                    id: applicationId,
+                    companyId: companyId 
+                },
+                include: [
+                    {
+                        model: Student,
+                        include: [
+                            {
+                                model: User,
+                                attributes: ['name', 'surname', 'email']
+                            }
+                        ]
+                    },
+                    {
+                        model: Offer,
+                        attributes: ['name', 'salary']
+                    }
+                ],
+                transaction: t
+            });
+
+            if (!application) {
+                return res.status(404).json({ mensaje: 'Aplicación no encontrada' });
+            }
+
+            if (application.status === 'hired') {
+                return res.status(400).json({ mensaje: 'El estudiante ya está marcado como contratado' });
+            }
+
+            // Actualizar estado de aplicación
+            await application.update({
+                status: 'hired',
+                hiredAt: new Date(),
+                contractDetails: JSON.stringify(contractDetails)
+            }, { transaction: t });
+
+            // 💰 GENERAR COBRO AL ESTUDIANTE
+            const chargeAmount = 29.99; // Precio por contratación
+
+            // Buscar o crear registro de tokens del estudiante
+            let studentToken = await StudentToken.findOne({
+                where: { studentId: application.studentId },
+                transaction: t
+            });
+
+            if (!studentToken) {
+                studentToken = await StudentToken.create({
+                    studentId: application.studentId,
+                    pendingPayment: 0,
+                    totalEarned: 0,
+                    contractCount: 0
+                }, { transaction: t });
+            }
+
+            // Actualizar deuda del estudiante
+            await studentToken.update({
+                pendingPayment: studentToken.pendingPayment + chargeAmount,
+                contractCount: studentToken.contractCount + 1
+            }, { transaction: t });
+
+            console.log(`💰 Estudiante ${application.Student.User.name} contratado. Cargo: €${chargeAmount}`);
+
+            res.json({
+                mensaje: 'Estudiante marcado como contratado exitosamente',
+                application: {
+                    id: application.id,
+                    status: 'hired',
+                    hiredAt: new Date(),
+                    student: {
+                        name: application.Student.User.name,
+                        surname: application.Student.User.surname,
+                        email: application.Student.User.email
+                    },
+                    offer: {
+                        name: application.Offer.name
+                    },
+                    charge: {
+                        amount: chargeAmount,
+                        currency: 'EUR',
+                        description: 'Comisión por contratación exitosa'
+                    }
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error hiring student:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+}
+
 export default {
     applyToOffer,
     getUserApplications,
-    getOfferApplications,
     getCompanyApplications,
+    getOfferApplications,
     updateApplicationStatus,
-    withdrawApplication
+    withdrawApplication,
+    hireStudent
 };

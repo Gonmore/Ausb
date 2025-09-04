@@ -23,4 +23,7 @@ router.route('/:applicationId/status')
 router.route('/:applicationId')
     .delete(authenticateJWT, applicationController.withdrawApplication);  // Retirar aplicación
 
+router.route('/:applicationId/hire')
+    .put(authenticateJWT, applicationController.hireStudent);  // Marcar como contratado
+
 export default router;

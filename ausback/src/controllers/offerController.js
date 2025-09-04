@@ -1,9 +1,5 @@
-import { Offer } from '../models/offer.js';
-import { Company } from '../models/company.js';
-import { Profamily } from '../models/profamily.js';
-import { Student } from '../models/student.js';
-import { Application } from '../models/application.js';
-import { User } from '../models/users.js';
+import { Offer, Company, Application, Student, User, Profamily } from '../models/relations.js';
+import { AffinityCalculator } from '../services/affinityCalculator.js';
 import { Status } from '../constants/index.js'
 import sequelize from '../database/database.js';
 import logger from '../logs/logger.js'
@@ -389,6 +385,11 @@ async function getCompanyOffersWithApplications(req, res) {
                         include: [{
                             model: User,
                             attributes: ['id', 'name', 'surname', 'email', 'phone']
+                        }, {
+                            model: Profamily,
+                            attributes: ['id', 'name', 'description'],
+                            as: 'profamily', // 🔥 AGREGAR ALIAS
+                            required: false
                         }]
                     }]
                 }
@@ -427,6 +428,178 @@ async function getCompanyOffersWithApplications(req, res) {
     }
 }
 
+/**
+ * @swagger
+ * /api/offers/company-with-candidates:
+ *   get:
+ *     summary: Obtener ofertas de la empresa con candidatos y valoración de afinidad
+ */
+async function getCompanyOffersWithCandidates(req, res) {
+    const { userId } = req.user;
+
+    try {
+        // 🔥 OBTENER EMPRESA DEL USUARIO DESDE LA BASE DE DATOS
+        const company = await Company.findOne({
+            where: { userId: userId }
+        });
+
+        if (!company) {
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+        }
+
+        console.log(`🏢 Empresa encontrada: ${company.name} (ID: ${company.id}) para usuario ${userId}`);
+
+        // Obtener ofertas de la empresa con aplicaciones
+        const offers = await Offer.findAll({
+            where: { companyId: company.id },
+            include: [
+                {
+                    model: Application,
+                    required: false, // LEFT JOIN para incluir ofertas sin aplicaciones
+                    include: [
+                        {
+                            model: Student,
+                            include: [
+                                {
+                                    model: User,
+                                    attributes: ['id', 'name', 'surname', 'email', 'phone']
+                                },
+                                {
+                                    model: Profamily,
+                                    attributes: ['id', 'name'],
+                                    as: 'profamily',
+                                    required: false
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            order: [['createdAt', 'DESC']]
+        });
+
+        console.log(`📋 Ofertas encontradas: ${offers.length}`);
+
+        const affinityCalculator = new AffinityCalculator();
+        
+        // Procesar cada oferta
+        const processedOffers = offers.map(offer => {
+            // Convertir tags de la oferta a skills valorados
+            const offerSkills = {};
+            if (offer.tag) {
+                const tags = offer.tag.split(',').map(tag => tag.trim());
+                tags.forEach(tag => {
+                    // Asignar valores basados en los requisitos (por ejemplo, todos críticos = 3)
+                    offerSkills[tag] = 3; // Puedes hacer esto más sofisticado
+                });
+            }
+
+            // 🔥 VERIFICAR QUE Applications EXISTE Y ES UN ARRAY
+            const applications = offer.Applications || [];
+            console.log(`Oferta "${offer.name}" (ID: ${offer.id}): ${applications.length} aplicaciones`);
+
+            // Procesar candidatos con valoración
+            const candidatesWithAffinity = applications.map(application => {
+                const student = application.Student;
+                
+                // Convertir tags del estudiante a skills
+                const studentSkills = {};
+                if (student.tag) {
+                    const tags = student.tag.split(',').map(tag => tag.trim());
+                    tags.forEach(tag => {
+                        studentSkills[tag] = Math.floor(Math.random() * 3) + 1; // Temporal
+                    });
+                }
+
+                // Calcular afinidad solo si hay skills en la oferta
+                let affinity = null;
+                if (Object.keys(offerSkills).length > 0) {
+                    affinity = affinityCalculator.calculateAffinity(offerSkills, studentSkills);
+                }
+
+                return {
+                    id: application.id,
+                    status: application.status,
+                    appliedAt: application.appliedAt,
+                    message: application.message,
+                    student: {
+                        id: student.id,
+                        grade: student.grade,
+                        course: student.course,
+                        car: student.car,
+                        tag: student.tag,
+                        description: student.description,
+                        User: student.User,
+                        profamily: student.profamily
+                    },
+                    // Valoración de afinidad
+                    affinity: affinity ? {
+                        level: affinity.level,
+                        score: affinity.score,
+                        matches: affinity.matches,
+                        coverage: affinity.coverage,
+                        explanation: `${affinity.matches} coincidencias, ${affinity.coverage}% cobertura`
+                    } : {
+                        level: 'sin datos',
+                        score: 0,
+                        matches: 0,
+                        coverage: 0,
+                        explanation: 'No hay suficiente información para calcular afinidad'
+                    }
+                };
+            });
+
+            // Ordenar candidatos por afinidad
+            candidatesWithAffinity.sort((a, b) => {
+                const levelOrder = { "muy alto": 4, "alto": 3, "medio": 2, "bajo": 1, "sin datos": 0 };
+                if (levelOrder[a.affinity.level] !== levelOrder[b.affinity.level]) {
+                    return levelOrder[b.affinity.level] - levelOrder[a.affinity.level];
+                }
+                return b.affinity.score - a.affinity.score;
+            });
+
+            return {
+                id: offer.id,
+                name: offer.name,
+                location: offer.location,
+                mode: offer.mode,
+                type: offer.type,
+                period: offer.period,
+                schedule: offer.schedule,
+                min_hr: offer.min_hr,
+                car: offer.car,
+                sector: offer.sector,
+                tag: offer.tag,
+                description: offer.description,
+                jobs: offer.jobs,
+                requisites: offer.requisites,
+                createdAt: offer.createdAt,
+                // Candidatos con valoración
+                candidates: candidatesWithAffinity,
+                candidateStats: {
+                    total: candidatesWithAffinity.length,
+                    byAffinity: {
+                        'muy alto': candidatesWithAffinity.filter(c => c.affinity.level === 'muy alto').length,
+                        'alto': candidatesWithAffinity.filter(c => c.affinity.level === 'alto').length,
+                        'medio': candidatesWithAffinity.filter(c => c.affinity.level === 'medio').length,
+                        'bajo': candidatesWithAffinity.filter(c => c.affinity.level === 'bajo').length,
+                        'sin datos': candidatesWithAffinity.filter(c => c.affinity.level === 'sin datos').length
+                    }
+                },
+                // Skills de la oferta para búsqueda inteligente
+                offerSkills
+            };
+        });
+
+        console.log(`✅ Ofertas procesadas: ${processedOffers.length}`);
+        res.json(processedOffers);
+
+    } catch (error) {
+        console.error('❌ Error getCompanyOffersWithCandidates:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+}
+
 export default {
     listOffers,
     getOffer,
@@ -436,5 +609,6 @@ export default {
     getOffersByCompany,
     getMyCompanyOffers,
     getOffersByProfamily,
-    getCompanyOffersWithApplications
+    getCompanyOffersWithApplications,
+    getCompanyOffersWithCandidates
 }

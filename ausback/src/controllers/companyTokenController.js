@@ -436,7 +436,8 @@ async function accessStudentCV(req, res) {
                     },
                     {
                         model: Profamily,
-                        attributes: ['id', 'name', 'description']
+                        attributes: ['id', 'name', 'description'],
+                        as: 'profamily' // 🔥 AGREGAR ALIAS
                     },
                     {
                         model: Scenter,

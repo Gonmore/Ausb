@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router } from 'express';
 import offerController from '../controllers/offerController.js';
 import { authenticateJWT } from '../middlewares/authenticate.midlleware.js';
 
@@ -23,10 +23,14 @@ router.route('/profamily/:profamilyId')
 router.route('/my-offers/applications')
     .get(authenticateJWT, offerController.getCompanyOffersWithApplications);  // Obtener ofertas de la empresa con aplicaciones
 
+// NUEVA RUTA: Ofertas con candidatos y valoración
+router.route('/company-with-candidates')
+    .get(authenticateJWT, offerController.getCompanyOffersWithCandidates);
+
 // Rutas con parámetros /:id DEBEN IR AL FINAL
 router.route('/:id')
     .get(offerController.getOffer)  // Obtener oferta específica (público)
     .put(authenticateJWT, offerController.updateOffer)  // Actualizar oferta (autenticado)
     .delete(authenticateJWT, offerController.deleteOffer);  // Eliminar oferta (autenticado)
 
-export default router
+export default router;

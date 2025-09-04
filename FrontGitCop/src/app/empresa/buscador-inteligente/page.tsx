@@ -66,9 +66,39 @@ function IntelligentSearchContent() {
   const [showCVModal, setShowCVModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showTokenModal, setShowTokenModal] = useState(false);
-  const [userTokens, setUserTokens] = useState(5); // Simulado
+  const [userTokens, setUserTokens] = useState(0); // Cambiar a 0 inicialmente
+  const [loadingTokens, setLoadingTokens] = useState(true);
 
   const { token } = useAuthStore();
+
+  // Cargar balance de tokens real
+  useEffect(() => {
+    const fetchTokenBalance = async () => {
+      try {
+        setLoadingTokens(true);
+        const response = await fetch('http://localhost:5000/api/students/tokens/balance', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUserTokens(data.balance);
+          console.log('💰 Balance de tokens:', data.balance);
+        }
+      } catch (error) {
+        console.error('❌ Error cargando tokens:', error);
+      } finally {
+        setLoadingTokens(false);
+      }
+    };
+
+    if (token) {
+      fetchTokenBalance();
+    }
+  }, [token]);
 
   const addSkill = () => {
     if (currentSkill.trim() && !skills[currentSkill.trim()]) {
@@ -127,24 +157,85 @@ function IntelligentSearchContent() {
     }
   };
 
-  const handleViewCV = (student: Student) => {
+  const handleViewCV = async (student: Student) => {
     if (userTokens < 2) {
       setShowTokenModal(true);
       return;
     }
-    setSelectedStudent(student);
-    setShowCVModal(true);
-    setUserTokens(prev => prev - 2); // Costo: 2 tokens
+
+    try {
+      // Usar tokens en el backend
+      const response = await fetch('http://localhost:5000/api/students/tokens/use', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'view_cv',
+          studentId: student.id,
+          amount: 2
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUserTokens(data.newBalance);
+        setSelectedStudent(student);
+        setShowCVModal(true);
+        console.log('✅ Tokens utilizados. Nuevo balance:', data.newBalance);
+      } else {
+        const error = await response.json();
+        if (error.code === 'INSUFFICIENT_TOKENS') {
+          setShowTokenModal(true);
+        } else {
+          alert('Error al procesar la solicitud');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error usando tokens:', error);
+      alert('Error al procesar la solicitud');
+    }
   };
 
-  const handleContactStudent = (student: Student) => {
+  const handleContactStudent = async (student: Student) => {
     if (userTokens < 3) {
       setShowTokenModal(true);
       return;
     }
-    setSelectedStudent(student);
-    setShowContactModal(true);
-    setUserTokens(prev => prev - 3); // Costo: 3 tokens
+
+    try {
+      const response = await fetch('http://localhost:5000/api/students/tokens/use', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'contact_student',
+          studentId: student.id,
+          amount: 3
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUserTokens(data.newBalance);
+        setSelectedStudent(student);
+        setShowContactModal(true);
+        console.log('✅ Tokens utilizados. Nuevo balance:', data.newBalance);
+      } else {
+        const error = await response.json();
+        if (error.code === 'INSUFFICIENT_TOKENS') {
+          setShowTokenModal(true);
+        } else {
+          alert('Error al procesar la solicitud');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error usando tokens:', error);
+      alert('Error al procesar la solicitud');
+    }
   };
 
   const getAffinityColor = (level: string) => {
@@ -174,10 +265,20 @@ function IntelligentSearchContent() {
           <Brain className="w-8 h-8 text-blue-600" />
           Buscador Inteligente de Estudiantes
         </h1>
-        <p className="text-gray-600">Encuentra los mejores candidatos basado en algoritmo de afinidad</p>
+        <p className="text-gray-600">
+          Encuentra los mejores candidatos <strong>que aún NO han aplicado</strong> a tus ofertas
+        </p>
+        <div className="bg-blue-50 p-3 rounded-lg mt-3">
+          <p className="text-sm text-blue-800">
+            💡 <strong>Nota:</strong> Este buscador solo muestra estudiantes que NO son candidatos actuales. 
+            Para ver candidatos que ya aplicaron, ve a la sección "Candidatos" (gratis).
+          </p>
+        </div>
         <div className="flex items-center gap-2 mt-2">
           <CreditCard className="w-4 h-4 text-green-600" />
-          <span className="text-sm text-green-600 font-medium">Tokens disponibles: {userTokens}</span>
+          <span className="text-sm text-green-600 font-medium">
+            {loadingTokens ? 'Cargando...' : `Tokens disponibles: ${userTokens}`}
+          </span>
         </div>
       </div>
 
@@ -358,21 +459,24 @@ function IntelligentSearchContent() {
 
           <div className="grid gap-6">
             {results.map((student) => (
-              <Card key={student.id} className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
+              <Card key={student.id} className="hover:shadow-lg transition-shadow border-l-4 border-l-purple-500">
                 <CardContent className="p-6">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       {/* Header del estudiante */}
                       <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-semibold">
                           {student.User.name?.charAt(0)}{student.User.surname?.charAt(0)}
                         </div>
                         <div className="flex-1">
                           <h3 className="text-lg font-semibold">{student.User.name} {student.User.surname}</h3>
                           <p className="text-gray-600">{student.User.email}</p>
                         </div>
-                        {/* Badge de afinidad */}
+                        {/* Badges */}
                         <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-300">
+                            Estudiante Nuevo
+                          </Badge>
                           {getAffinityIcon(student.affinity.level)}
                           <Badge className={getAffinityColor(student.affinity.level)}>
                             Afinidad: {student.affinity.level.toUpperCase()}

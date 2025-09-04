@@ -1,13 +1,15 @@
-import {User}  from "./users.js"
-import { Company } from "./company.js"
-import { Cv } from "./cv.js"
-import { Offer } from "./offer.js"
-import { Profamily } from "./profamily.js"
-import { Student } from "./student.js"
-import { Tutor } from "./tutor.js"
-import { Scenter } from "./scenter.js"
-import { Application } from "./application.js"
-import { CompanyToken, TokenUsage } from "./companyToken.js"
+import { User } from "./users.js";
+import { Scenter } from "./scenter.js";
+import { Tutor } from "./tutor.js";
+import { Student } from "./student.js";
+import { Company } from "./company.js";
+import { Profamily } from "./profamily.js";
+import { Offer } from "./offer.js";
+import { Application } from "./application.js";
+import { Cv } from "./cv.js";
+import { Token } from "./token.js";
+import { TokenTransaction } from "./tokenTransaction.js";
+import { StudentToken } from "./studentToken.js"; // NUEVO
 
 //Relaciones entre tablas
 
@@ -31,21 +33,54 @@ Cv.belongsToMany(Company, { through: 'CompanyCv' });
 
 // Relaciones para Applications
 Application.belongsTo(Offer, { foreignKey: 'offerId' });
-Offer.hasMany(Application, { foreignKey: 'offerId' });
+Offer.hasMany(Application, { foreignKey: 'offerId' }); // 🔥 VERIFICAR QUE ESTA LÍNEA EXISTE
 Application.belongsTo(Student, { foreignKey: 'studentId' });
 Student.hasMany(Application, { foreignKey: 'studentId' });
 Application.belongsTo(Company, { foreignKey: 'companyId' });
 Company.hasMany(Application, { foreignKey: 'companyId' });
 
-// Relaciones para CompanyToken
-CompanyToken.belongsTo(Company, { foreignKey: 'companyId' });
-Company.hasOne(CompanyToken, { foreignKey: 'companyId' });
+// Relaciones para tokens de empresa
+Company.hasOne(Token, {
+    foreignKey: 'companyId',
+    as: 'tokens'
+});
 
-// Relaciones para TokenUsage
-TokenUsage.belongsTo(Company, { foreignKey: 'companyId' });
-Company.hasMany(TokenUsage, { foreignKey: 'companyId' });
-TokenUsage.belongsTo(Student, { foreignKey: 'studentId' });
-Student.hasMany(TokenUsage, { foreignKey: 'studentId' });
+Token.belongsTo(Company, {
+    foreignKey: 'companyId',
+    as: 'company'
+});
+
+Company.hasMany(TokenTransaction, {
+    foreignKey: 'companyId',
+    as: 'tokenTransactions'
+});
+
+TokenTransaction.belongsTo(Company, {
+    foreignKey: 'companyId',
+    as: 'company'
+});
+
+TokenTransaction.belongsTo(Student, {
+    foreignKey: 'studentId',
+    as: 'student',
+    required: false
+});
+
+Student.hasMany(TokenTransaction, {
+    foreignKey: 'studentId',
+    as: 'tokenTransactions'
+});
+
+// NUEVO: Relaciones para tokens de estudiantes
+Student.hasOne(StudentToken, {
+    foreignKey: 'studentId',
+    as: 'studentTokens'
+});
+
+StudentToken.belongsTo(Student, {
+    foreignKey: 'studentId',
+    as: 'student'
+});
 
 // Relación uno a uno 
 User.hasOne(Student, { foreignKey: 'userId' });
@@ -57,21 +92,22 @@ Cv.belongsTo(Student, { foreignKey: 'studentId' });
 
 // Relación uno a muchos adicionales
 Profamily.hasMany(Student, { foreignKey: 'profamilyId' });
-Student.belongsTo(Profamily, { foreignKey: 'profamilyId' });
+Student.belongsTo(Profamily, { foreignKey: 'profamilyId', as: 'profamily' });
 Profamily.hasMany(Tutor, { foreignKey: 'profamilyId' });
 Tutor.belongsTo(Profamily, { foreignKey: 'profamilyId' });
 
 
-export {
+export { 
     User,
     Scenter,
-    Student,
-    Company,
-    Tutor,
-    Profamily,
-    Cv,
-    Offer,
+    Tutor, 
+    Student, 
+    Company, 
+    Profamily, 
+    Cv, 
+    Offer, 
     Application,
-    CompanyToken,
-    TokenUsage
+    Token,
+    TokenTransaction,
+    StudentToken // NUEVO
 };
