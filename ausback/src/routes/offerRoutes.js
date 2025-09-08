@@ -27,6 +27,10 @@ router.route('/my-offers/applications')
 router.route('/company-with-candidates')
     .get(authenticateJWT, offerController.getCompanyOffersWithCandidates);
 
+// 🔥 NUEVA RUTA: Obtener aplicaciones de una oferta específica
+router.route('/:offerId/applications')
+    .get(authenticateJWT, offerController.getApplicationsByOffer);
+
 // Rutas con parámetros /:id DEBEN IR AL FINAL
 router.route('/:id')
     .get(offerController.getOffer)  // Obtener oferta específica (público)

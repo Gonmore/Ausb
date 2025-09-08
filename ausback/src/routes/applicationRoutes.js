@@ -14,6 +14,9 @@ router.route('/user')
 router.route('/company')
     .get(authenticateJWT, applicationController.getCompanyApplications);  // Obtener aplicaciones de la empresa
 
+router.route('/company/candidates/:offerId')
+    .get(authenticateJWT, applicationController.getSmartCandidates);  // Búsqueda inteligente con tokens
+
 router.route('/offer/:offerId')
     .get(authenticateJWT, applicationController.getOfferApplications);  // Obtener aplicaciones de una oferta
 

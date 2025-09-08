@@ -9,6 +9,8 @@ import { User } from '../models/users.js';
 import sequelize from '../database/database.js';
 import logger from '../logs/logger.js';
 import { StudentToken } from '../models/studentToken.js';
+import affinityCalculator from '../services/affinityCalculator.js';
+import companyService from '../services/companyService.js';
 
 /**
  * @swagger
@@ -256,23 +258,14 @@ async function getOfferApplications(req, res) {
     const { offerId } = req.params;
 
     try {
-        // Verificar que la oferta pertenece al usuario empresa usando el mapeo manual
-        const userCompanyMapping = {
-            2: 1, // María (userId: 2) → Tech Corp (companyId: 1)
-            3: 2, // Carlos (userId: 3) → Innovate SL (companyId: 2)
-            4: 3  // Ana (userId: 4) → Future Labs (companyId: 3)
-        };
-
-        const companyId = userCompanyMapping[userId];
-        if (!companyId) {
-            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
-        }
+        // 🔥 REEMPLAZAR EL MAPEO MANUAL CON EL SERVICE
+        const company = await companyService.getCompanyByUserId(userId);
 
         // Verificar que la oferta pertenece a la empresa del usuario
         const offer = await Offer.findOne({
             where: { 
                 id: offerId,
-                companyId: companyId
+                companyId: company.id // 🔥 USAR company.id del service
             }
         });
 
@@ -298,7 +291,7 @@ async function getOfferApplications(req, res) {
                         {
                             model: Profamily,
                             attributes: ['id', 'name', 'description'],
-                            as: 'profamily', // 🔥 AGREGAR EL ALIAS
+                            as: 'profamily',
                             required: false
                         }
                     ]
@@ -367,6 +360,12 @@ async function getOfferApplications(req, res) {
         res.json(formattedApplications);
     } catch (error) {
         console.error('❌ Error getOfferApplications:', error);
+        
+        // 🔥 AÑADIR MANEJO DE ERROR DEL SERVICE
+        if (error.message.includes('No se encontró empresa')) {
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+        }
+        
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
@@ -391,23 +390,14 @@ async function getCompanyApplications(req, res) {
     const { userId } = req.user;
     
     try {
-        // Mapeo manual usuario → empresa
-        const userCompanyMapping = {
-            2: 1, // María → Tech Corp
-            3: 2, // Carlos → Innovate SL  
-            4: 3  // Ana → Future Labs
-        };
+        // 🔥 REEMPLAZAR EL MAPEO MANUAL CON EL SERVICE
+        const company = await companyService.getCompanyByUserId(userId);
 
-        const companyId = userCompanyMapping[userId];
-        if (!companyId) {
-            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
-        }
-
-        console.log(`🔍 Buscando aplicaciones para empresa ${companyId} (usuario ${userId})`);
+        console.log(`🔍 Buscando aplicaciones para empresa ${company.id} (usuario ${userId})`);
 
         // Obtener todas las aplicaciones a ofertas de esta empresa
         const applications = await Application.findAll({
-            where: { companyId: companyId },
+            where: { companyId: company.id }, // 🔥 USAR company.id del service
             include: [
                 {
                     model: Offer,
@@ -424,7 +414,7 @@ async function getCompanyApplications(req, res) {
                         {
                             model: Profamily,
                             attributes: ['id', 'name', 'description'],
-                            as: 'profamily', // 🔥 AGREGAR EL ALIAS
+                            as: 'profamily',
                             required: false
                         }
                     ]
@@ -432,8 +422,6 @@ async function getCompanyApplications(req, res) {
             ],
             order: [['appliedAt', 'DESC']]
         });
-
-        console.log(`✅ Encontradas ${applications.length} aplicaciones para la empresa`);
 
         // Formatear la respuesta manteniendo la estructura esperada por el frontend
         const formattedApplications = applications.map(app => ({
@@ -476,6 +464,12 @@ async function getCompanyApplications(req, res) {
         res.json(formattedApplications);
     } catch (error) {
         console.error('❌ Error getCompanyApplications:', error);
+        
+        // 🔥 AÑADIR MANEJO DE ERROR DEL SERVICE
+        if (error.message.includes('No se encontró empresa')) {
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+        }
+        
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
@@ -532,6 +526,9 @@ async function updateApplicationStatus(req, res) {
     const transaction = await sequelize.transaction();
     
     try {
+        // 🔥 USAR EL SERVICE PARA OBTENER LA EMPRESA
+        const company = await companyService.getCompanyByUserId(userId);
+
         // Buscar la aplicación
         const application = await Application.findByPk(applicationId, {
             include: [{
@@ -539,6 +536,7 @@ async function updateApplicationStatus(req, res) {
                 include: [{ model: User }]
             }, {
                 model: Offer,
+                where: { companyId: company.id }, // 🔥 VALIDAR QUE LA OFERTA PERTENECE A LA EMPRESA
                 include: [{ model: Company }]
             }],
             transaction
@@ -546,13 +544,7 @@ async function updateApplicationStatus(req, res) {
 
         if (!application) {
             await transaction.rollback();
-            return res.status(404).json({ mensaje: 'Aplicación no encontrada' });
-        }
-
-        // Verificar que la aplicación pertenece a la empresa del usuario
-        if (application.Offer.companyId !== userId) {
-            await transaction.rollback();
-            return res.status(403).json({ mensaje: 'No tienes permisos para modificar esta aplicación' });
+            return res.status(404).json({ mensaje: 'Aplicación no encontrada o no tienes permisos para modificarla' });
         }
 
         // Actualizar el estado de la aplicación actual
@@ -609,7 +601,6 @@ async function updateApplicationStatus(req, res) {
 
         await transaction.commit();
         
-        // Obtener la aplicación actualizada con toda la información
         const updatedApplication = await Application.findByPk(applicationId, {
             include: [{
                 model: Student,
@@ -633,6 +624,12 @@ async function updateApplicationStatus(req, res) {
         await transaction.rollback();
         logger.error('Error updateApplicationStatus: ' + err);
         console.error('❌ Error en updateApplicationStatus:', err);
+        
+        // 🔥 AÑADIR MANEJO DE ERROR DEL SERVICE
+        if (err.message.includes('No se encontró empresa')) {
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+        }
+        
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
@@ -713,20 +710,13 @@ async function hireStudent(req, res) {
 
     try {
         await sequelize.transaction(async (t) => {
-            // Verificar que la aplicación pertenece a la empresa del usuario
-            const userCompanyMapping = {
-                2: 1, 3: 2, 4: 3
-            };
-
-            const companyId = userCompanyMapping[userId];
-            if (!companyId) {
-                return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
-            }
+            // 🔥 REEMPLAZAR EL MAPEO MANUAL CON EL SERVICE
+            const company = await companyService.getCompanyByUserId(userId);
 
             const application = await Application.findOne({
                 where: { 
                     id: applicationId,
-                    companyId: companyId 
+                    companyId: company.id  // 🔥 USAR company.id del service
                 },
                 include: [
                     {
@@ -811,6 +801,182 @@ async function hireStudent(req, res) {
         });
     } catch (error) {
         console.error('Error hiring student:', error);
+        
+        // 🔥 AÑADIR MANEJO DE ERROR DEL SERVICE
+        if (error.message.includes('No se encontró empresa')) {
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+        }
+        
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+}
+
+/**
+ * @swagger
+ * /api/applications/company/candidates/{offerId}:
+ *   get:
+ *     summary: Buscar candidatos inteligentes para una oferta (usa tokens)
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: offerId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de la oferta
+ *       - in: query
+ *         name: minScore
+ *         schema:
+ *           type: number
+ *           minimum: 0
+ *           maximum: 10
+ *           default: 6.0
+ *         description: Puntuación mínima de afinidad
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 10
+ *         description: Número máximo de candidatos a devolver
+ *     responses:
+ *       200:
+ *         description: Lista de candidatos recomendados
+ *       402:
+ *         description: Tokens insuficientes
+ *       403:
+ *         description: No tienes permisos
+ *       404:
+ *         description: Oferta no encontrada
+ *       500:
+ *         description: Error interno del servidor
+ */
+async function getSmartCandidates(req, res) {
+    const { userId } = req.user;
+    const { offerId } = req.params;
+    const { minScore = 6.0, limit = 10 } = req.query;
+
+    try {
+        await sequelize.transaction(async (t) => {
+            // 🔥 USAR EL SERVICE PARA OBTENER LA EMPRESA
+            const company = await companyService.getCompanyByUserId(userId);
+
+            // Verificar que la oferta pertenece a la empresa
+            const offer = await Offer.findOne({
+                where: { 
+                    id: offerId,
+                    companyId: company.id 
+                },
+                include: [{
+                    model: Profamily,
+                    attributes: ['id', 'name']
+                }],
+                transaction: t
+            });
+
+            if (!offer) {
+                return res.status(404).json({ mensaje: 'Oferta no encontrada o no tienes permisos' });
+            }
+
+            // Verificar tokens de la empresa
+            const companyToken = await CompanyToken.findOne({
+                where: { companyId: company.id },
+                transaction: t
+            });
+
+            const tokensRequired = parseInt(limit) || 10;
+            if (!companyToken || companyToken.balance < tokensRequired) {
+                return res.status(402).json({ 
+                    mensaje: 'Tokens insuficientes para esta búsqueda',
+                    required: tokensRequired,
+                    available: companyToken?.balance || 0
+                });
+            }
+
+            // Obtener todos los estudiantes (excluyendo los que ya aplicaron a esta oferta)
+            const existingApplications = await Application.findAll({
+                where: { offerId },
+                attributes: ['studentId'],
+                transaction: t
+            });
+
+            const excludeStudentIds = existingApplications.map(app => app.studentId);
+
+            const students = await Student.findAll({
+                where: excludeStudentIds.length > 0 ? {
+                    id: { [Op.notIn]: excludeStudentIds }
+                } : {},
+                include: [
+                    {
+                        model: User,
+                        attributes: ['id', 'name', 'surname', 'email', 'phone']
+                    },
+                    {
+                        model: Profamily,
+                        attributes: ['id', 'name'],
+                        as: 'profamily',
+                        required: false
+                    }
+                ],
+                transaction: t
+            });
+
+            // 🤖 USAR EL AFFINITY CALCULATOR
+            const companySkills = offer.requiredSkills || {};
+            const studentsWithSkills = students.map(student => ({
+                ...student.toJSON(),
+                skills: student.skills || {}
+            }));
+
+            const smartResults = affinityCalculator.findBestCandidates(
+                companySkills, 
+                studentsWithSkills, 
+                parseFloat(minScore), 
+                parseInt(limit)
+            );
+
+            // Descontar tokens
+            await companyToken.update({
+                balance: companyToken.balance - tokensRequired
+            }, { transaction: t });
+
+            // Registrar uso de tokens
+            await TokenUsage.create({
+                companyId: company.id,
+                tokensUsed: tokensRequired,
+                action: 'smart_search',
+                metadata: {
+                    offerId,
+                    candidatesFound: smartResults.candidates.length,
+                    minScore,
+                    searchTimestamp: new Date()
+                }
+            }, { transaction: t });
+
+            console.log(`🤖 Búsqueda inteligente completada: ${smartResults.candidates.length} candidatos encontrados (${smartResults.recommended} recomendados)`);
+
+            res.json({
+                mensaje: 'Búsqueda inteligente completada',
+                results: smartResults,
+                tokensUsed: tokensRequired,
+                remainingTokens: companyToken.balance - tokensRequired,
+                offer: {
+                    id: offer.id,
+                    name: offer.name,
+                    requiredSkills: companySkills
+                }
+            });
+        });
+    } catch (error) {
+        console.error('❌ Error getSmartCandidates:', error);
+        
+        if (error.message.includes('No se encontró empresa')) {
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+        }
+        
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
@@ -822,5 +988,6 @@ export default {
     getOfferApplications,
     updateApplicationStatus,
     withdrawApplication,
-    hireStudent
+    hireStudent,
+    getSmartCandidates // 🔥 NUEVA FUNCIÓN CON AFFINITY CALCULATOR
 };

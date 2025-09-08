@@ -18,6 +18,7 @@ import userRouter from './src/routes/userRoutes.js'
 import studentRouter from './src/routes/studentRoutes.js'
 import scenterRouter from './src/routes/scenterRoutes.js'
 import companyRouter from './src/routes/companyRoutes.js'
+import debugRouter from './src/routes/debugRoutes.js'
 import offerRouter from './src/routes/offerRoutes.js'
 import profamilyRouter from './src/routes/profamilyRoutes.js'
 import tutorRouter from './src/routes/tutorRoutes.js'
@@ -101,6 +102,7 @@ app.use('/api/dev', seedRouter);
 app.use('/login', authRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/students', studentRouter); // Nueva ruta
+app.use('/api/debug', debugRouter);
 
 // Ruta de ejemplo 
 app.get('/', (req, res) => { 

@@ -9,7 +9,8 @@ import { Application } from "./application.js";
 import { Cv } from "./cv.js";
 import { Token } from "./token.js";
 import { TokenTransaction } from "./tokenTransaction.js";
-import { StudentToken } from "./studentToken.js"; // NUEVO
+import { StudentToken } from "./studentToken.js";
+import UserCompany from './userCompany.js';
 
 //Relaciones entre tablas
 
@@ -33,11 +34,16 @@ Cv.belongsToMany(Company, { through: 'CompanyCv' });
 
 // Relaciones para Applications
 Application.belongsTo(Offer, { foreignKey: 'offerId' });
-Offer.hasMany(Application, { foreignKey: 'offerId' }); // 🔥 VERIFICAR QUE ESTA LÍNEA EXISTE
-Application.belongsTo(Student, { foreignKey: 'studentId' });
-Student.hasMany(Application, { foreignKey: 'studentId' });
-Application.belongsTo(Company, { foreignKey: 'companyId' });
-Company.hasMany(Application, { foreignKey: 'companyId' });
+Offer.hasMany(Application, { foreignKey: 'offerId' });
+
+Application.belongsTo(Student, { 
+    foreignKey: 'studentId',
+    as: 'student'
+});
+
+Student.hasMany(Application, { 
+    foreignKey: 'studentId'
+});
 
 // Relaciones para tokens de empresa
 Company.hasOne(Token, {
@@ -71,7 +77,7 @@ Student.hasMany(TokenTransaction, {
     as: 'tokenTransactions'
 });
 
-// NUEVO: Relaciones para tokens de estudiantes
+// Relaciones para tokens de estudiantes
 Student.hasOne(StudentToken, {
     foreignKey: 'studentId',
     as: 'studentTokens'
@@ -83,10 +89,16 @@ StudentToken.belongsTo(Student, {
 });
 
 // Relación uno a uno 
-User.hasOne(Student, { foreignKey: 'userId' });
-Student.belongsTo(User, { foreignKey: 'userId' });
-User.hasOne(Company, { foreignKey: 'userId' });
-Company.belongsTo(User, { foreignKey: 'userId' });
+User.hasOne(Student, { 
+    foreignKey: 'userId',
+    as: 'student'
+});
+
+Student.belongsTo(User, { 
+    foreignKey: 'userId',
+    as: 'user'
+});
+
 Student.hasOne(Cv, { foreignKey: 'studentId' });
 Cv.belongsTo(Student, { foreignKey: 'studentId' });
 
@@ -96,6 +108,33 @@ Student.belongsTo(Profamily, { foreignKey: 'profamilyId', as: 'profamily' });
 Profamily.hasMany(Tutor, { foreignKey: 'profamilyId' });
 Tutor.belongsTo(Profamily, { foreignKey: 'profamilyId' });
 
+// ✅ Relación Many-to-Many con UserCompany
+User.belongsToMany(Company, { 
+    through: UserCompany, 
+    foreignKey: 'userId',
+    otherKey: 'companyId',
+    as: 'companies'
+});
+
+Company.belongsToMany(User, { 
+    through: UserCompany, 
+    foreignKey: 'companyId',
+    otherKey: 'userId',
+    as: 'users'
+});
+
+// Relaciones directas con la tabla intermedia
+User.hasMany(UserCompany, { foreignKey: 'userId' });
+UserCompany.belongsTo(User, { 
+    foreignKey: 'userId',
+    as: 'user'
+});
+
+Company.hasMany(UserCompany, { foreignKey: 'companyId' });
+UserCompany.belongsTo(Company, { 
+    foreignKey: 'companyId',
+    as: 'company'
+});
 
 export { 
     User,
@@ -109,5 +148,6 @@ export {
     Application,
     Token,
     TokenTransaction,
-    StudentToken // NUEVO
+    UserCompany,
+    StudentToken
 };

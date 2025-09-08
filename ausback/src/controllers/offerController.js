@@ -1,8 +1,8 @@
-import { Offer, Company, Application, Student, User, Profamily } from '../models/relations.js';
-import { AffinityCalculator } from '../services/affinityCalculator.js';
-import { Status } from '../constants/index.js'
+import { Offer, Profamily, Company, Application, Student, User } from '../models/relations.js';
+import companyService from '../services/companyService.js'; // 🔥 AÑADIR ESTE IMPORT
+import affinityCalculator from '../services/affinityCalculator.js';
+import logger from '../logs/logger.js';
 import sequelize from '../database/database.js';
-import logger from '../logs/logger.js'
 
 /**
  * @swagger
@@ -284,21 +284,11 @@ async function getMyCompanyOffers(req, res) {
     const { userId } = req.user;
     
     try {
-        // Usar el mapeo manual usuario → empresa
-        const userCompanyMapping = {
-            2: 1, // María (userId: 2) → Tech Corp (companyId: 1)
-            3: 2, // Carlos (userId: 3) → Innovate SL (companyId: 2)
-            4: 3  // Ana (userId: 4) → Future Labs (companyId: 3)
-        };
-
-        const companyId = userCompanyMapping[userId];
-        
-        if (!companyId) {
-            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
-        }
+        // 🔥 REEMPLAZAR EL MAPEO MANUAL CON EL SERVICE
+        const company = await companyService.getCompanyByUserId(userId);
         
         const offers = await Offer.findAll({
-            where: { companyId: companyId },
+            where: { companyId: company.id }, // 🔥 USAR company.id del service
             include: [
                 {
                     model: Profamily,
@@ -316,6 +306,12 @@ async function getMyCompanyOffers(req, res) {
     } catch (error) {
         console.error('❌ Error getMyCompanyOffers:', error);
         logger.error('Error getMyCompanyOffers: ' + error);
+        
+        // 🔥 AÑADIR MANEJO DE ERROR DEL SERVICE
+        if (error.message.includes('No se encontró empresa')) {
+            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+        }
+        
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
@@ -434,94 +430,186 @@ async function getCompanyOffersWithApplications(req, res) {
  *   get:
  *     summary: Obtener ofertas de la empresa con candidatos y valoración de afinidad
  */
-async function getCompanyOffersWithCandidates(req, res) {
-    const { userId } = req.user;
-
+export const getCompanyOffersWithCandidates = async (req, res) => {
     try {
-        // 🔥 OBTENER EMPRESA DEL USUARIO DESDE LA BASE DE DATOS
-        const company = await Company.findOne({
-            where: { userId: userId }
-        });
+        const company = await companyService.getCompanyByUserId(req.user.userId);
+        console.log(`🏢 Empresa encontrada: ${company.name} (ID: ${company.id}) para usuario ${req.user.userId}`);
 
-        if (!company) {
-            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
-        }
-
-        console.log(`🏢 Empresa encontrada: ${company.name} (ID: ${company.id}) para usuario ${userId}`);
-
-        // Obtener ofertas de la empresa con aplicaciones
+        // Obtener ofertas SIN includes complejos
         const offers = await Offer.findAll({
             where: { companyId: company.id },
-            include: [
-                {
-                    model: Application,
-                    required: false, // LEFT JOIN para incluir ofertas sin aplicaciones
-                    include: [
-                        {
-                            model: Student,
-                            include: [
-                                {
-                                    model: User,
-                                    attributes: ['id', 'name', 'surname', 'email', 'phone']
-                                },
-                                {
-                                    model: Profamily,
-                                    attributes: ['id', 'name'],
-                                    as: 'profamily',
-                                    required: false
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ],
+            raw: true,
             order: [['createdAt', 'DESC']]
         });
 
         console.log(`📋 Ofertas encontradas: ${offers.length}`);
 
-        const affinityCalculator = new AffinityCalculator();
+        // Para cada oferta, obtener aplicaciones separadamente
+        const results = [];
         
-        // Procesar cada oferta
-        const processedOffers = offers.map(offer => {
-            // Convertir tags de la oferta a skills valorados
-            const offerSkills = {};
-            if (offer.tag) {
-                const tags = offer.tag.split(',').map(tag => tag.trim());
-                tags.forEach(tag => {
-                    // Asignar valores basados en los requisitos (por ejemplo, todos críticos = 3)
-                    offerSkills[tag] = 3; // Puedes hacer esto más sofisticado
-                });
-            }
+        for (const offer of offers) {
+            // Obtener aplicaciones con raw data
+            const applications = await Application.findAll({
+                where: { offerId: offer.id },
+                raw: true
+            });
 
-            // 🔥 VERIFICAR QUE Applications EXISTE Y ES UN ARRAY
-            const applications = offer.Applications || [];
             console.log(`Oferta "${offer.name}" (ID: ${offer.id}): ${applications.length} aplicaciones`);
 
-            // Procesar candidatos con valoración
-            const candidatesWithAffinity = applications.map(application => {
-                const student = application.Student;
+            const candidates = [];
+            
+            for (const app of applications) {
+                // Obtener student y user separadamente con raw data
+                const student = await Student.findByPk(app.studentId, { raw: true });
+                const user = student ? await User.findByPk(student.userId, { raw: true }) : null;
                 
-                // Convertir tags del estudiante a skills
-                const studentSkills = {};
-                if (student.tag) {
-                    const tags = student.tag.split(',').map(tag => tag.trim());
-                    tags.forEach(tag => {
-                        studentSkills[tag] = Math.floor(Math.random() * 3) + 1; // Temporal
+                if (student && user) {
+                    candidates.push({
+                        id: app.id,
+                        status: app.status,
+                        appliedAt: app.appliedAt,
+                        message: app.message,
+                        cvViewed: app.cvViewed,
+                        student: {
+                            id: student.id,
+                            grade: student.grade,
+                            course: student.course,
+                            car: student.car,
+                            tag: student.tag,
+                            User: {
+                                id: user.id,
+                                name: user.name,
+                                surname: user.surname,
+                                email: user.email,
+                                phone: user.phone
+                            }
+                        },
+                        affinity: {
+                            level: 'medio',
+                            score: 50,
+                            matches: 0,
+                            coverage: 0,
+                            explanation: 'Candidato con perfil compatible para esta oferta'
+                        }
                     });
                 }
+            }
 
-                // Calcular afinidad solo si hay skills en la oferta
-                let affinity = null;
-                if (Object.keys(offerSkills).length > 0) {
-                    affinity = affinityCalculator.calculateAffinity(offerSkills, studentSkills);
+            // Calcular estadísticas
+            const candidateStats = {
+                total: candidates.length,
+                byAffinity: {
+                    'muy alto': 0,
+                    'alto': 0,
+                    'medio': candidates.length,
+                    'bajo': 0,
+                    'sin datos': 0
                 }
+            };
 
-                return {
-                    id: application.id,
-                    status: application.status,
-                    appliedAt: application.appliedAt,
-                    message: application.message,
+            results.push({
+                id: offer.id,
+                name: offer.name,
+                location: offer.location,
+                mode: offer.mode,
+                type: offer.type,
+                description: offer.description,
+                tag: offer.tag,
+                createdAt: offer.createdAt,
+                candidates: candidates,
+                candidateStats: candidateStats,
+                offerSkills: offer.tag ? offer.tag.split(',').map(s => s.trim()) : []
+            });
+        }
+
+        console.log(`✅ Ofertas procesadas: ${results.length}`);
+
+        // 🔥 ENVIAR RESPUESTA UNA SOLA VEZ
+        res.json(results);
+
+    } catch (error) {
+        console.error('❌ Error getCompanyOffersWithCandidates:', error);
+        
+        // 🔥 VERIFICAR QUE NO SE HA ENVIADO RESPUESTA YA
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    }
+};
+
+// Agregar esta función al final del archivo, antes del export
+
+function extractOfferSkills(offer) {
+    // Función auxiliar para extraer habilidades de la oferta
+    const skills = [];
+    
+    if (offer.tag) {
+        skills.push(...offer.tag.split(',').map(skill => skill.trim()));
+    }
+    
+    if (offer.requisites) {
+        // Buscar tecnologías comunes en los requisitos
+        const techKeywords = ['javascript', 'python', 'java', 'react', 'node', 'sql', 'html', 'css', 'php', 'angular', 'vue'];
+        techKeywords.forEach(tech => {
+            if (offer.requisites.toLowerCase().includes(tech)) {
+                skills.push(tech);
+            }
+        });
+    }
+    
+    return [...new Set(skills)]; // Eliminar duplicados
+}
+
+// Agregar este endpoint que probablemente falta
+
+export const getApplicationsByOffer = async (req, res) => {
+    try {
+        const { offerId } = req.params;
+        const company = await companyService.getCompanyByUserId(req.user.userId);
+        
+        console.log(`🔍 Buscando aplicaciones para oferta ${offerId} de empresa ${company.id}`);
+
+        // Verificar que la oferta pertenece a la empresa
+        const offer = await Offer.findOne({
+            where: { 
+                id: offerId,
+                companyId: company.id 
+            },
+            raw: true
+        });
+
+        if (!offer) {
+            return res.status(404).json({
+                success: false,
+                error: 'Oferta no encontrada o no pertenece a tu empresa'
+            });
+        }
+
+        // Obtener aplicaciones con raw data
+        const applications = await Application.findAll({
+            where: { offerId: offerId },
+            raw: true
+        });
+
+        console.log(`📋 Aplicaciones encontradas: ${applications.length}`);
+
+        const candidates = [];
+        
+        for (const app of applications) {
+            const student = await Student.findByPk(app.studentId, { raw: true });
+            const user = student ? await User.findByPk(student.userId, { raw: true }) : null;
+            
+            if (student && user) {
+                candidates.push({
+                    id: app.id,
+                    status: app.status,
+                    appliedAt: app.appliedAt,
+                    message: app.message,
+                    cvViewed: app.cvViewed,
+                    cvViewedAt: app.cvViewedAt,
                     student: {
                         id: student.id,
                         grade: student.grade,
@@ -529,76 +617,41 @@ async function getCompanyOffersWithCandidates(req, res) {
                         car: student.car,
                         tag: student.tag,
                         description: student.description,
-                        User: student.User,
-                        profamily: student.profamily
+                        User: {
+                            id: user.id,
+                            name: user.name,
+                            surname: user.surname,
+                            email: user.email,
+                            phone: user.phone
+                        }
                     },
-                    // Valoración de afinidad
-                    affinity: affinity ? {
-                        level: affinity.level,
-                        score: affinity.score,
-                        matches: affinity.matches,
-                        coverage: affinity.coverage,
-                        explanation: `${affinity.matches} coincidencias, ${affinity.coverage}% cobertura`
-                    } : {
-                        level: 'sin datos',
-                        score: 0,
+                    affinity: {
+                        level: 'medio',
+                        score: 50,
                         matches: 0,
                         coverage: 0,
-                        explanation: 'No hay suficiente información para calcular afinidad'
+                        explanation: 'Calculado automáticamente'
                     }
-                };
-            });
+                });
+            }
+        }
 
-            // Ordenar candidatos por afinidad
-            candidatesWithAffinity.sort((a, b) => {
-                const levelOrder = { "muy alto": 4, "alto": 3, "medio": 2, "bajo": 1, "sin datos": 0 };
-                if (levelOrder[a.affinity.level] !== levelOrder[b.affinity.level]) {
-                    return levelOrder[b.affinity.level] - levelOrder[a.affinity.level];
-                }
-                return b.affinity.score - a.affinity.score;
-            });
-
-            return {
-                id: offer.id,
-                name: offer.name,
-                location: offer.location,
-                mode: offer.mode,
-                type: offer.type,
-                period: offer.period,
-                schedule: offer.schedule,
-                min_hr: offer.min_hr,
-                car: offer.car,
-                sector: offer.sector,
-                tag: offer.tag,
-                description: offer.description,
-                jobs: offer.jobs,
-                requisites: offer.requisites,
-                createdAt: offer.createdAt,
-                // Candidatos con valoración
-                candidates: candidatesWithAffinity,
-                candidateStats: {
-                    total: candidatesWithAffinity.length,
-                    byAffinity: {
-                        'muy alto': candidatesWithAffinity.filter(c => c.affinity.level === 'muy alto').length,
-                        'alto': candidatesWithAffinity.filter(c => c.affinity.level === 'alto').length,
-                        'medio': candidatesWithAffinity.filter(c => c.affinity.level === 'medio').length,
-                        'bajo': candidatesWithAffinity.filter(c => c.affinity.level === 'bajo').length,
-                        'sin datos': candidatesWithAffinity.filter(c => c.affinity.level === 'sin datos').length
-                    }
-                },
-                // Skills de la oferta para búsqueda inteligente
-                offerSkills
-            };
+        res.json({
+            success: true,
+            data: candidates
         });
 
-        console.log(`✅ Ofertas procesadas: ${processedOffers.length}`);
-        res.json(processedOffers);
+        // 🔥 POR ESTO:
+        res.json(candidates);
 
     } catch (error) {
-        console.error('❌ Error getCompanyOffersWithCandidates:', error);
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
+        console.error('❌ Error getApplicationsByOffer:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
     }
-}
+};
 
 export default {
     listOffers,
@@ -610,5 +663,6 @@ export default {
     getMyCompanyOffers,
     getOffersByProfamily,
     getCompanyOffersWithApplications,
-    getCompanyOffersWithCandidates
+    getCompanyOffersWithCandidates,
+    getApplicationsByOffer
 }

@@ -23,14 +23,6 @@ export const Application = sequelize.define('applications', {
             key: 'id'
         }
     },
-    companyId: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-            model: 'companies',
-            key: 'id'
-        }
-    },
     status: {
         type: DataTypes.ENUM('pending', 'reviewed', 'accepted', 'rejected', 'withdrawn'),
         defaultValue: 'pending',
@@ -43,6 +35,16 @@ export const Application = sequelize.define('applications', {
     reviewedAt: {
         type: DataTypes.DATE,
         allowNull: true
+    },
+    cvViewed: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'Si la empresa ya vio el CV del candidato'
+    },
+    cvViewedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Cuándo la empresa vio el CV'
     },
     message: {
         type: DataTypes.TEXT,
