@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-import { Eye, Mail, Search, Plus, X, Brain, Star, Target, Car, GraduationCap, Briefcase, Lock, CreditCard } from 'lucide-react';
+import { Eye, Mail, Search, Plus, X, Brain, Star, Target, Car, GraduationCap, Briefcase, Lock, CreditCard, CheckCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { AuthGuard } from '@/components/auth-guard';
 
@@ -68,6 +68,13 @@ function IntelligentSearchContent() {
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [userTokens, setUserTokens] = useState(0); // Cambiar a 0 inicialmente
   const [loadingTokens, setLoadingTokens] = useState(true);
+  const [selectedStudentForAction, setSelectedStudentForAction] = useState<any>(null);
+  const [cvData, setCvData] = useState<any>(null);
+  const [contactForm, setContactForm] = useState({
+    subject: '',
+    message: ''
+  });
+  const [revealedCVs, setRevealedCVs] = useState<number[]>([]);
 
   const { token } = useAuthStore();
 
@@ -97,6 +104,32 @@ function IntelligentSearchContent() {
 
     if (token) {
       fetchTokenBalance();
+    }
+  }, [token]);
+
+  // REVEAL CVs
+  useEffect(() => {
+    const fetchRevealedCVs = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/students/revealed-cvs', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setRevealedCVs(data.revealedStudentIds);
+          console.log('✅ CVs revelados cargados:', data.revealedStudentIds);
+        }
+      } catch (error) {
+        console.error('❌ Error cargando CVs revelados:', error);
+      }
+    };
+
+    if (token) {
+      fetchRevealedCVs();
     }
   }, [token]);
 
@@ -157,84 +190,109 @@ function IntelligentSearchContent() {
     }
   };
 
-  const handleViewCV = async (student: Student) => {
-    if (userTokens < 2) {
-      setShowTokenModal(true);
-      return;
-    }
-
+  const handleRevealStudent = async (student: Student) => {
     try {
-      // Usar tokens en el backend
-      const response = await fetch('http://localhost:5000/api/students/tokens/use', {
+      console.log('🔓 Revelar estudiante:', student.id);
+      
+      const isAlreadyRevealed = revealedCVs.includes(student.id);
+      
+      if (isAlreadyRevealed) {
+        console.log('✅ Estudiante ya revelado - Acceso gratuito');
+      }
+      
+      const response = await fetch(`http://localhost:5000/api/students/${student.id}/view-cv`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'view_cv',
-          studentId: student.id,
-          amount: 2
+          fromIntelligentSearch: true
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setUserTokens(data.newBalance);
-        setSelectedStudent(student);
-        setShowCVModal(true);
-        console.log('✅ Tokens utilizados. Nuevo balance:', data.newBalance);
-      } else {
-        const error = await response.json();
-        if (error.code === 'INSUFFICIENT_TOKENS') {
-          setShowTokenModal(true);
-        } else {
-          alert('Error al procesar la solicitud');
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (errorData.code === 'INSUFFICIENT_TOKENS') {
+          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para revelar este estudiante.`);
+          return;
         }
+        throw new Error('Error al revelar el estudiante');
       }
+
+      const cvData = await response.json();
+      console.log('✅ Estudiante revelado:', cvData);
+      
+      // 🔥 ACTUALIZAR INMEDIATAMENTE EL STATE Y TOKEN BALANCE
+      if (!isAlreadyRevealed && !cvData.wasAlreadyRevealed) {
+        setRevealedCVs(prev => [...prev, student.id]);
+        // Actualizar tokens inmediatamente
+        setUserTokens(prev => prev - 2);
+      }
+      
+      // Mostrar modal elegante
+      setSelectedStudentForAction(student);
+      setCvData(cvData);
+      setShowCVModal(true);
+      
     } catch (error) {
-      console.error('❌ Error usando tokens:', error);
-      alert('Error al procesar la solicitud');
+      console.error('❌ Error revelando estudiante:', error);
+      alert('Error al revelar el estudiante');
     }
   };
 
-  const handleContactStudent = async (student: Student) => {
-    if (userTokens < 3) {
-      setShowTokenModal(true);
-      return;
-    }
+  const handleContact = (student: Student) => {
+    setSelectedStudentForAction(student);
+    setContactForm({
+      subject: `Interés en tu perfil profesional`,
+      message: `Estimado/a ${student.User.name},\n\nHemos encontrado tu perfil a través de nuestro sistema de búsqueda inteligente y nos interesa mucho conocerte.\n\nTu nivel de afinidad con nuestras ofertas es: ${student.affinity?.level?.toUpperCase()}\n\n¿Te gustaría conocer más sobre las oportunidades que tenemos disponibles?\n\nSaludos cordiales.`
+    });
+    setShowContactModal(true);
+  };
+
+  const handleSendContact = async () => {
+    if (!selectedStudentForAction) return;
 
     try {
-      const response = await fetch('http://localhost:5000/api/students/tokens/use', {
+      const response = await fetch(`http://localhost:5000/api/students/${selectedStudentForAction.id}/contact`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'contact_student',
-          studentId: student.id,
-          amount: 3
+          fromIntelligentSearch: false, // 🔥 GRATIS porque ya fue revelado
+          subject: contactForm.subject,
+          message: contactForm.message
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setUserTokens(data.newBalance);
-        setSelectedStudent(student);
-        setShowContactModal(true);
-        console.log('✅ Tokens utilizados. Nuevo balance:', data.newBalance);
-      } else {
-        const error = await response.json();
-        if (error.code === 'INSUFFICIENT_TOKENS') {
-          setShowTokenModal(true);
-        } else {
-          alert('Error al procesar la solicitud');
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (errorData.code === 'INSUFFICIENT_TOKENS') {
+          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para contactar.`);
+          return;
         }
+        throw new Error('Error al contactar el estudiante');
       }
+
+      const result = await response.json();
+      console.log('✅ Contacto registrado:', result);
+
+      // Abrir cliente de email
+      const emailBody = encodeURIComponent(contactForm.message);
+      const emailSubject = encodeURIComponent(contactForm.subject);
+      const emailUrl = `mailto:${selectedStudentForAction.User.email}?subject=${emailSubject}&body=${emailBody}`;
+      
+      window.open(emailUrl);
+      
+      // Cerrar modal
+      setShowContactModal(false);
+      setContactForm({ subject: '', message: '' });
+      
     } catch (error) {
-      console.error('❌ Error usando tokens:', error);
-      alert('Error al procesar la solicitud');
+      console.error('❌ Error contactando estudiante:', error);
+      alert('Error al contactar el estudiante');
     }
   };
 
@@ -534,23 +592,15 @@ function IntelligentSearchContent() {
                     </div>
 
                     {/* Botones de acción */}
-                    <div className="flex flex-col gap-2 ml-4">
-                      <Button
-                        size="sm"
+                    <div className="flex flex-col gap-2">
+                      <Button 
+                        size="sm" 
                         variant="outline"
-                        onClick={() => handleViewCV(student)}
-                        className="flex items-center gap-2"
+                        onClick={() => handleRevealStudent(student)}
+                        className={revealedCVs.includes(student.id) ? 'bg-green-50 border-green-300 text-green-700' : 'bg-purple-50 border-purple-300 text-purple-700'}
                       >
-                        {userTokens < 2 ? <Lock className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        Ver CV (2 tokens)
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleContactStudent(student)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
-                      >
-                        {userTokens < 3 ? <Lock className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
-                        Contactar (3 tokens)
+                        <Eye className="w-4 h-4 mr-1" />
+                        {revealedCVs.includes(student.id) ? 'Ver Perfil (Revelado)' : 'Revelar Perfil (2 tokens)'}
                       </Button>
                     </div>
                   </div>
@@ -573,40 +623,221 @@ function IntelligentSearchContent() {
         </div>
       )}
 
-      {/* Modal de tokens insuficientes */}
-      <Dialog open={showTokenModal} onOpenChange={setShowTokenModal}>
-        <DialogContent className="max-w-md">
+      {/* Modal CV Elegante */}
+      <Dialog open={showCVModal} onOpenChange={setShowCVModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-orange-500" />
-              Tokens Insuficientes
+              <Eye className="w-5 h-5" />
+              CV de {selectedStudentForAction?.User?.name} {selectedStudentForAction?.User?.surname}
+              <Badge className={cvData?.wasAlreadyRevealed ? 'bg-blue-100 text-blue-800 ml-2' : 'bg-purple-100 text-purple-800 ml-2'}>
+                {cvData?.wasAlreadyRevealed ? 'Ya Revelado' : 'Con Tokens'}
+              </Badge>
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-gray-600">
-              No tienes suficientes tokens para realizar esta acción. 
-            </p>
-            <div className="bg-orange-50 p-4 rounded-lg">
-              <h4 className="font-semibold text-orange-900 mb-2">Precios:</h4>
-              <ul className="text-sm text-orange-800 space-y-1">
-                <li>• Ver CV: 2 tokens</li>
-                <li>• Contactar estudiante: 3 tokens</li>
-              </ul>
+          
+          {selectedStudentForAction && cvData && (
+            <div className="space-y-6">
+              {/* Información personal */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-lg mb-3">Información Personal</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Nombre completo</p>
+                    <p className="font-medium">{selectedStudentForAction.User.name} {selectedStudentForAction.User.surname}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Email</p>
+                    <p className="font-medium">{selectedStudentForAction.User.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Teléfono</p>
+                    <p className="font-medium">{selectedStudentForAction.User.phone || 'No especificado'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Vehículo propio</p>
+                    <p className="font-medium">{selectedStudentForAction.car ? 'Sí' : 'No'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Formación académica */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-lg mb-3">Formación Académica</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Grado</p>
+                    <p className="font-medium">{selectedStudentForAction.grade}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Curso</p>
+                    <p className="font-medium">{selectedStudentForAction.course}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Habilidades */}
+              {selectedStudentForAction.tag && (
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-lg mb-3">Habilidades y Tecnologías</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedStudentForAction.tag.split(',').map((tag: string, index: number) => (
+                      <Badge key={index} variant="secondary">{tag.trim()}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Afinidad */}
+              {selectedStudentForAction.affinity && (
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-lg mb-3">Afinidad con tu búsqueda</h3>
+                  <div className="flex items-center gap-3 mb-2">
+                    <Badge className="bg-purple-100 text-purple-800">
+                      {selectedStudentForAction.affinity.level.toUpperCase()}
+                    </Badge>
+                    <span className="text-sm text-gray-600">
+                      Score: {selectedStudentForAction.affinity.score}/10
+                    </span>
+                  </div>
+                  <p className="text-sm text-purple-700">
+                    {selectedStudentForAction.affinity.explanation}
+                  </p>
+                </div>
+              )}
+
+              {/* Información de acceso */}
+              <div className={`p-4 rounded-lg border ${cvData?.wasAlreadyRevealed ? 'bg-blue-50 border-blue-200' : 'bg-purple-50 border-purple-200'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <h4 className={`font-semibold ${cvData?.wasAlreadyRevealed ? 'text-blue-800' : 'text-purple-800'}`}>
+                    {cvData?.wasAlreadyRevealed ? 'CV Previamente Revelado' : 'Candidato Inteligente - 2 Tokens'}
+                  </h4>
+                </div>
+                <p className="text-sm text-gray-700">
+                  {cvData?.wasAlreadyRevealed 
+                    ? 'Ya revelaste este CV anteriormente con tokens, ahora puedes acceder gratuitamente.'
+                    : 'Este candidato fue encontrado por nuestro algoritmo de IA y tiene alta afinidad con tu búsqueda.'
+                  }
+                </p>
+              </div>
+
+              {/* Acciones */}
+              <div className="flex gap-2 pt-4 border-t">
+                <Button 
+                  onClick={() => {
+                    setShowCVModal(false);
+                    // Abrir modal de contacto
+                    setContactForm({
+                      subject: `Interés en tu perfil profesional`,
+                      message: `Estimado/a ${selectedStudentForAction?.User?.name},\n\nHemos revisado tu perfil y nos interesa mucho conocerte.\n\nTu nivel de afinidad con nuestras búsquedas es: ${selectedStudentForAction?.affinity?.level?.toUpperCase()}\n\n¿Te gustaría conocer más sobre las oportunidades que tenemos disponibles?\n\nSaludos cordiales.`
+                    });
+                    setShowContactModal(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Mail className="w-4 h-4 mr-2" />
+                  Contactar Estudiante
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowCVModal(false)}
+                >
+                  Cerrar
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Button className="flex-1 bg-orange-600 hover:bg-orange-700">
-                Comprar Tokens
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Contacto Elegante */}
+      <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5" />
+              Contactar a {selectedStudentForAction?.User?.name} {selectedStudentForAction?.User?.surname}
+              <Badge className="bg-green-100 text-green-800 ml-2">
+                Sin Costo Adicional
+              </Badge>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Info del estudiante */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                  {selectedStudentForAction?.User?.name?.charAt(0)}{selectedStudentForAction?.User?.surname?.charAt(0)}
+                </div>
+                <div>
+                  <h4 className="font-semibold">{selectedStudentForAction?.User?.name} {selectedStudentForAction?.User?.surname}</h4>
+                  <p className="text-sm text-gray-600">{selectedStudentForAction?.User?.email}</p>
+                  <p className="text-sm text-gray-600">{selectedStudentForAction?.grade} - {selectedStudentForAction?.course}</p>
+                  {selectedStudentForAction?.affinity && (
+                    <Badge className="bg-purple-100 text-purple-800 mt-1">
+                      Afinidad: {selectedStudentForAction.affinity.level}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Formulario de contacto */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Asunto del mensaje
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={contactForm.subject}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, subject: e.target.value }))}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mensaje
+                </label>
+                <textarea
+                  rows={8}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={contactForm.message}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Información de costo */}
+            <div className="p-3 rounded-lg bg-green-50 text-green-800">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4" />
+                <span className="text-sm font-medium">Contacto incluido sin costo adicional - Estudiante ya revelado</span>
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-2 pt-4">
+              <Button 
+                onClick={handleSendContact}
+                className="bg-green-600 hover:bg-green-700"
+                disabled={!contactForm.subject.trim() || !contactForm.message.trim()}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Enviar Contacto
               </Button>
-              <Button variant="outline" onClick={() => setShowTokenModal(false)}>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowContactModal(false)}
+              >
                 Cancelar
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Modales CV y contacto (similares a los existentes) */}
-      {/* ... implementar modales similares a candidatos ... */}
     </div>
   );
 }

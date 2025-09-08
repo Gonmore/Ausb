@@ -11,6 +11,7 @@ import { Token } from "./token.js";
 import { TokenTransaction } from "./tokenTransaction.js";
 import { StudentToken } from "./studentToken.js";
 import UserCompany from './userCompany.js';
+import { RevealedCV } from './revealedCV.js';
 
 //Relaciones entre tablas
 
@@ -42,7 +43,8 @@ Application.belongsTo(Student, {
 });
 
 Student.hasMany(Application, { 
-    foreignKey: 'studentId'
+    foreignKey: 'studentId',
+    as: 'applications'
 });
 
 // Relaciones para tokens de empresa
@@ -136,6 +138,27 @@ UserCompany.belongsTo(Company, {
     as: 'company'
 });
 
+// Relaciones para CVs revelados
+Company.hasMany(RevealedCV, {
+    foreignKey: 'companyId',
+    as: 'revealedCVs'
+});
+
+RevealedCV.belongsTo(Company, {
+    foreignKey: 'companyId',
+    as: 'company'
+});
+
+Student.hasMany(RevealedCV, {
+    foreignKey: 'studentId',
+    as: 'revealedCVs'
+});
+
+RevealedCV.belongsTo(Student, {
+    foreignKey: 'studentId',
+    as: 'student'
+});
+
 export { 
     User,
     Scenter,
@@ -149,5 +172,6 @@ export {
     Token,
     TokenTransaction,
     UserCompany,
-    StudentToken
+    StudentToken,
+    RevealedCV
 };

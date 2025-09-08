@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import {ConditionalHeader} from "../components/conditional-header";
+import { ConditionalHeader } from "../components/conditional-header";
 import QueryProvider from '../providers/query-provider';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { TokenGuard } from '@/components/auth/token-guard';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -52,8 +53,12 @@ export default function RootLayout({
     <html lang="es" className="fprax-theme">
       <body className={inter.className}>
         <QueryProvider>
-          <ConditionalHeader />
-          {children}
+          <TokenGuard>
+            <ConditionalHeader />
+            <main className="min-h-screen">
+              {children}
+            </main>
+          </TokenGuard>
           <ToastContainer
             position="top-right"
             autoClose={3000}

@@ -1,9 +1,9 @@
 import { Status } from '../constants/index.js'
 import sequelize from '../database/database.js';
 import logger from '../logs/logger.js'
-import { User, Student, Profamily, Company, Application, UserCompany, Offer } from '../models/relations.js';
-import { AffinityCalculator } from '../services/affinityCalculator.js';
 import { TokenService } from '../services/tokenService.js';
+import { User, Student, Profamily, Company, Application, UserCompany, Offer, RevealedCV } from '../models/relations.js';
+import { AffinityCalculator } from '../services/affinityCalculator.js';
 import { Op } from 'sequelize';
 
 async function getStudent(req, res) {
@@ -528,36 +528,44 @@ export const getStudentById = async (req, res) => {
   }
 };
 
+// AGREGAR esta función también antes del export default:
+
 export const getTokenBalance = async (req, res) => {
   try {
     const { userId } = req.user;
-    
-    const userCompanyMapping = {
-      2: 1, // María → Tech Corp
-      3: 2, // Carlos → Innovate SL  
-      4: 3  // Ana → Future Labs
-    };
 
-    const companyId = userCompanyMapping[userId];
-    if (!companyId) {
-      return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+    // Obtener empresa asociada al usuario
+    const userCompany = await UserCompany.findOne({
+      where: { userId: userId, isActive: true },
+      include: [{ model: Company, as: 'company' }],
+      raw: false
+    });
+
+    if (!userCompany || !userCompany.company) {
+      return res.status(404).json({ mensaje: 'Usuario no está asociado a ninguna empresa activa' });
     }
 
-    const tokenRecord = await TokenService.getCompanyTokens(companyId);
-    
+    // Obtener balance de tokens usando TokenService
+    const tokenData = await TokenService.getCompanyTokens(userCompany.company.id);
+
     res.json({
-      balance: tokenRecord.amount,
-      used: tokenRecord.usedAmount,
-      purchased: tokenRecord.purchasedAmount,
-      lastPurchase: tokenRecord.lastPurchaseDate
+      balance: tokenData.available,
+      used: tokenData.used,
+      total: tokenData.total,
+      companyId: userCompany.company.id,
+      companyName: userCompany.company.name
     });
+
   } catch (error) {
-    logger.error('Error getTokenBalance:', error);
-    res.status(500).json({ mensaje: 'Error interno del servidor' });
+    console.error('❌ Error obteniendo balance de tokens:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
-// AGREGAR estas líneas al final del archivo, antes del export default:
+// AGREGAR estas funciones al final del archivo, antes del export default:
 
 // 🔥 VER CV - GRATIS para candidatos normales, CON TOKENS para IA
 export const viewStudentCV = async (req, res) => {
@@ -580,27 +588,35 @@ export const viewStudentCV = async (req, res) => {
     }
 
     const company = userCompany.company;
+    let wasAlreadyRevealed = false;
+    let tokensUsed = 0;
 
-    // 🔥 SI VIENE DE BÚSQUEDA INTELIGENTE, COBRAR TOKENS
+    // 🔥 SI VIENE DE BÚSQUEDA INTELIGENTE, VERIFICAR PERSISTENCIA Y COBRAR TOKENS
     if (fromIntelligentSearch) {
-      const tokenCost = 2;
-      
       try {
-        const newBalance = await TokenService.useTokens(
+        const result = await TokenService.useTokens(
           company.id,
-          tokenCost,
+          2, // Costo por ver CV
           'view_cv_ai',
           studentId,
           `Ver CV desde búsqueda inteligente - Estudiante ID: ${studentId}`
         );
         
-        console.log(`💳 Tokens cobrados: ${tokenCost}, Nuevo balance: ${newBalance}`);
+        wasAlreadyRevealed = result.wasAlreadyRevealed;
+        tokensUsed = wasAlreadyRevealed ? 0 : 2;
+        
+        if (wasAlreadyRevealed) {
+          console.log(`✅ CV ya fue revelado anteriormente - Acceso gratuito`);
+        } else {
+          console.log(`💳 Tokens cobrados: 2, Nuevo balance: ${result.newBalance}`);
+        }
+        
       } catch (error) {
         if (error.message === 'Tokens insuficientes') {
           return res.status(400).json({
             mensaje: 'Tokens insuficientes para ver este CV',
             code: 'INSUFFICIENT_TOKENS',
-            required: tokenCost
+            required: 2
           });
         }
         throw error;
@@ -626,7 +642,8 @@ export const viewStudentCV = async (req, res) => {
           name: user.name,
           surname: user.surname,
           email: user.email,
-          phone: user.phone
+          phone: user.phone,
+          description: user.description
         } : null,
         Profamily: profamily ? {
           id: profamily.id,
@@ -638,10 +655,11 @@ export const viewStudentCV = async (req, res) => {
         skills: student.tag ? student.tag.split(',').map(s => s.trim()) : [],
         hasVehicle: student.car,
         availability: student.disp,
-        description: student.description
+        description: student.description || 'Sin descripción adicional'
       },
-      accessType: fromIntelligentSearch ? 'paid' : 'free',
-      tokensUsed: fromIntelligentSearch ? 2 : 0
+      accessType: fromIntelligentSearch ? (wasAlreadyRevealed ? 'previously_revealed' : 'paid') : 'free',
+      tokensUsed: tokensUsed,
+      wasAlreadyRevealed: wasAlreadyRevealed
     };
 
     res.json(cvData);
@@ -655,12 +673,177 @@ export const viewStudentCV = async (req, res) => {
   }
 };
 
-// 🔥 CONTACTAR ESTUDIANTE - GRATIS para candidatos normales, CON TOKENS para IA
+// AGREGAR función para obtener CVs revelados:
+export const getRevealedCVs = async (req, res) => {
+  try {
+    const { userId } = req.user;
+
+    const userCompany = await UserCompany.findOne({
+      where: { userId: userId, isActive: true },
+      include: [{ model: Company, as: 'company' }],
+      raw: false
+    });
+
+    if (!userCompany || !userCompany.company) {
+      return res.status(404).json({ mensaje: 'Usuario no está asociado a ninguna empresa activa' });
+    }
+
+    const revealedStudentIds = await TokenService.getRevealedCVs(userCompany.company.id);
+    
+    res.json({
+      revealedStudentIds: revealedStudentIds,
+      total: revealedStudentIds.length
+    });
+
+  } catch (error) {
+    console.error('❌ Error obteniendo CVs revelados:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+export const getRevealedCVsWithDetails = async (req, res) => {
+  try {
+    const { userId } = req.user;
+
+    const userCompany = await UserCompany.findOne({
+      where: { userId: userId, isActive: true },
+      include: [{ model: Company, as: 'company' }],
+      raw: false
+    });
+
+    if (!userCompany || !userCompany.company) {
+      return res.status(404).json({ mensaje: 'Usuario no está asociado a ninguna empresa activa' });
+    }
+
+    const revealedCVsData = await RevealedCV.findAll({
+      where: { companyId: userCompany.company.id },
+      include: [
+        {
+          model: Student,
+          as: 'student',
+          include: [
+            { 
+              model: User, 
+              as: 'user', // Usar 'user' en lugar de 'User'
+              attributes: ['id', 'name', 'surname', 'email', 'phone']
+            },
+            { 
+              model: Profamily, 
+              as: 'profamily',
+              attributes: ['id', 'name'],
+              required: false 
+            }
+          ]
+        }
+      ],
+      order: [['revealedAt', 'DESC']]
+    });
+
+    const processedData = revealedCVsData.map(revealed => ({
+      id: revealed.id,
+      studentId: revealed.studentId,
+      revealedAt: revealed.revealedAt,
+      tokensUsed: revealed.tokensUsed,
+      revealType: revealed.revealType,
+      student: {
+        id: revealed.student.id,
+        grade: revealed.student.grade,
+        course: revealed.student.course,
+        car: revealed.student.car,
+        tag: revealed.student.tag,
+        description: revealed.student.description,
+        active: revealed.student.active,
+        user: revealed.student.user,
+        profamily: revealed.student.profamily
+      }
+    }));
+
+    res.json({
+      revealedCVs: processedData,
+      total: processedData.length,
+      company: {
+        id: userCompany.company.id,
+        name: userCompany.company.name
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error obteniendo CVs revelados con detalles:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+export const useTokens = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { action, studentId, amount } = req.body;
+
+    // Mapeo de usuarios a empresas (temporal - debería venir de la relación UserCompany)
+    const userCompanyMapping = {
+      2: 1, 3: 2, 4: 3
+    };
+
+    const companyId = userCompanyMapping[userId];
+    if (!companyId) {
+      return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+    }
+
+    // Definir costos por acción
+    const costs = {
+      'view_cv': 2,
+      'contact_student': 3
+    };
+
+    const cost = amount || costs[action];
+    if (!cost) {
+      return res.status(400).json({ mensaje: 'Acción no válida' });
+    }
+
+    // Usar el TokenService para procesar la transacción
+    const result = await TokenService.useTokens(
+      companyId, 
+      cost, 
+      action, 
+      studentId,
+      `${action} - Estudiante ID: ${studentId}`
+    );
+
+    res.json({
+      success: true,
+      newBalance: result.newBalance,
+      used: cost,
+      action,
+      wasAlreadyRevealed: result.wasAlreadyRevealed || false
+    });
+
+  } catch (error) {
+    console.error('❌ Error useTokens:', error);
+    
+    if (error.message === 'Tokens insuficientes') {
+      return res.status(400).json({ 
+        mensaje: 'Tokens insuficientes',
+        code: 'INSUFFICIENT_TOKENS'
+      });
+    }
+    
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
+// AGREGAR esta función después de viewStudentCV:
+
+// 🔥 CONTACTAR ESTUDIANTE - GRATIS si ya fue revelado, CON TOKENS si es la primera vez
 export const contactStudent = async (req, res) => {
   try {
     const { userId } = req.user;
     const { studentId } = req.params;
-    const { fromIntelligentSearch = false, message = '' } = req.body;
+    const { fromIntelligentSearch = false, message = '', subject = '' } = req.body;
 
     console.log(`📞 Solicitud de contacto - Estudiante: ${studentId}, Desde IA: ${fromIntelligentSearch}`);
 
@@ -676,27 +859,35 @@ export const contactStudent = async (req, res) => {
     }
 
     const company = userCompany.company;
+    let wasAlreadyRevealed = false;
+    let tokensUsed = 0;
 
-    // 🔥 SI VIENE DE BÚSQUEDA INTELIGENTE, COBRAR TOKENS
+    // 🔥 SI VIENE DE BÚSQUEDA INTELIGENTE, VERIFICAR SI YA FUE REVELADO
     if (fromIntelligentSearch) {
-      const tokenCost = 3;
-      
       try {
-        const newBalance = await TokenService.useTokens(
+        const result = await TokenService.useTokens(
           company.id,
-          tokenCost,
+          2, // Mismo costo que ver CV (2 tokens por "revelar" estudiante)
           'contact_student_ai',
           studentId,
           `Contactar estudiante desde búsqueda inteligente - Estudiante ID: ${studentId}`
         );
         
-        console.log(`💳 Tokens cobrados: ${tokenCost}, Nuevo balance: ${newBalance}`);
+        wasAlreadyRevealed = result.wasAlreadyRevealed;
+        tokensUsed = wasAlreadyRevealed ? 0 : 2;
+        
+        if (wasAlreadyRevealed) {
+          console.log(`✅ Estudiante ya fue revelado anteriormente - Contacto gratuito`);
+        } else {
+          console.log(`💳 Tokens cobrados: 2, Nuevo balance: ${result.newBalance}`);
+        }
+        
       } catch (error) {
         if (error.message === 'Tokens insuficientes') {
           return res.status(400).json({
             mensaje: 'Tokens insuficientes para contactar este estudiante',
             code: 'INSUFFICIENT_TOKENS',
-            required: tokenCost
+            required: 2
           });
         }
         throw error;
@@ -713,6 +904,9 @@ export const contactStudent = async (req, res) => {
 
     const user = await User.findByPk(student.userId, { raw: true });
 
+    // TODO: Aquí agregar lógica para enviar notificación/email al estudiante
+    // Por ahora solo registramos el contacto
+    
     res.json({
       success: true,
       message: 'Contacto realizado exitosamente',
@@ -727,9 +921,14 @@ export const contactStudent = async (req, res) => {
         name: company.name,
         email: company.email
       },
-      accessType: fromIntelligentSearch ? 'paid' : 'free',
-      tokensUsed: fromIntelligentSearch ? 3 : 0,
-      contactMessage: message
+      contactData: {
+        subject: subject || `Contacto desde ${company.name}`,
+        message: message || 'La empresa está interesada en contactar contigo.',
+        sentAt: new Date().toISOString()
+      },
+      accessType: fromIntelligentSearch ? (wasAlreadyRevealed ? 'previously_revealed' : 'paid') : 'free',
+      tokensUsed: tokensUsed,
+      wasAlreadyRevealed: wasAlreadyRevealed
     });
 
   } catch (error) {
@@ -741,68 +940,12 @@ export const contactStudent = async (req, res) => {
   }
 };
 
-// VERIFICAR que esta función esté al final del archivo, antes del export default:
-
-export const useTokens = async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const { action, studentId, amount } = req.body;
-
-    const userCompanyMapping = {
-      2: 1, 3: 2, 4: 3
-    };
-
-    const companyId = userCompanyMapping[userId];
-    if (!companyId) {
-      return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
-    }
-
-    // Definir costos
-    const costs = {
-      'view_cv': 2,
-      'contact_student': 3
-    };
-
-    const cost = amount || costs[action];
-    if (!cost) {
-      return res.status(400).json({ mensaje: 'Acción no válida' });
-    }
-
-    const newBalance = await TokenService.useTokens(
-      companyId, 
-      cost, 
-      action, 
-      studentId,
-      `${action} - Estudiante ID: ${studentId}`
-    );
-
-    res.json({
-      success: true,
-      newBalance,
-      used: cost,
-      action
-    });
-  } catch (error) {
-    logger.error('Error useTokens:', error);
-    
-    if (error.message === 'Tokens insuficientes') {
-      return res.status(400).json({ 
-        mensaje: 'Tokens insuficientes',
-        code: 'INSUFFICIENT_TOKENS'
-      });
-    }
-    
-    res.status(500).json({ mensaje: 'Error interno del servidor' });
-  }
-};
-
 export default {
     getStudent,
     createStudent,
     updateStudent,
     activateInactivate,
     deleteStudent,
-    // 🔥 AGREGAR LAS NUEVAS FUNCIONES:
     getAllStudents,
     getCandidates,
     searchIntelligentStudents,
@@ -810,6 +953,8 @@ export default {
     getTokenBalance,
     useTokens,
     viewStudentCV,
-    contactStudent
+    contactStudent,
+    getRevealedCVs,
+    getRevealedCVsWithDetails  // 🔥 AGREGAR
 }
 

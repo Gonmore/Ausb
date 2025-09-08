@@ -25,4 +25,8 @@ router.post('/:studentId/contact', (req, res, next) => {
   next();
 }, authenticateJWT, studentController.contactStudent);
 
+// AGREGAR esta nueva ruta:
+router.get('/revealed-cvs', authenticateJWT, studentController.getRevealedCVs);
+router.get('/revealed-cvs-details', authenticateJWT, studentController.getRevealedCVsWithDetails);
+
 export default router;

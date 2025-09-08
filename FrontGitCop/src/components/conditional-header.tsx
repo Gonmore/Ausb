@@ -29,7 +29,9 @@ import {
   BookOpen,
   Menu,
   X,
-  LogOut
+  LogOut,
+  Star,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -60,6 +62,63 @@ const roleConfig = {
     color: 'bg-red-500',
   },
 };
+
+// Componente de Tokens
+function TokenDisplay() {
+  const [tokens, setTokens] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const { token, user, activeRole } = useAuthStore();
+
+  useEffect(() => {
+    const fetchTokens = async () => {
+      // Solo mostrar para empresas
+      if (!token || (activeRole || user?.role) !== 'company') {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:5000/api/students/tokens/balance', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setTokens(data.balance);
+        }
+      } catch (error) {
+        console.error('Error cargando tokens:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTokens();
+    
+    // Actualizar cada 30 segundos
+    const interval = setInterval(fetchTokens, 30000);
+    return () => clearInterval(interval);
+  }, [token, user, activeRole]);
+
+  // Solo mostrar para empresas
+  if (!token || (activeRole || user?.role) !== 'company') return null;
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1 bg-purple-50 rounded-full border border-purple-200 shadow-sm">
+      {loading ? (
+        <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+      ) : (
+        <Star className="w-4 h-4 text-purple-600" />
+      )}
+      <span className="text-sm font-medium text-purple-700">
+        {loading ? 'Cargando...' : `${tokens} tokens`}
+      </span>
+    </div>
+  );
+}
 
 export function ConditionalHeader() {
   const [mounted, setMounted] = useState(false);
@@ -182,8 +241,11 @@ export function ConditionalHeader() {
             })}
             
             {user ? (
-              // Usuario logueado - mostrar selector de rol y logout
+              // Usuario logueado - mostrar selector de rol, tokens y logout
               <div className="flex items-center space-x-4">
+                {/* 🔥 DISPLAY DE TOKENS - Solo para empresas */}
+                <TokenDisplay />
+                
                 {/* Selector de rol si hay múltiples roles */}
                 {availableRoles.length > 1 && (
                   <DropdownMenu>
@@ -316,6 +378,13 @@ export function ConditionalHeader() {
               
               {user ? (
                 <div className="px-3 py-2 border-t mt-3" style={{ borderColor: 'var(--fprax-blue)' }}>
+                  {/* 🔥 TOKENS EN MÓVIL - Solo para empresas */}
+                  {(activeRole || user?.role) === 'company' && (
+                    <div className="mb-3">
+                      <TokenDisplay />
+                    </div>
+                  )}
+                  
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-medium" style={{ color: 'var(--fprax-dark-gray)' }}>
                       Hola, <span style={{ color: 'var(--fprax-blue)' }}>{user.username || user.name || 'Usuario'}</span>

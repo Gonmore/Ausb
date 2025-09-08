@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { tokenUtils } from './token-utils';
+import { useAuthStore } from '@/stores/auth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -33,22 +34,38 @@ apiClient.interceptors.request.use(
 
 // Response interceptor to handle errors
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    return response;
+  },
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid
-      if (typeof window !== 'undefined') {
-        // No redirigir automáticamente desde ciertas páginas públicas
-        const currentPath = window.location.pathname;
-        const publicPaths = ['/ofertas', '/', '/login', '/registro'];
+    // Si es error 401 (no autorizado) o 403 (token expirado)
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      const errorMessage = error.response?.data?.mensaje || error.response?.data?.message;
+      
+      // Si el mensaje indica token expirado o inválido
+      if (errorMessage?.includes('expirado') || 
+          errorMessage?.includes('expired') || 
+          errorMessage?.includes('invalid') ||
+          errorMessage?.includes('inválido') ||
+          error.response?.status === 401) {
         
-        // Solo redirigir si no estamos en una página pública
-        if (!publicPaths.includes(currentPath)) {
+        console.log('🔥 Token expirado detectado, limpiando sesión...');
+        
+        // Limpiar localStorage
+        if (typeof window !== 'undefined') {
           localStorage.removeItem('authToken');
-          window.location.href = '/login';
+          localStorage.removeItem('auth-storage');
+          
+          // Limpiar el store de Zustand
+          const { logout } = useAuthStore.getState();
+          logout();
+          
+          // Redirigir al login
+          window.location.href = '/login?expired=true';
         }
       }
     }
+    
     return Promise.reject(error);
   }
 );

@@ -88,6 +88,16 @@ function CompanyOffersContent() {
   const [showBetterCandidatesModal, setBetterCandidatesModal] = useState(false);
   const [betterCandidates, setBetterCandidates] = useState<any[]>([]);
   const [loadingBetterCandidates, setLoadingBetterCandidates] = useState(false);
+  const [showCVModal, setShowCVModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [selectedStudentForAction, setSelectedStudentForAction] = useState<any>(null);
+  const [cvData, setCvData] = useState<any>(null);
+  const [contactForm, setContactForm] = useState({
+    subject: '',
+    message: ''
+  });
+  const [actionType, setActionType] = useState<'free' | 'paid'>('free');
+  const [revealedCVs, setRevealedCVs] = useState<number[]>([]);
 
   const { token } = useAuthStore();
 
@@ -117,6 +127,32 @@ function CompanyOffersContent() {
 
     if (token) {
       fetchOffers();
+    }
+  }, [token]);
+
+  // Cargar CVs revelados
+  useEffect(() => {
+    const fetchRevealedCVs = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/students/revealed-cvs', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setRevealedCVs(data.revealedStudentIds);
+          console.log('✅ CVs revelados cargados:', data.revealedStudentIds);
+        }
+      } catch (error) {
+        console.error('❌ Error cargando CVs revelados:', error);
+      }
+    };
+
+    if (token) {
+      fetchRevealedCVs();
     }
   }, [token]);
 
@@ -177,14 +213,154 @@ function CompanyOffersContent() {
     }
   };
 
-  const handleViewCVWithTokens = (studentId: number) => {
-    // Redirigir al buscador inteligente con los datos precargados
-    window.location.href = `/empresa/buscador-inteligente?action=view_cv&studentId=${studentId}`;
+  // 🔥 VER CV GRATUITO para candidatos que aplicaron
+  const handleViewCVFree = async (student: any) => {
+    try {
+      console.log('📄 Ver CV gratuito para candidato:', student.id);
+      
+      const response = await fetch(`http://localhost:5000/api/students/${student.id}/view-cv`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fromIntelligentSearch: false
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al obtener el CV');
+      }
+
+      const cvData = await response.json();
+      console.log('✅ CV obtenido gratuitamente:', cvData);
+      
+      // Mostrar modal elegante en lugar de alert
+      setSelectedStudentForAction(student);
+      setCvData(cvData);
+      setActionType('free');
+      setShowCVModal(true);
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo CV:', error);
+      alert('Error al obtener el CV del estudiante');
+    }
+  };
+
+  // 🔥 CONTACTAR GRATUITO para candidatos que aplicaron
+  const handleContactFree = (student: any, offerName: string) => {
+    // Mostrar modal elegante en lugar de alert
+    setSelectedStudentForAction(student);
+    setActionType('free');
+    setContactForm({
+      subject: `Interés en tu aplicación - ${offerName}`,
+      message: `Estimado/a ${student.User.name},\n\nHemos revisado tu aplicación para la oferta "${offerName}" y nos gustaría conocerte mejor.\n\n¿Estarías disponible para una entrevista?\n\nSaludos cordiales.`
+    });
+    setShowContactModal(true);
+  };
+
+  const handleViewCVWithTokens = async (studentId: number) => {
+    try {
+      console.log('📄 Ver CV con tokens para estudiante:', studentId);
+      
+      const isAlreadyRevealed = revealedCVs.includes(studentId);
+      
+      const response = await fetch(`http://localhost:5000/api/students/${studentId}/view-cv`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fromIntelligentSearch: true
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (errorData.code === 'INSUFFICIENT_TOKENS') {
+          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para ver este CV.`);
+          return;
+        }
+        throw new Error('Error al obtener el CV');
+      }
+
+      const cvData = await response.json();
+      console.log('✅ CV obtenido con tokens:', cvData);
+      
+      // 🔥 ACTUALIZAR LA LISTA SI ES NUEVO
+      if (!isAlreadyRevealed && !cvData.wasAlreadyRevealed) {
+        setRevealedCVs(prev => [...prev, studentId]);
+      }
+      
+      const student = betterCandidates.find(s => s.id === studentId);
+      setSelectedStudentForAction(student);
+      setCvData(cvData);
+      setActionType('paid');
+      setShowCVModal(true);
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo CV:', error);
+      alert('Error al obtener el CV del estudiante');
+    }
   };
 
   const handleContactWithTokens = (studentId: number) => {
-    // Redirigir al buscador inteligente con los datos precargados
-    window.location.href = `/empresa/buscador-inteligente?action=contact&studentId=${studentId}`;
+    const student = betterCandidates.find(s => s.id === studentId);
+    setSelectedStudentForAction(student);
+    setActionType('paid');
+    setContactForm({
+      subject: `Interés en tu perfil - ${selectedOffer?.name}`,
+      message: `Estimado/a ${student?.User?.name},\n\nHemos encontrado tu perfil y nos interesa conocerte para la oferta "${selectedOffer?.name}".\n\n¿Te gustaría conocer más sobre esta oportunidad?\n\nSaludos cordiales.`
+    });
+    setShowContactModal(true);
+  };
+
+  const handleSendContact = async () => {
+    if (!selectedStudentForAction) return;
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/students/${selectedStudentForAction.id}/contact`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fromIntelligentSearch: actionType === 'paid',
+          subject: contactForm.subject,
+          message: contactForm.message
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (errorData.code === 'INSUFFICIENT_TOKENS') {
+          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para contactar.`);
+          return;
+        }
+        throw new Error('Error al contactar el estudiante');
+      }
+
+      const result = await response.json();
+      console.log('✅ Contacto registrado:', result);
+
+      // Abrir cliente de email
+      const emailBody = encodeURIComponent(contactForm.message);
+      const emailSubject = encodeURIComponent(contactForm.subject);
+      const emailUrl = `mailto:${selectedStudentForAction.User.email}?subject=${emailSubject}&body=${emailBody}`;
+      
+      window.open(emailUrl);
+      
+      // Cerrar modal
+      setShowContactModal(false);
+      setContactForm({ subject: '', message: '' });
+      
+    } catch (error) {
+      console.error('❌ Error contactando estudiante:', error);
+      alert('Error al contactar el estudiante');
+    }
   };
 
   if (loading) {
@@ -368,11 +544,19 @@ function CompanyOffersContent() {
                       </div>
 
                       <div className="flex flex-col gap-2 ml-4">
-                        <Button size="sm" variant="outline">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleViewCVFree(candidate.student)}
+                        >
                           <Eye className="w-4 h-4 mr-1" />
                           Ver CV (Gratis)
                         </Button>
-                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                        <Button 
+                          size="sm" 
+                          className="bg-blue-600 hover:bg-blue-700"
+                          onClick={() => handleContactFree(candidate.student, selectedOffer?.name || 'esta oferta')}
+                        >
                           <Mail className="w-4 h-4 mr-1" />
                           Contactar (Gratis)
                         </Button>
@@ -434,8 +618,8 @@ function CompanyOffersContent() {
                             </Badge>
                             {getAffinityIcon(student.affinity?.level || 'bajo')}
                             <Badge className={getAffinityColor(student.affinity?.level || 'bajo')}>
-                              {(student.affinity?.level || 'bajo').toUpperCase()}
-                            </Badge>
+                              {(student.affinity?.level || 'bajo').toUpperCase()
+                            }</Badge>
                           </div>
                         </div>
 
@@ -456,17 +640,10 @@ function CompanyOffersContent() {
                           size="sm" 
                           variant="outline"
                           onClick={() => handleViewCVWithTokens(student.id)}
+                          className={revealedCVs.includes(student.id) ? 'bg-green-50 border-green-300 text-green-700' : 'bg-purple-50 border-purple-300 text-purple-700'}
                         >
                           <Eye className="w-4 h-4 mr-1" />
-                          Ver CV (2 tokens)
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          className="bg-purple-600 hover:bg-purple-700"
-                          onClick={() => handleContactWithTokens(student.id)}
-                        >
-                          <Mail className="w-4 h-4 mr-1" />
-                          Contactar (3 tokens)
+                          {revealedCVs.includes(student.id) ? 'CV Revelado' : 'Revelar Perfil (2 tokens)'}
                         </Button>
                       </div>
                     </div>
@@ -485,6 +662,176 @@ function CompanyOffersContent() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal CV Elegante */}
+      <Dialog open={showCVModal} onOpenChange={setShowCVModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              CV de {selectedStudentForAction?.User?.name} {selectedStudentForAction?.User?.surname}
+              <Badge className={actionType === 'free' ? 'bg-green-100 text-green-800 ml-2' : 'bg-purple-100 text-purple-800 ml-2'}>
+                {actionType === 'free' ? 'Acceso Gratuito' : 'Con Tokens'}
+              </Badge>
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedStudentForAction && cvData && (
+            <div className="space-y-6">
+              {/* Información personal */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-lg mb-3">Información Personal</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Nombre completo</p>
+                    <p className="font-medium">{selectedStudentForAction.User.name} {selectedStudentForAction.User.surname}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Email</p>
+                    <p className="font-medium">{selectedStudentForAction.User.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Teléfono</p>
+                    <p className="font-medium">{selectedStudentForAction.User.phone || 'No especificado'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Vehículo propio</p>
+                    <p className="font-medium">{selectedStudentForAction.car ? 'Sí' : 'No'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Formación académica */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-lg mb-3">Formación Académica</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Grado</p>
+                    <p className="font-medium">{selectedStudentForAction.grade}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Curso</p>
+                    <p className="font-medium">{selectedStudentForAction.course}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Habilidades */}
+              {selectedStudentForAction.tag && (
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-lg mb-3">Habilidades y Tecnologías</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedStudentForAction.tag.split(',').map((tag: string, index: number) => (
+                      <Badge key={index} variant="secondary">{tag.trim()}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Información de acceso */}
+              <div className={`p-4 rounded-lg border ${actionType === 'free' ? 'bg-green-50 border-green-200' : 'bg-purple-50 border-purple-200'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <h4 className={`font-semibold ${actionType === 'free' ? 'text-green-800' : 'text-purple-800'}`}>
+                    {actionType === 'free' ? 'Acceso Completo Gratuito' : 'Candidato Inteligente - 2 Tokens'}
+                  </h4>
+                </div>
+                <p className="text-sm text-gray-700">
+                  {actionType === 'free' 
+                    ? 'Este estudiante aplicó a tu oferta, por lo que puedes ver su CV completo sin costo adicional.'
+                    : 'Este candidato fue encontrado por nuestro algoritmo de IA y tiene alta afinidad con tu oferta.'
+                  }
+                </p>
+              </div>
+
+              {/* Acciones */}
+              <div className="flex gap-2 pt-4 border-t">
+                <Button 
+                  onClick={() => {
+                    setShowCVModal(false);
+                    if (actionType === 'free') {
+                      handleContactFree(selectedStudentForAction, selectedOffer?.name || 'la oferta');
+                    } else {
+                      handleContactWithTokens(selectedStudentForAction.id);
+                    }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Mail className="w-4 h-4 mr-2" />
+                  Contactar {actionType === 'paid' ? '(Incluido)' : '(Gratis)'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowCVModal(false)}
+                >
+                  Cerrar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Contacto Elegante */}
+      <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5" />
+              Contactar a {selectedStudentForAction?.User?.name} {selectedStudentForAction?.User?.surname}
+              <Badge className="bg-green-100 text-green-800 ml-2">
+                {actionType === 'free' ? 'Gratuito' : 'Sin Costo Adicional'}
+              </Badge>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Formulario de contacto */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Asunto del mensaje
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={contactForm.subject}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, subject: e.target.value }))}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mensaje
+                </label>
+                <textarea
+                  rows={8}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={contactForm.message}
+                  onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-2 pt-4">
+              <Button 
+                onClick={handleSendContact}
+                className="bg-green-600 hover:bg-green-700"
+                disabled={!contactForm.subject.trim() || !contactForm.message.trim()}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                {actionType === 'free' ? 'Enviar (Gratis)' : 'Enviar (Incluido)'}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowContactModal(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -390,31 +390,35 @@ async function getCompanyApplications(req, res) {
     const { userId } = req.user;
     
     try {
-        // 🔥 REEMPLAZAR EL MAPEO MANUAL CON EL SERVICE
+        // Usar el service para obtener la empresa
         const company = await companyService.getCompanyByUserId(userId);
 
         console.log(`🔍 Buscando aplicaciones para empresa ${company.id} (usuario ${userId})`);
 
-        // Obtener todas las aplicaciones a ofertas de esta empresa
+        // 🔥 OBTENER APLICACIONES AGRUPADAS POR ESTUDIANTE
         const applications = await Application.findAll({
-            where: { companyId: company.id }, // 🔥 USAR company.id del service
             include: [
                 {
                     model: Offer,
+                    as: 'offer',
+                    required: true,
+                    where: { companyId: company.id },
                     attributes: ['id', 'name', 'location', 'type', 'mode', 'description', 'sector']
                 },
                 {
                     model: Student,
-                    attributes: ['id', 'grade', 'course', 'car', 'tag'],
+                    as: 'student',
+                    attributes: ['id', 'grade', 'course', 'car', 'tag', 'description'],
                     include: [
                         {
                             model: User,
+                            as: 'user',
                             attributes: ['id', 'name', 'surname', 'email', 'phone']
                         },
                         {
                             model: Profamily,
-                            attributes: ['id', 'name', 'description'],
                             as: 'profamily',
+                            attributes: ['id', 'name', 'description'],
                             required: false
                         }
                     ]
@@ -423,54 +427,123 @@ async function getCompanyApplications(req, res) {
             order: [['appliedAt', 'DESC']]
         });
 
-        // Formatear la respuesta manteniendo la estructura esperada por el frontend
-        const formattedApplications = applications.map(app => ({
-            id: app.id,
-            status: app.status,
-            appliedAt: app.appliedAt,
-            message: app.message,
-            companyNotes: app.companyNotes,
-            rejectionReason: app.rejectionReason,
-            Offer: {
-                id: app.offer.id,
-                name: app.offer.name,
-                location: app.offer.location,
-                type: app.offer.type,
-                mode: app.offer.mode,
-                description: app.offer.description,
-                sector: app.offer.sector
-            },
-            Student: {
-                id: app.student.id,
-                grade: app.student.grade,
-                course: app.student.course,
-                car: app.student.car,
-                tag: app.student.tag,
-                User: {
-                    id: app.student.user.id,
-                    name: app.student.user.name,
-                    surname: app.student.user.surname,
-                    email: app.student.user.email,
-                    phone: app.student.user.phone
-                },
-                profamily: app.student.profamily ? { // 🔥 USAR profamily (minúscula)
-                    id: app.student.profamily.id,
-                    name: app.student.profamily.name,
-                    description: app.student.profamily.description
-                } : null
-            }
-        }));
+        console.log(`✅ Aplicaciones encontradas: ${applications.length}`);
 
-        res.json(formattedApplications);
+        // 🔥 AGRUPAR POR ESTUDIANTE
+        const studentApplicationsMap = new Map();
+
+        applications.forEach(app => {
+            const studentId = app.student.id;
+            
+            if (!studentApplicationsMap.has(studentId)) {
+                studentApplicationsMap.set(studentId, {
+                    student: {
+                        id: app.student.id,
+                        grade: app.student.grade,
+                        course: app.student.course,
+                        car: app.student.car,
+                        tag: app.student.tag,
+                        description: app.student.description,
+                        User: app.student.user,
+                        profamily: app.student.profamily
+                    },
+                    applications: [],
+                    stats: {
+                        total: 0,
+                        pending: 0,
+                        reviewed: 0,
+                        accepted: 0,
+                        rejected: 0,
+                        withdrawn: 0,
+                        latestApplication: null,
+                        firstApplication: null
+                    }
+                });
+            }
+
+            const studentData = studentApplicationsMap.get(studentId);
+            
+            // Agregar aplicación
+            const applicationData = {
+                id: app.id,
+                status: app.status,
+                appliedAt: app.appliedAt,
+                reviewedAt: app.reviewedAt,
+                cvViewed: app.cvViewed,
+                cvViewedAt: app.cvViewedAt,
+                message: app.message,
+                companyNotes: app.companyNotes,
+                rejectionReason: app.rejectionReason,
+                offer: {
+                    id: app.offer.id,
+                    name: app.offer.name,
+                    location: app.offer.location,
+                    type: app.offer.type,
+                    mode: app.offer.mode,
+                    description: app.offer.description,
+                    sector: app.offer.sector
+                }
+            };
+
+            studentData.applications.push(applicationData);
+
+            // Actualizar estadísticas
+            studentData.stats.total++;
+            studentData.stats[app.status]++;
+            
+            // Actualizar fechas de primera y última aplicación
+            const currentDate = new Date(app.appliedAt);
+            if (!studentData.stats.latestApplication || currentDate > new Date(studentData.stats.latestApplication)) {
+                studentData.stats.latestApplication = app.appliedAt;
+            }
+            if (!studentData.stats.firstApplication || currentDate < new Date(studentData.stats.firstApplication)) {
+                studentData.stats.firstApplication = app.appliedAt;
+            }
+        });
+
+        // Convertir Map a Array y ordenar
+        const groupedApplications = Array.from(studentApplicationsMap.values())
+            .map(studentData => {
+                // Ordenar aplicaciones del estudiante por fecha (más reciente primero)
+                studentData.applications.sort((a, b) => new Date(b.appliedAt) - new Date(a.appliedAt));
+                
+                return {
+                    ...studentData,
+                    // Agregar información adicional
+                    primaryStatus: studentData.stats.accepted > 0 ? 'accepted' :
+                                 studentData.stats.rejected === studentData.stats.total ? 'rejected' :
+                                 studentData.stats.reviewed > 0 ? 'reviewed' : 'pending',
+                    mostRecentOffer: studentData.applications[0].offer.name,
+                    totalOffers: studentData.applications.length
+                };
+            })
+            .sort((a, b) => {
+                // Ordenar por última aplicación (más reciente primero)
+                return new Date(b.stats.latestApplication) - new Date(a.stats.latestApplication);
+            });
+
+        console.log(`✅ Aplicaciones agrupadas por ${groupedApplications.length} estudiantes únicos`);
+
+        res.json({
+            students: groupedApplications,
+            summary: {
+                totalStudents: groupedApplications.length,
+                totalApplications: applications.length,
+                averageApplicationsPerStudent: Math.round(applications.length / groupedApplications.length * 100) / 100
+            }
+        });
+
     } catch (error) {
         console.error('❌ Error getCompanyApplications:', error);
         
-        // 🔥 AÑADIR MANEJO DE ERROR DEL SERVICE
         if (error.message.includes('No se encontró empresa')) {
             return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
         }
         
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
+        res.status(500).json({ 
+            mensaje: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 }
 
