@@ -214,7 +214,8 @@ function IntelligentSearchContent() {
       if (!response.ok) {
         const errorData = await response.json();
         if (errorData.code === 'INSUFFICIENT_TOKENS') {
-          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para revelar este estudiante.`);
+          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para revelar este estudiante.\n\n¿Quieres recargar tokens?`);
+          setShowTokenModal(true); // 🔥 MOSTRAR MODAL DE RECARGA
           return;
         }
         throw new Error('Error al revelar el estudiante');
@@ -226,8 +227,10 @@ function IntelligentSearchContent() {
       // 🔥 ACTUALIZAR INMEDIATAMENTE EL STATE Y TOKEN BALANCE
       if (!isAlreadyRevealed && !cvData.wasAlreadyRevealed) {
         setRevealedCVs(prev => [...prev, student.id]);
-        // Actualizar tokens inmediatamente
-        setUserTokens(prev => prev - 2);
+        // Actualizar tokens inmediatamente solo si se cobraron
+        if (cvData.tokensUsed > 0) {
+          setUserTokens(prev => prev - cvData.tokensUsed);
+        }
       }
       
       // Mostrar modal elegante
@@ -597,10 +600,14 @@ function IntelligentSearchContent() {
                         size="sm" 
                         variant="outline"
                         onClick={() => handleRevealStudent(student)}
-                        className={revealedCVs.includes(student.id) ? 'bg-green-50 border-green-300 text-green-700' : 'bg-purple-50 border-purple-300 text-purple-700'}
+                        className={revealedCVs.includes(student.id) ? 
+                          'bg-green-50 border-green-300 text-green-700 cursor-default' : 
+                          'bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100'
+                        }
+                        disabled={revealedCVs.includes(student.id)}
                       >
                         <Eye className="w-4 h-4 mr-1" />
-                        {revealedCVs.includes(student.id) ? 'Ver Perfil (Revelado)' : 'Revelar Perfil (2 tokens)'}
+                        {revealedCVs.includes(student.id) ? 'CV Revelado ✓' : 'Revelar Perfil (2 tokens)'}
                       </Button>
                     </div>
                   </div>

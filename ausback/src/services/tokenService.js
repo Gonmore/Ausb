@@ -50,84 +50,99 @@ export class TokenService {
 
     // Usar tokens con persistencia para CVs revelados
     static async useTokens(companyId, amount, action, studentId = null, description = '') {
-        try {
-            // 🔥 USAR VALORES CORRECTOS DEL ENUM
-            const validActions = {
-                'view_cv_ai': 'view_cv',        // Mapear a valor válido
-                'contact_student_ai': 'contact_student'  // Mapear a valor válido
+      try {
+        console.log(`💳 Intentando usar ${amount} tokens para ${action}, estudiante: ${studentId}`);
+        
+        // 🔥 MAPEAR ACCIONES CORRECTAS PARA LA DB
+        const actionMap = {
+          'view_cv_ai': 'view_cv',
+          'contact_student_ai': 'contact_student',
+          'view_cv': 'view_cv',
+          'contact_student': 'contact_student'
+        };
+        
+        const dbAction = actionMap[action] || action;
+        
+        // 🔥 VERIFICAR SI EL CV YA FUE REVELADO (PERSISTENCIA)
+        if (studentId && (action === 'view_cv_ai' || action === 'view_cv')) {
+          const alreadyRevealed = await this.isCVRevealed(companyId, studentId);
+          if (alreadyRevealed) {
+            console.log(`✅ CV del estudiante ${studentId} ya fue revelado previamente - Acceso gratuito`);
+            return { 
+              wasAlreadyRevealed: true, 
+              newBalance: null,
+              message: 'CV ya revelado previamente'
             };
-            
-            const dbAction = validActions[action] || action;
-            
-            // 🔥 ACCIONES QUE REVELAN AL ESTUDIANTE
-            const revealActions = ['view_cv_ai', 'contact_student_ai'];
-            
-            // Si es una acción de revelar estudiante, verificar si ya fue revelado
-            if (revealActions.includes(action) && studentId) {
-              const alreadyRevealed = await this.isCVRevealed(companyId, studentId);
-              if (alreadyRevealed) {
-                console.log(`✅ Estudiante ${studentId} ya fue revelado, acceso gratuito`);
-                return { wasAlreadyRevealed: true, newBalance: null };
-              }
-            }
-
-            // Obtener o crear registro de tokens
-            let token = await Token.findOne({
-              where: { companyId }
-            });
-
-            if (!token) {
-              token = await Token.create({
-                companyId: companyId,
-                amount: 10,
-                usedAmount: 0,
-                purchasedAmount: 10
-              });
-            }
-
-            // Verificar si hay tokens suficientes
-            if (token.amount < amount) {
-              throw new Error('Tokens insuficientes');
-            }
-
-            // Actualizar balance
-            const newBalance = token.amount - amount;
-            const newUsedAmount = token.usedAmount + amount;
-
-            await token.update({
-              amount: newBalance,
-              usedAmount: newUsedAmount
-            });
-
-            // 🔥 REGISTRAR TRANSACCIÓN CON VALOR VÁLIDO DEL ENUM
-            await TokenTransaction.create({
-              companyId: companyId,
-              studentId: studentId,
-              type: 'usage',
-              action: dbAction,  // 🔥 USAR VALOR MAPEADO
-              amount: -amount,
-              description: description,
-              balanceAfter: newBalance
-            });
-
-            // 🔥 SI ES UNA ACCIÓN DE REVELAR, MARCAR AL ESTUDIANTE COMO REVELADO
-            if (revealActions.includes(action) && studentId) {
-              await RevealedCV.create({
-                companyId: companyId,
-                studentId: studentId,
-                tokensUsed: amount,
-                revealType: 'intelligent_search'
-              });
-              console.log(`💾 Estudiante ${studentId} marcado como revelado completamente`);
-            }
-
-            console.log(`💳 Tokens usados: ${amount}, nuevo balance: ${newBalance}`);
-            return { wasAlreadyRevealed: false, newBalance: newBalance };
-
-        } catch (error) {
-            console.error('Error useTokens:', error);
-            throw error;
+          }
         }
+
+        // Obtener o crear registro de tokens de la empresa
+        let tokenRecord = await Token.findOne({
+          where: { companyId }
+        });
+
+        if (!tokenRecord) {
+          // Crear registro inicial con tokens gratuitos
+          tokenRecord = await Token.create({
+            companyId: companyId,
+            amount: 10, // Tokens iniciales gratuitos
+            usedAmount: 0,
+            purchasedAmount: 10
+          });
+          console.log(`🎁 Tokens iniciales creados para empresa ${companyId}`);
+        }
+
+        // 🔥 VERIFICAR BALANCE SUFICIENTE
+        if (tokenRecord.amount < amount) {
+          console.log(`❌ Tokens insuficientes. Requeridos: ${amount}, Disponibles: ${tokenRecord.amount}`);
+          throw new Error('Tokens insuficientes');
+        }
+
+        // 🔥 DESCONTAR TOKENS INMEDIATAMENTE
+        const newBalance = tokenRecord.amount - amount;
+        const newUsedAmount = tokenRecord.usedAmount + amount;
+
+        await tokenRecord.update({
+          amount: newBalance,
+          usedAmount: newUsedAmount
+        });
+
+        console.log(`💰 Tokens descontados: ${amount}. Nuevo balance: ${newBalance}`);
+
+        // 🔥 REGISTRAR LA TRANSACCIÓN
+        await TokenTransaction.create({
+          companyId: companyId,
+          studentId: studentId,
+          type: 'usage',
+          action: dbAction,
+          amount: -amount, // Negativo porque es un gasto
+          description: description || `Usar ${amount} tokens para ${dbAction}`,
+          balanceAfter: newBalance
+        });
+
+        // 🔥 SI ES PARA VER CV, MARCAR COMO REVELADO PERMANENTEMENTE
+        if (studentId && (action === 'view_cv_ai' || action === 'view_cv')) {
+          await RevealedCV.create({
+            companyId: companyId,
+            studentId: studentId,
+            tokensUsed: amount,
+            revealType: 'intelligent_search',
+            revealedAt: new Date()
+          });
+          console.log(`💾 CV del estudiante ${studentId} marcado como revelado para empresa ${companyId}`);
+        }
+
+        return { 
+          wasAlreadyRevealed: false, 
+          newBalance: newBalance,
+          tokensUsed: amount,
+          message: `${amount} tokens utilizados correctamente`
+        };
+
+      } catch (error) {
+        console.error('❌ Error en useTokens:', error);
+        throw error;
+      }
     }
 
     // Comprar tokens

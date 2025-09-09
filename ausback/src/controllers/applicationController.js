@@ -192,41 +192,73 @@ async function applyToOffer(req, res) {
  *       500:
  *         description: Error interno del servidor
  */
-async function getUserApplications(req, res) {
+export const getUserApplications = async (req, res) => {
+  try {
     const { userId } = req.user;
+    console.log(`📋 Obteniendo aplicaciones para usuario: ${userId}`);
 
-    try {
-        // Buscar el estudiante
-        const student = await Student.findOne({
-            where: { userId }
-        });
+    // Obtener el estudiante primero
+    const student = await Student.findOne({
+      where: { userId }
+    });
 
-        if (!student) {
-            return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
-        }
-
-        // Obtener las aplicaciones del estudiante
-        const applications = await Application.findAll({
-            where: { studentId: student.id },
-            include: [
-                {
-                    model: Offer,
-                    attributes: ['id', 'name', 'location', 'type', 'mode', 'description', 'sector'],
-                    include: [{
-                        model: Company,
-                        attributes: ['id', 'name', 'city', 'sector']
-                    }]
-                }
-            ],
-            order: [['appliedAt', 'DESC']]
-        });
-
-        res.json(applications);
-    } catch (error) {
-        logger.error('Error getUserApplications: ' + error);
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Perfil de estudiante no encontrado' });
     }
-}
+
+    // 🔥 USAR LOS ALIAS CORRECTOS SEGÚN relations.js
+    const applications = await Application.findAll({
+      where: { studentId: student.id },
+      include: [
+        {
+          model: Offer,
+          as: 'offer', // 🔥 ALIAS CORRECTO
+          include: [
+            {
+              model: Company,
+              as: 'company', // 🔥 VERIFICAR QUE ESTE ALIAS EXISTA EN relations.js
+              attributes: ['id', 'name', 'sector', 'city']
+            }
+          ]
+        }
+      ],
+      order: [['appliedAt', 'DESC']]
+    });
+
+    console.log(`✅ Encontradas ${applications.length} aplicaciones`);
+
+    // 🔥 FORMATEAR RESPUESTA PARA EL FRONTEND
+    const formattedApplications = applications.map(app => ({
+      id: app.id,
+      offerId: app.offerId,
+      status: app.status,
+      appliedAt: app.appliedAt,
+      reviewedAt: app.reviewedAt,
+      message: app.message,
+      companyNotes: app.companyNotes,
+      rejectionReason: app.rejectionReason,
+      offer: app.offer ? {
+        id: app.offer.id,
+        name: app.offer.name,
+        sector: app.offer.sector,
+        location: app.offer.location,
+        type: app.offer.type,
+        salary: app.offer.salary,
+        description: app.offer.description,
+        company: app.offer.company
+      } : null
+    }));
+
+    res.json(formattedApplications);
+
+  } catch (error) {
+    console.error('❌ Error getUserApplications:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
 
 /**
  * @swagger
@@ -732,43 +764,97 @@ async function updateApplicationStatus(req, res) {
  *       500:
  *         description: Error interno del servidor
  */
-async function withdrawApplication(req, res) {
-    const { userId } = req.user;
+export const withdrawApplication = async (req, res) => {
+  try {
+    // 🔥 USAR applicationId EN LUGAR DE id (según la ruta)
     const { applicationId } = req.params;
+    const { userId } = req.user;
 
-    try {
-        // Buscar la aplicación y verificar que pertenece al estudiante
-        const application = await Application.findByPk(applicationId, {
-            include: [{
-                model: Student,
-                include: [{
-                    model: User,
-                    where: { id: userId }
-                }]
-            }]
-        });
+    console.log(`🗑️ Intentando retirar aplicación - ApplicationID: ${applicationId}, UserID: ${userId}`);
+    console.log(`🔍 req.params:`, req.params);
 
-        if (!application) {
-            return res.status(404).json({ mensaje: 'Aplicación no encontrada' });
-        }
-
-        if (!application.Student || !application.Student.User) {
-            return res.status(403).json({ mensaje: 'No tienes permisos para retirar esta aplicación' });
-        }
-
-        // Marcar como retirada en lugar de eliminar
-        await application.update({
-            status: 'withdrawn',
-            reviewedAt: new Date()
-        });
-
-        logger.info({ userId, applicationId }, "Application withdrawn");
-        res.json({ mensaje: 'Aplicación retirada exitosamente' });
-    } catch (error) {
-        logger.error('Error withdrawApplication: ' + error);
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    if (!applicationId || applicationId === 'undefined') {
+      return res.status(400).json({ 
+        mensaje: 'ID de aplicación no válido',
+        receivedId: applicationId 
+      });
     }
-}
+
+    if (!userId) {
+      return res.status(401).json({ mensaje: 'Usuario no autenticado' });
+    }
+
+    // Obtener el estudiante primero
+    const student = await Student.findOne({
+      where: { userId }
+    });
+
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Perfil de estudiante no encontrado' });
+    }
+
+    console.log(`👤 Estudiante encontrado: ${student.id}`);
+
+    // 🔥 BUSCAR LA APLICACIÓN
+    const application = await Application.findOne({
+      where: { 
+        id: parseInt(applicationId),
+        studentId: student.id 
+      },
+      include: [
+        {
+          model: Offer,
+          as: 'offer',
+          required: false,
+          attributes: ['id', 'name', 'sector']
+        }
+      ]
+    });
+
+    if (!application) {
+      return res.status(404).json({ 
+        mensaje: 'Aplicación no encontrada o no tienes permisos para eliminarla',
+        searchedId: applicationId,
+        studentId: student.id
+      });
+    }
+
+    console.log(`📋 Aplicación encontrada: ${application.id}, Estado: ${application.status}`);
+
+    // Verificar que solo se puedan retirar aplicaciones pendientes
+    if (application.status !== 'pending') {
+      return res.status(400).json({ 
+        mensaje: `Solo se pueden retirar aplicaciones pendientes. Estado actual: ${application.status}` 
+      });
+    }
+
+    // 🔥 ACTUALIZAR A WITHDRAWN
+    await application.update({
+      status: 'withdrawn',
+      withdrawnAt: new Date()
+    });
+
+    console.log(`✅ Aplicación ${applicationId} retirada exitosamente`);
+
+    res.json({
+      success: true,
+      mensaje: 'Aplicación retirada exitosamente',
+      application: {
+        id: application.id,
+        status: 'withdrawn',
+        withdrawnAt: application.withdrawnAt,
+        offerName: application.offer?.name
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error withdrawApplication:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
 
 /**
  * @swagger

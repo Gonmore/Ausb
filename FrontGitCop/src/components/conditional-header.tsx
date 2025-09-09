@@ -31,7 +31,10 @@ import {
   X,
   LogOut,
   Star,
-  Loader2
+  Loader2,
+  Briefcase,
+  Brain,
+  CreditCard
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -68,6 +71,7 @@ function TokenDisplay() {
   const [tokens, setTokens] = useState(0);
   const [loading, setLoading] = useState(true);
   const { token, user, activeRole } = useAuthStore();
+  const router = useRouter(); // 🔥 AGREGAR useRouter
 
   useEffect(() => {
     const fetchTokens = async () => {
@@ -103,11 +107,21 @@ function TokenDisplay() {
     return () => clearInterval(interval);
   }, [token, user, activeRole]);
 
+  // 🔥 FUNCIÓN PARA NAVEGAR A LA PÁGINA DE TOKENS
+  const handleTokenClick = () => {
+    router.push('/empresa/tokens');
+  };
+
   // Solo mostrar para empresas
   if (!token || (activeRole || user?.role) !== 'company') return null;
 
+  // 🔥 MEJORAR EL DISEÑO Y HACER CLICKEABLE
   return (
-    <div className="flex items-center gap-2 px-3 py-1 bg-purple-50 rounded-full border border-purple-200 shadow-sm">
+    <button 
+      onClick={handleTokenClick}
+      className="flex items-center gap-2 px-3 py-1 bg-purple-50 rounded-full border border-purple-200 shadow-sm hover:bg-purple-100 hover:shadow-md transition-all duration-200 cursor-pointer"
+      title="Gestionar tokens" // Tooltip
+    >
       {loading ? (
         <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
       ) : (
@@ -116,7 +130,15 @@ function TokenDisplay() {
       <span className="text-sm font-medium text-purple-700">
         {loading ? 'Cargando...' : `${tokens} tokens`}
       </span>
-    </div>
+      
+      {/* 🔥 INDICADORES VISUALES PARA TOKENS BAJOS */}
+      {!loading && tokens === 0 && (
+        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+      )}
+      {!loading && tokens > 0 && tokens < 10 && (
+        <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+      )}
+    </button>
   );
 }
 
@@ -179,10 +201,11 @@ export function ConditionalHeader() {
         ];
       case 'company':
         return [
-          ...commonItems,
+          { href: '/empresa/dashboard', label: 'Dashboard', icon: Home },
+          { href: '/ofertas', label: 'Ofertas', icon: Search },
           { href: '/empresa/ofertas', label: 'Mis Ofertas', icon: Building2 },
           { href: '/empresa/buscador-alumnos', label: 'Candidatos', icon: Users },
-          { href: '/empresa/mis-alumnos', label: 'Mis Alumnos', icon: GraduationCap },
+          // El Buscador Inteligente NO va en el menú principal
         ];
       case 'scenter':
         return [

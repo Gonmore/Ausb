@@ -260,11 +260,17 @@ function CompanyOffersContent() {
     setShowContactModal(true);
   };
 
+  // REEMPLAZAR la función handleViewCVWithTokens:
+
   const handleViewCVWithTokens = async (studentId: number) => {
     try {
       console.log('📄 Ver CV con tokens para estudiante:', studentId);
       
       const isAlreadyRevealed = revealedCVs.includes(studentId);
+      
+      if (isAlreadyRevealed) {
+        console.log('✅ CV ya revelado previamente - Acceso gratuito');
+      }
       
       const response = await fetch(`http://localhost:5000/api/students/${studentId}/view-cv`, {
         method: 'POST',
@@ -280,18 +286,21 @@ function CompanyOffersContent() {
       if (!response.ok) {
         const errorData = await response.json();
         if (errorData.code === 'INSUFFICIENT_TOKENS') {
-          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para ver este CV.`);
+          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para ver este CV.\n\n¿Quieres recargar tokens?`);
+          // 🔥 OPCIONAL: Redirigir a página de tokens
+          // window.open('/empresa/tokens', '_blank');
           return;
         }
         throw new Error('Error al obtener el CV');
       }
 
       const cvData = await response.json();
-      console.log('✅ CV obtenido con tokens:', cvData);
+      console.log('✅ CV obtenido:', cvData);
       
-      // 🔥 ACTUALIZAR LA LISTA SI ES NUEVO
+      // 🔥 ACTUALIZAR INMEDIATAMENTE EL STATE DE CVs REVELADOS
       if (!isAlreadyRevealed && !cvData.wasAlreadyRevealed) {
         setRevealedCVs(prev => [...prev, studentId]);
+        console.log(`💾 CV del estudiante ${studentId} marcado como revelado`);
       }
       
       const student = betterCandidates.find(s => s.id === studentId);

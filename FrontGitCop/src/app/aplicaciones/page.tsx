@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 interface ApplicationWithOffer {
-  id: string;
+  id: string; // 🔥 ASEGURAR QUE SEA STRING
   offerId: string;
   status: 'pending' | 'reviewed' | 'accepted' | 'rejected' | 'withdrawn';
   appliedAt: string;
@@ -97,10 +97,21 @@ export default function AplicacionesPage() {
   };
 
   const handleRemoveApplication = async (applicationId: string) => {
+    console.log('🗑️ Removing application:', applicationId);
+
+    if (!applicationId || applicationId === 'undefined') {
+      alert('Error: ID de aplicación no válido');
+      return;
+    }
+
     if (!confirm('¿Estás seguro de que quieres retirar esta aplicación?')) return;
     
     try {
-      const response = await fetch(`http://localhost:5000/api/applications/${applicationId}`, {
+      // 🔥 USAR applicationId EN LA URL PARA COINCIDIR CON LA RUTA
+      const url = `http://localhost:5000/api/applications/${applicationId}`;
+      console.log('🌐 DELETE URL:', url);
+
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -108,16 +119,29 @@ export default function AplicacionesPage() {
         },
       });
 
+      console.log('📡 Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const errorData = await response.json();
+        console.error('❌ Server error:', errorData);
+        throw new Error(errorData.mensaje || `HTTP ${response.status}`);
       }
 
-      // Actualizar la lista local
-      setAplicaciones(prev => prev.filter(app => app.id !== applicationId));
-      console.log('✅ Application removed successfully');
+      const result = await response.json();
+      console.log('✅ Delete result:', result);
+
+      // 🔥 ACTUALIZAR ESTADO LOCAL
+      setAplicaciones(prev => prev.map(app => 
+        app.id === applicationId 
+          ? { ...app, status: 'withdrawn' as const }
+          : app
+      ));
+
+      alert('Aplicación retirada exitosamente');
+      
     } catch (err: any) {
-      console.error('Error removing application:', err);
-      alert('Error al retirar la aplicación');
+      console.error('❌ Error removing application:', err);
+      alert(`Error al retirar la aplicación: ${err.message}`);
     }
   };
 
@@ -277,7 +301,10 @@ export default function AplicacionesPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleRemoveApplication(aplicacion.id)}
+                        onClick={() => {
+                          console.log('🔍 Button clicked with ID:', aplicacion.id, 'Type:', typeof aplicacion.id);
+                          handleRemoveApplication(aplicacion.id.toString()); // 🔥 CONVERTIR A STRING EXPLÍCITAMENTE
+                        }}
                         className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="w-4 h-4" />

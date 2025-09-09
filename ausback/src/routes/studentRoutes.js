@@ -4,15 +4,17 @@ import * as studentController from '../controllers/studentController.js';
 
 const router = express.Router();
 
-// 🔥 RUTAS EXISTENTES
-router.get('/', authenticateJWT, studentController.getAllStudents);
+// 🔥 RUTAS ESPECÍFICAS PRIMERO (antes de las rutas con parámetros)
 router.get('/candidates', authenticateJWT, studentController.getCandidates);
 router.post('/search-intelligent', authenticateJWT, studentController.searchIntelligentStudents);
 router.get('/tokens/balance', authenticateJWT, studentController.getTokenBalance);
 router.post('/tokens/use', authenticateJWT, studentController.useTokens);
-router.get('/:id', authenticateJWT, studentController.getStudentById);
+router.get('/revealed-cvs', authenticateJWT, studentController.getRevealedCVs);
 
-// 🔥 NUEVAS RUTAS PARA VER CV Y CONTACTAR
+// 🔥 RUTAS EXISTENTES GENERALES
+router.get('/', authenticateJWT, studentController.getAllStudents);
+
+// 🔥 RUTAS CON PARÁMETROS AL FINAL
 router.post('/:studentId/view-cv', (req, res, next) => {
   console.log('🔍 RUTA /view-cv llamada para estudiante:', req.params.studentId);
   console.log('🔍 BODY recibido:', req.body);
@@ -25,8 +27,6 @@ router.post('/:studentId/contact', (req, res, next) => {
   next();
 }, authenticateJWT, studentController.contactStudent);
 
-// AGREGAR esta nueva ruta:
-router.get('/revealed-cvs', authenticateJWT, studentController.getRevealedCVs);
-router.get('/revealed-cvs-details', authenticateJWT, studentController.getRevealedCVsWithDetails);
+router.get('/:id', authenticateJWT, studentController.getStudentById);
 
 export default router;

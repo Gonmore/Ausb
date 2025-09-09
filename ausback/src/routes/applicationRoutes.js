@@ -4,29 +4,37 @@ import { authenticateJWT } from '../middlewares/authenticate.midlleware.js';
 
 const router = Router();
 
-// Rutas para aplicaciones
-router.route('/')
-    .post(authenticateJWT, applicationController.applyToOffer);  // Aplicar a una oferta
-
+// 🔥 RUTAS ESPECÍFICAS PRIMERO (sin parámetros)
 router.route('/user')
-    .get(authenticateJWT, applicationController.getUserApplications);  // Obtener aplicaciones del usuario
+    .get(authenticateJWT, applicationController.getUserApplications);
 
 router.route('/company')
-    .get(authenticateJWT, applicationController.getCompanyApplications);  // Obtener aplicaciones de la empresa
+    .get(authenticateJWT, applicationController.getCompanyApplications);
 
 router.route('/company/candidates/:offerId')
-    .get(authenticateJWT, applicationController.getSmartCandidates);  // Búsqueda inteligente con tokens
+    .get(authenticateJWT, applicationController.getSmartCandidates);
 
 router.route('/offer/:offerId')
-    .get(authenticateJWT, applicationController.getOfferApplications);  // Obtener aplicaciones de una oferta
+    .get(authenticateJWT, applicationController.getOfferApplications);
 
+router.route('/')
+    .post(authenticateJWT, applicationController.applyToOffer);
+
+// 🔥 RUTAS CON PARÁMETROS AL FINAL
 router.route('/:applicationId/status')
-    .put(authenticateJWT, applicationController.updateApplicationStatus);  // Actualizar estado de aplicación
-
-router.route('/:applicationId')
-    .delete(authenticateJWT, applicationController.withdrawApplication);  // Retirar aplicación
+    .put(authenticateJWT, applicationController.updateApplicationStatus);
 
 router.route('/:applicationId/hire')
-    .put(authenticateJWT, applicationController.hireStudent);  // Marcar como contratado
+    .put(authenticateJWT, applicationController.hireStudent);
+
+// 🔥 RUTA PARA RETIRAR APLICACIÓN (SOLO UNA VEZ)
+router.delete('/:applicationId', (req, res, next) => {
+  console.log('🔍 DELETE route called with params:', req.params);
+  console.log('🔍 applicationId:', req.params.applicationId);
+  next();
+}, authenticateJWT, applicationController.withdrawApplication);
+
+// 🔥 COMENTAR ESTA LÍNEA HASTA QUE EXISTA LA FUNCIÓN
+// router.get('/:id', authenticateJWT, applicationController.getApplicationById);
 
 export default router;

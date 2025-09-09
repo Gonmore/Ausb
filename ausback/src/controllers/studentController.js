@@ -2,7 +2,8 @@ import { Status } from '../constants/index.js'
 import sequelize from '../database/database.js';
 import logger from '../logs/logger.js'
 import { TokenService } from '../services/tokenService.js';
-import { User, Student, Profamily, Company, Application, UserCompany, Offer, RevealedCV } from '../models/relations.js';
+import * as companyService from '../services/companyService.js'; // 🔥 AGREGAR ESTA LÍNEA
+import { Student, User, Profamily, UserCompany, Company, RevealedCV, Application, Offer } from '../models/relations.js';
 import { AffinityCalculator } from '../services/affinityCalculator.js';
 import { Op } from 'sequelize';
 
@@ -574,9 +575,9 @@ export const viewStudentCV = async (req, res) => {
     const { studentId } = req.params;
     const { fromIntelligentSearch = false } = req.body;
 
-    console.log(`📄 Solicitud de CV - Estudiante: ${studentId}, Desde IA: ${fromIntelligentSearch}`);
+    console.log(`📄 Solicitud CV - Estudiante: ${studentId}, Desde IA: ${fromIntelligentSearch}, Usuario: ${userId}`);
 
-    // Obtener empresa
+    // 🔥 OBTENER EMPRESA DEL USUARIO DIRECTAMENTE
     const userCompany = await UserCompany.findOne({
       where: { userId: userId, isActive: true },
       include: [{ model: Company, as: 'company' }],
@@ -588,67 +589,79 @@ export const viewStudentCV = async (req, res) => {
     }
 
     const company = userCompany.company;
-    let wasAlreadyRevealed = false;
+    console.log(`🏢 Empresa encontrada: ${company.name} (ID: ${company.id})`);
+    
     let tokensUsed = 0;
+    let wasAlreadyRevealed = false;
+    let accessType = 'free';
 
-    // 🔥 SI VIENE DE BÚSQUEDA INTELIGENTE, VERIFICAR PERSISTENCIA Y COBRAR TOKENS
+    // 🔥 SI VIENE DE BÚSQUEDA INTELIGENTE, VERIFICAR Y COBRAR TOKENS
     if (fromIntelligentSearch) {
+      console.log(`🤖 Búsqueda inteligente - Verificando tokens para empresa ${company.id}`);
+      
       try {
-        const result = await TokenService.useTokens(
+        const tokenResult = await TokenService.useTokens(
           company.id,
-          2, // Costo por ver CV
+          2, // Costo fijo: 2 tokens por CV
           'view_cv_ai',
-          studentId,
-          `Ver CV desde búsqueda inteligente - Estudiante ID: ${studentId}`
+          parseInt(studentId),
+          `Ver CV completo del estudiante ${studentId} (Búsqueda Inteligente)`
         );
         
-        wasAlreadyRevealed = result.wasAlreadyRevealed;
-        tokensUsed = wasAlreadyRevealed ? 0 : 2;
+        tokensUsed = tokenResult.wasAlreadyRevealed ? 0 : 2;
+        wasAlreadyRevealed = tokenResult.wasAlreadyRevealed;
+        accessType = wasAlreadyRevealed ? 'previously_revealed' : 'paid';
         
-        if (wasAlreadyRevealed) {
-          console.log(`✅ CV ya fue revelado anteriormente - Acceso gratuito`);
-        } else {
-          console.log(`💳 Tokens cobrados: 2, Nuevo balance: ${result.newBalance}`);
-        }
+        console.log(`💳 Resultado tokens: ${tokenResult.message || 'Tokens procesados correctamente'}`);
         
       } catch (error) {
         if (error.message === 'Tokens insuficientes') {
-          return res.status(400).json({
-            mensaje: 'Tokens insuficientes para ver este CV',
+          return res.status(402).json({
             code: 'INSUFFICIENT_TOKENS',
-            required: 2
+            mensaje: 'Tokens insuficientes para ver el CV',
+            required: 2,
+            action: 'view_cv'
           });
         }
         throw error;
       }
     } else {
-      console.log(`🆓 Acceso GRATUITO al CV desde lista de candidatos normales`);
+      console.log(`✅ Acceso gratuito - Candidato aplicó directamente`);
+      accessType = 'free';
     }
 
-    // Obtener datos del estudiante
-    const student = await Student.findByPk(studentId, { raw: true });
+    // 🔥 OBTENER DATOS COMPLETOS DEL ESTUDIANTE
+    const student = await Student.findByPk(studentId, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'surname', 'email', 'phone', 'description']
+        },
+        {
+          model: Profamily,
+          as: 'profamily',
+          attributes: ['id', 'name', 'description'],
+          required: false
+        }
+      ]
+    });
+
     if (!student) {
       return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
     }
 
-    const user = await User.findByPk(student.userId, { raw: true });
-    const profamily = student.profamilyId ? await Profamily.findByPk(student.profamilyId, { raw: true }) : null;
-
-    const cvData = {
+    // 🔥 PREPARAR RESPUESTA COMPLETA
+    const responseData = {
       student: {
-        ...student,
-        User: user ? {
-          id: user.id,
-          name: user.name,
-          surname: user.surname,
-          email: user.email,
-          phone: user.phone,
-          description: user.description
-        } : null,
-        Profamily: profamily ? {
-          id: profamily.id,
-          name: profamily.name
-        } : null
+        id: student.id,
+        grade: student.grade,
+        course: student.course,
+        car: student.car,
+        tag: student.tag,
+        description: student.description,
+        User: student.user,
+        profamily: student.profamily
       },
       cv: {
         education: `${student.grade} - ${student.course}`,
@@ -657,12 +670,22 @@ export const viewStudentCV = async (req, res) => {
         availability: student.disp,
         description: student.description || 'Sin descripción adicional'
       },
-      accessType: fromIntelligentSearch ? (wasAlreadyRevealed ? 'previously_revealed' : 'paid') : 'free',
+      access: {
+        type: accessType,
+        tokensUsed: tokensUsed,
+        wasAlreadyRevealed: wasAlreadyRevealed,
+        message: wasAlreadyRevealed ? 'CV ya revelado previamente' : 
+                fromIntelligentSearch ? `CV revelado usando ${tokensUsed} tokens` : 
+                'Acceso gratuito por aplicación directa'
+      },
+      // 🔥 MANTENER COMPATIBILIDAD CON FRONTEND EXISTENTE
+      accessType: accessType,
       tokensUsed: tokensUsed,
       wasAlreadyRevealed: wasAlreadyRevealed
     };
 
-    res.json(cvData);
+    console.log(`✅ CV enviado exitosamente. Tipo: ${accessType}, Tokens: ${tokensUsed}`);
+    res.json(responseData);
 
   } catch (error) {
     console.error('❌ Error viendo CV:', error);
@@ -677,7 +700,8 @@ export const viewStudentCV = async (req, res) => {
 export const getRevealedCVs = async (req, res) => {
   try {
     const { userId } = req.user;
-
+    
+    // Obtener empresa del usuario directamente
     const userCompany = await UserCompany.findOne({
       where: { userId: userId, isActive: true },
       include: [{ model: Company, as: 'company' }],
@@ -688,11 +712,23 @@ export const getRevealedCVs = async (req, res) => {
       return res.status(404).json({ mensaje: 'Usuario no está asociado a ninguna empresa activa' });
     }
 
-    const revealedStudentIds = await TokenService.getRevealedCVs(userCompany.company.id);
+    const company = userCompany.company;
+    
+    // Obtener todos los CVs revelados de esta empresa
+    const revealedCVs = await RevealedCV.findAll({
+      where: { companyId: company.id },
+      attributes: ['studentId', 'tokensUsed', 'revealType', 'revealedAt'],
+      order: [['revealedAt', 'DESC']]
+    });
+
+    const revealedStudentIds = revealedCVs.map(cv => cv.studentId);
+    
+    console.log(`📋 CVs revelados para empresa ${company.id}: ${revealedStudentIds.length} estudiantes`);
     
     res.json({
       revealedStudentIds: revealedStudentIds,
-      total: revealedStudentIds.length
+      details: revealedCVs,
+      count: revealedStudentIds.length
     });
 
   } catch (error) {
@@ -954,7 +990,7 @@ export default {
     useTokens,
     viewStudentCV,
     contactStudent,
-    getRevealedCVs,
-    getRevealedCVsWithDetails  // 🔥 AGREGAR
+    getRevealedCVs
+    //getRevealedCVsWithDetails  // 🔥 AGREGAR
 }
 

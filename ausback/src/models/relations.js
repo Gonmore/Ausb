@@ -34,8 +34,14 @@ Company.belongsToMany(Cv, { through: 'CompanyCv' });
 Cv.belongsToMany(Company, { through: 'CompanyCv' });
 
 // Relaciones para Applications
-Application.belongsTo(Offer, { foreignKey: 'offerId' });
-Offer.hasMany(Application, { foreignKey: 'offerId' });
+Application.belongsTo(Offer, { 
+    foreignKey: 'offerId',
+    as: 'offer'
+});
+Offer.hasMany(Application, { 
+    foreignKey: 'offerId',
+    as: 'applications'
+});
 
 Application.belongsTo(Student, { 
     foreignKey: 'studentId',

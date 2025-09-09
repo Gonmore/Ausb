@@ -18,7 +18,12 @@ export default function OfertasPage() {
   const [filteredOffers, setFilteredOffers] = useState<Offer[]>([]);
   const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const { user } = useAuthStore();
+  
+  // 🔥 AGREGAR ESTADO PARA APLICACIONES
+  const [userApplications, setUserApplications] = useState<{[key: string]: any}>({});
+  const [loadingApplications, setLoadingApplications] = useState(true);
+  
+  const { user, token } = useAuthStore();
 
   // Debug logging
   console.log('🔍 OfertasPage render - User:', user);
@@ -56,29 +61,140 @@ export default function OfertasPage() {
     }
   }, [offers, searchTerm]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'closed':
-        return 'bg-red-100 text-red-800';
-      case 'draft':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-blue-100 text-blue-800';
+  // 🔥 CARGAR APLICACIONES DEL USUARIO AL INICIO
+  useEffect(() => {
+    const fetchUserApplications = async () => {
+      if (!user || !token || user.role !== 'student') {
+        setLoadingApplications(false);
+        return;
+      }
+
+      try {
+        console.log('🔄 Cargando aplicaciones del usuario...');
+        
+        const response = await fetch('http://localhost:5000/api/applications/user', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const applications = await response.json();
+          console.log('📋 Applications loaded:', applications);
+          
+          // 🔥 CREAR MAPA DE APLICACIONES MÁS ROBUSTO
+          const applicationsMap: {[key: string]: any} = {};
+          
+          applications.forEach((app: any) => {
+            const offerId = app.offerId || app.offer?.id;
+            if (offerId) {
+              applicationsMap[offerId.toString()] = {
+                id: app.id,
+                status: app.status,
+                appliedAt: app.appliedAt,
+                reviewedAt: app.reviewedAt,
+                message: app.message,
+                companyNotes: app.companyNotes,
+                rejectionReason: app.rejectionReason
+              };
+            }
+          });
+          
+          setUserApplications(applicationsMap);
+          console.log('🗺️ Applications map created:', applicationsMap);
+          
+        } else {
+          console.error('❌ Error loading applications:', response.status);
+        }
+      } catch (error) {
+        console.error('❌ Error loading applications:', error);
+      } finally {
+        setLoadingApplications(false);
+      }
+    };
+
+    fetchUserApplications();
+  }, [user, token]); // 🔥 DEPENDENCIAS CORRECTAS
+
+  // 🔥 FUNCIÓN MEJORADA PARA APLICAR
+  const handleApplyToOffer = async (offer: Offer) => {
+    console.log('🚀 Applying to offer:', offer.id);
+    
+    if (!user || user.role !== 'student') {
+      alert('Solo los estudiantes pueden aplicar a ofertas');
+      return;
+    }
+
+    // 🔥 VERIFICAR SI YA APLICÓ (MÁS ROBUSTO)
+    const existingApplication = userApplications[offer.id.toString()];
+    if (existingApplication && existingApplication.status !== 'withdrawn') {
+      alert(`Ya has aplicado a esta oferta.\nEstado: ${getStatusText(existingApplication.status)}\nFecha: ${new Date(existingApplication.appliedAt).toLocaleDateString()}`);
+      return;
+    }
+    
+    try {
+      const response = await fetch('http://localhost:5000/api/applications', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          offerId: offer.id,
+          message: `Aplicación a ${offer.name}`
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Application created:', result);
+        
+        // 🔥 ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE
+        setUserApplications(prev => ({
+          ...prev,
+          [offer.id.toString()]: {
+            id: result.id || result.application?.id,
+            status: 'pending',
+            appliedAt: new Date().toISOString(),
+            message: `Aplicación a ${offer.name}`
+          }
+        }));
+
+        alert(`¡Aplicación enviada exitosamente!\n\nOferta: ${offer.name}\nEmpresa: ${offer.sector || 'N/A'}\n\nTe contactaremos pronto.`);
+        
+      } else {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.mensaje || 'No se pudo enviar la aplicación'}`);
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Application failed:', error);
+      alert(`Error al aplicar: ${error.message || 'Error desconocido'}`);
     }
   };
 
+  // 🔥 FUNCIÓN PARA OBTENER TEXTO DEL ESTADO
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'active':
-        return 'Activa';
-      case 'closed':
-        return 'Cerrada';
-      case 'draft':
-        return 'Borrador';
-      default:
-        return 'Desconocido';
+      case 'pending': return 'Pendiente';
+      case 'reviewed': return 'Revisada';
+      case 'accepted': return 'Aceptada';
+      case 'rejected': return 'Rechazada';
+      case 'withdrawn': return 'Retirada';
+      default: return status;
+    }
+  };
+
+  // 🔥 FUNCIÓN PARA OBTENER COLOR DEL ESTADO
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'reviewed': return 'bg-blue-100 text-blue-800';
+      case 'accepted': return 'bg-green-100 text-green-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'withdrawn': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -94,56 +210,6 @@ export default function OfertasPage() {
     console.log('📋 Ver detalles de la oferta:', offer);
     setSelectedOffer(offer);
     setShowDetailsModal(true);
-  };
-
-  const handleApplyToOffer = async (offer: Offer) => {
-    console.log('� handleApplyToOffer called with:', offer);
-    console.log('👤 Current user:', user);
-    console.log('🔐 User role:', user?.role);
-    
-    if (!user) {
-      console.log('❌ No user found, redirecting to login');
-      window.location.href = '/login';
-      return;
-    }
-    
-    if (user.role !== 'student') {
-      console.log('❌ User is not a student, role:', user.role);
-      alert('Solo los estudiantes pueden aplicar a ofertas');
-      return;
-    }
-    
-    console.log('✅ Validation passed, attempting to apply...');
-    
-    try {
-      // Crear objeto de oferta compatible con el servicio
-      const offerData = {
-        id: offer.id,
-        title: offer.name,
-        company: offer.sector,
-        description: offer.description,
-        requirements: offer.requirements || [],
-        benefits: offer.benefits || [],
-        salary: offer.salary,
-        location: offer.location,
-        type: offer.type,
-        postedDate: offer.postedDate,
-        deadline: offer.deadline,
-        contactEmail: offer.contactEmail
-      };
-      
-      const result = await applicationService.applyToOffer(offerData, user);
-      console.log('✅ Application result:', result);
-      
-      if (result.success) {
-        alert(`¡Aplicación enviada exitosamente!\n\nOferta: ${offer.name}\nEmpresa: ${offer.sector}\n\nTe contactaremos pronto.`);
-      } else {
-        alert(`Error: ${result.message}`);
-      }
-    } catch (error: any) {
-      console.error('❌ Application failed:', error);
-      alert(`Error al aplicar a la oferta: ${error.message || 'Error desconocido'}`);
-    }
   };
 
   const closeDetailsModal = () => {
@@ -347,7 +413,25 @@ export default function OfertasPage() {
                             </Badge>
                           )}
                         </div>
-                        <div className="flex space-x-2">
+                        
+                        <div className="flex items-center space-x-2">
+                          {/* 🔥 MOSTRAR ESTADO DE APLICACIÓN SI EXISTE */}
+                          {user?.role === 'student' && userApplications[offer.id] && (
+                            <div className="flex flex-col items-end">
+                              <Badge className={getStatusColor(userApplications[offer.id].status)}>
+                                {getStatusText(userApplications[offer.id].status)}
+                              </Badge>
+                              <span className="text-xs text-gray-500 mt-1">
+                                {new Date(userApplications[offer.id].appliedAt).toLocaleDateString()}
+                              </span>
+                              {userApplications[offer.id].reviewedAt && (
+                                <span className="text-xs text-green-600">
+                                  ✓ CV revisado
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          
                           <Button 
                             variant="outline" 
                             size="sm"
@@ -356,19 +440,42 @@ export default function OfertasPage() {
                           >
                             Ver detalles
                           </Button>
-                          <Button 
-                            size="sm"
-                            onClick={() => {
-                              console.log('🔥 Apply button clicked!');
-                              handleApplyToOffer(offer);
-                            }}
-                            disabled={!!user && user.role !== 'student'}
-                            className="btn-fprax-primary"
-                          >
-                            {!user ? 'Iniciar sesión' : 
-                             user.role !== 'student' ? 'Solo estudiantes' : 
-                             'Aplicar'}
-                          </Button>
+                          
+                          {/* 🔥 BOTÓN CONDICIONAL SEGÚN ESTADO */}
+                          {!user ? (
+                            <Button 
+                              size="sm"
+                              onClick={() => window.location.href = '/login'}
+                              className="btn-fprax-primary"
+                            >
+                              Iniciar sesión
+                            </Button>
+                          ) : user.role !== 'student' ? (
+                            <Button 
+                              size="sm"
+                              disabled
+                              className="btn-fprax-primary opacity-50"
+                            >
+                              Solo estudiantes
+                            </Button>
+                          ) : userApplications[offer.id] ? (
+                            <Button 
+                              size="sm"
+                              disabled
+                              className="bg-green-600 text-white opacity-75"
+                            >
+                              ✓ Aplicado
+                            </Button>
+                          ) : (
+                            <Button 
+                              size="sm"
+                              onClick={() => handleApplyToOffer(offer)}
+                              className="btn-fprax-primary"
+                              disabled={loadingApplications}
+                            >
+                              {loadingApplications ? 'Cargando...' : 'Aplicar'}
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </CardContent>
