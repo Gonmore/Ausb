@@ -14,15 +14,21 @@ import {
   Trash2,
   ExternalLink,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  CheckCircle
 } from 'lucide-react';
 
 interface ApplicationWithOffer {
-  id: string; // 🔥 ASEGURAR QUE SEA STRING
+  id: string;
   offerId: string;
   status: 'pending' | 'reviewed' | 'accepted' | 'rejected' | 'withdrawn';
   appliedAt: string;
+  reviewedAt?: string; // 🔥 AGREGAR reviewedAt
   message?: string;
+  // 🔥 AGREGAR CAMPOS DE ESTADO
+  isReviewed: boolean;
+  cvViewed: boolean;
+  statusLabel: string;
   offer: {
     id: string;
     name: string;
@@ -145,8 +151,22 @@ export default function AplicacionesPage() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  const getStatusBadge = (aplicacion: ApplicationWithOffer) => {
+    // 🔥 PRIORIZAR "CV REVISADO" SOBRE "PENDING"
+    if (aplicacion.reviewedAt && aplicacion.status === 'reviewed') {
+      return (
+        <div className="flex flex-col items-end gap-1">
+          <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">
+            ✓ CV Revisado
+          </Badge>
+          <span className="text-xs text-blue-600">
+            {new Date(aplicacion.reviewedAt).toLocaleDateString('es-ES')}
+          </span>
+        </div>
+      );
+    }
+
+    switch (aplicacion.status) {
       case 'pending':
         return <Badge variant="outline" className="text-yellow-600 border-yellow-300">Pendiente</Badge>;
       case 'reviewed':
@@ -158,7 +178,7 @@ export default function AplicacionesPage() {
       case 'withdrawn':
         return <Badge variant="outline" className="text-gray-600 border-gray-300">Retirada</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline">{aplicacion.status}</Badge>;
     }
   };
 
@@ -244,7 +264,7 @@ export default function AplicacionesPage() {
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-xl font-semibold">{aplicacion.offer.name}</h3>
-                      {getStatusBadge(aplicacion.status)}
+                      {getStatusBadge(aplicacion)}
                     </div>
                     
                     <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
@@ -264,7 +284,8 @@ export default function AplicacionesPage() {
 
                     <p className="text-gray-700 mb-3">{aplicacion.offer.description}</p>
 
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                    {/* 🔥 INFORMACIÓN DE ESTADO MÁS DETALLADA */}
+                    <div className="flex items-center gap-4 text-sm text-gray-500 mb-3">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-4 h-4" />
                         Aplicado: {new Date(aplicacion.appliedAt).toLocaleDateString('es-ES', {
@@ -273,11 +294,41 @@ export default function AplicacionesPage() {
                           day: 'numeric'
                         })}
                       </div>
+                      
+                      {/* 🔥 MOSTRAR FECHA DE REVISIÓN SI EXISTE */}
+                      {aplicacion.reviewedAt && (
+                        <div className="flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4 text-blue-600" />
+                          <span className="text-blue-600 font-medium">
+                            CV revisado: {new Date(aplicacion.reviewedAt).toLocaleDateString('es-ES', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </span>
+                        </div>
+                      )}
+                      
                       <div className="flex items-center gap-1">
                         <Building2 className="w-4 h-4" />
                         {aplicacion.offer.company.sector}
                       </div>
                     </div>
+
+                    {/* 🔥 INDICADOR VISUAL ADICIONAL PARA CV REVISADO */}
+                    {aplicacion.reviewedAt && (
+                      <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-blue-600" />
+                          <span className="text-sm font-medium text-blue-800">
+                            ¡La empresa ha revisado tu CV!
+                          </span>
+                        </div>
+                        <p className="text-xs text-blue-700 mt-1">
+                          Esto significa que la empresa ha visto tu perfil completo y está considerando tu aplicación.
+                        </p>
+                      </div>
+                    )}
 
                     {aplicacion.message && (
                       <div className="mt-3 p-3 bg-gray-50 rounded-lg">
@@ -303,7 +354,7 @@ export default function AplicacionesPage() {
                         size="sm"
                         onClick={() => {
                           console.log('🔍 Button clicked with ID:', aplicacion.id, 'Type:', typeof aplicacion.id);
-                          handleRemoveApplication(aplicacion.id.toString()); // 🔥 CONVERTIR A STRING EXPLÍCITAMENTE
+                          handleRemoveApplication(aplicacion.id.toString());
                         }}
                         className="text-red-600 hover:text-red-700"
                       >
@@ -325,7 +376,7 @@ export default function AplicacionesPage() {
             <CardTitle>Resumen de Aplicaciones</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">
                   {aplicaciones.length}
@@ -338,6 +389,13 @@ export default function AplicacionesPage() {
                 </div>
                 <div className="text-sm text-gray-600">Pendientes</div>
               </div>
+              {/* 🔥 AGREGAR ESTADÍSTICA DE CV REVISADO */}
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  {aplicaciones.filter(a => a.reviewedAt).length}
+                </div>
+                <div className="text-sm text-gray-600">CV Revisados</div>
+              </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
                   {aplicaciones.filter(a => a.status === 'accepted').length}
@@ -349,6 +407,35 @@ export default function AplicacionesPage() {
                   {aplicaciones.filter(a => a.status === 'rejected').length}
                 </div>
                 <div className="text-sm text-gray-600">Rechazadas</div>
+              </div>
+            </div>
+            
+            {/* 🔥 AGREGAR PROGRESO VISUAL */}
+            <div className="mt-6">
+              <div className="text-sm text-gray-600 mb-2">Progreso de tus aplicaciones:</div>
+              <div className="flex rounded-full overflow-hidden h-3 bg-gray-200">
+                <div 
+                  className="bg-yellow-500" 
+                  style={{ width: `${(aplicaciones.filter(a => a.status === 'pending').length / aplicaciones.length) * 100}%` }}
+                ></div>
+                <div 
+                  className="bg-blue-500" 
+                  style={{ width: `${(aplicaciones.filter(a => a.reviewedAt).length / aplicaciones.length) * 100}%` }}
+                ></div>
+                <div 
+                  className="bg-green-500" 
+                  style={{ width: `${(aplicaciones.filter(a => a.status === 'accepted').length / aplicaciones.length) * 100}%` }}
+                ></div>
+                <div 
+                  className="bg-red-500" 
+                  style={{ width: `${(aplicaciones.filter(a => a.status === 'rejected').length / aplicaciones.length) * 100}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>Pendientes</span>
+                <span>CV Revisados</span>
+                <span>Aceptadas</span>
+                <span>Rechazadas</span>
               </div>
             </div>
           </CardContent>

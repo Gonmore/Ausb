@@ -19,7 +19,10 @@ import {
   Brain,
   Search,
   ChevronRight,
-  TrendingUp
+  TrendingUp,
+  CheckCircle,    // 🔥 AGREGAR
+  Calendar,       // 🔥 AGREGAR
+  XCircle         // 🔥 AGREGAR
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { AuthGuard } from '@/components/auth-guard';
@@ -98,8 +101,28 @@ function CompanyOffersContent() {
   });
   const [actionType, setActionType] = useState<'free' | 'paid'>('free');
   const [revealedCVs, setRevealedCVs] = useState<number[]>([]);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [acceptForm, setAcceptForm] = useState({ message: '' });
+  const [interviewForm, setInterviewForm] = useState({
+    date: '',
+    time: '',
+    location: '',
+    type: 'presencial',
+    notes: ''
+  });
+  const [rejectForm, setRejectForm] = useState({
+    reason: '',
+    message: ''
+  });
+  const { token } = useAuthStore(); // 🔥 VERIFICAR QUE ESTÉ PRESENTE
 
-  const { token } = useAuthStore();
+  // Debug del token
+  useEffect(() => {
+    console.log('🔍 Token disponible:', !!token);
+    console.log('🔍 Token value:', token ? 'EXISTS' : 'NULL');
+  }, [token]);
 
   // Cargar ofertas con candidatos
   useEffect(() => {
@@ -372,6 +395,166 @@ function CompanyOffersContent() {
     }
   };
 
+  const handleAcceptApplication = async (candidate: Candidate) => {
+    console.log('✅ Aceptar candidato:', candidate.id);
+    setSelectedStudentForAction(candidate);
+    setAcceptForm({
+      message: `¡Felicidades ${candidate.student.User.name}! Hemos decidido aceptar tu candidatura para la oferta: ${selectedOffer?.name}.\n\nNos pondremos en contacto contigo pronto para coordinar los próximos pasos.\n\n¡Bienvenido/a al equipo!`
+    });
+    setShowAcceptModal(true);
+  };
+
+  // REEMPLAZAR la función handleRequestInterviewSingle:
+
+  const handleRequestInterviewSingle = async (candidate: Candidate) => {
+    console.log('📅 Solicitar entrevista para candidato:', candidate.id);
+    setSelectedStudentForAction(candidate);
+    setInterviewForm({
+      date: '',
+      time: '',
+      location: '',
+      type: 'presencial',
+      notes: `Entrevista para la oferta: ${selectedOffer?.name}`
+    });
+    setShowInterviewModal(true);
+  };
+
+  const handleRejectApplication = async (candidate: Candidate) => {
+    console.log('❌ Rechazar candidato:', candidate.id);
+    setSelectedStudentForAction(candidate);
+    setRejectForm({
+      reason: '',
+      message: `Estimado/a ${candidate.student.User.name},\n\nTe agradecemos el interés mostrado en nuestra oferta "${selectedOffer?.name}".\n\nEn esta ocasión hemos decidido continuar con otros candidatos.\n\nSaludos cordiales.`
+    });
+    setShowRejectModal(true);
+  };
+
+  // 🔥 AGREGAR estas funciones de confirmación:
+
+  const handleConfirmAccept = async () => {
+    if (!selectedStudentForAction) return;
+
+    try {
+      console.log('✅ Confirmando aceptación para aplicación:', selectedStudentForAction.id);
+      
+      const response = await fetch(`http://localhost:5000/api/applications/${selectedStudentForAction.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'accepted',
+          companyNotes: acceptForm.message
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al aceptar la aplicación');
+      }
+
+      alert('✅ Candidato aceptado exitosamente');
+      
+      // Cerrar modal y recargar
+      setShowAcceptModal(false);
+      setShowCandidatesModal(false);
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('❌ Error aceptando candidato:', error);
+      alert('Error al aceptar el candidato');
+    } finally {
+      setAcceptForm({ message: '' });
+    }
+  };
+
+  const handleConfirmInterview = async () => {
+    if (!selectedStudentForAction) return;
+
+    try {
+      console.log('📅 Confirmando entrevista para aplicación:', selectedStudentForAction.id);
+      
+      const response = await fetch(`http://localhost:5000/api/applications/${selectedStudentForAction.id}/interview`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          interviewDetails: {
+            date: interviewForm.date,
+            time: interviewForm.time,
+            location: interviewForm.location,
+            type: interviewForm.type,
+            notes: interviewForm.notes
+          },
+          companyNotes: `Entrevista programada para ${interviewForm.date} a las ${interviewForm.time}`
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al programar entrevista');
+      }
+
+      alert('📅 Entrevista programada exitosamente');
+      
+      // Cerrar modal y recargar
+      setShowInterviewModal(false);
+      setShowCandidatesModal(false);
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('❌ Error programando entrevista:', error);
+      alert('Error al programar la entrevista');
+    } finally {
+      setInterviewForm({
+        date: '',
+        time: '',
+        location: '',
+        type: 'presencial',
+        notes: ''
+      });
+    }
+  };
+
+  const handleConfirmReject = async () => {
+    if (!selectedStudentForAction) return;
+
+    try {
+      console.log('❌ Confirmando rechazo para aplicación:', selectedStudentForAction.id);
+      
+      const response = await fetch(`http://localhost:5000/api/applications/${selectedStudentForAction.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'rejected',
+          rejectionReason: rejectForm.reason,
+          companyNotes: rejectForm.message
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al rechazar aplicación');
+      }
+
+      alert('❌ Candidato rechazado');
+      
+      // Cerrar modal y recargar
+      setShowRejectModal(false);
+      setShowCandidatesModal(false);
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('❌ Error rechazando candidato:', error);
+      alert('Error al rechazar el candidato');
+    } finally {
+      setRejectForm({ reason: '', message: '' });
+    }
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -569,6 +752,39 @@ function CompanyOffersContent() {
                           <Mail className="w-4 h-4 mr-1" />
                           Contactar (Gratis)
                         </Button>
+                        
+                        {/* 🔥 NUEVOS BOTONES DE GESTIÓN */}
+                        <div className="border-t pt-2 mt-2">
+                          <div className="text-xs text-gray-500 mb-2">Gestionar:</div>
+                          
+                          <Button
+                            size="sm"
+                            onClick={() => handleAcceptApplication(candidate)}
+                            className="bg-green-600 hover:bg-green-700 text-white w-full mb-1"
+                          >
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Aceptar
+                          </Button>
+                          
+                          <Button
+                            size="sm"
+                            onClick={() => handleRequestInterviewSingle(candidate)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white w-full mb-1"
+                          >
+                            <Calendar className="w-4 h-4 mr-1" />
+                            Entrevista
+                          </Button>
+                          
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleRejectApplication(candidate)}
+                            className="w-full"
+                          >
+                            <XCircle className="w-4 h-4 mr-1" />
+                            Rechazar
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -843,10 +1059,244 @@ function CompanyOffersContent() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal para aceptar candidato */}
+      <Dialog open={showAcceptModal} onOpenChange={setShowAcceptModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              Aceptar Candidato: {selectedStudentForAction?.student?.User?.name} {selectedStudentForAction?.student?.User?.surname}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <p className="text-sm text-green-800">
+                <strong>Candidato:</strong> {selectedStudentForAction?.student?.User?.name} {selectedStudentForAction?.student?.User?.surname}
+              </p>
+              <p className="text-sm text-green-800">
+                <strong>Oferta:</strong> {selectedOffer?.name}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mensaje de aceptación
+              </label>
+              <textarea
+                value={acceptForm.message}
+                onChange={(e) => setAcceptForm(prev => ({ ...prev, message: e.target.value }))}
+                rows={6}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t">
+              <Button
+                onClick={handleConfirmAccept}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Confirmar Aceptación
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowAcceptModal(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para solicitar entrevista */}
+      <Dialog open={showInterviewModal} onOpenChange={setShowInterviewModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-600" />
+              Solicitar Entrevista: {selectedStudentForAction?.student?.User?.name} {selectedStudentForAction?.student?.User?.surname}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+              <p className="text-sm text-purple-800">
+                <strong>Candidato:</strong> {selectedStudentForAction?.student?.User?.name} {selectedStudentForAction?.student?.User?.surname}
+              </p>
+              <p className="text-sm text-purple-800">
+                <strong>Oferta:</strong> {selectedOffer?.name}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha
+                </label>
+                <input
+                  type="date"
+                  value={interviewForm.date}
+                  onChange={(e) => setInterviewForm(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hora
+                </label>
+                <input
+                  type="time"
+                  value={interviewForm.time}
+                  onChange={(e) => setInterviewForm(prev => ({ ...prev, time: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de entrevista
+              </label>
+              <select
+                value={interviewForm.type}
+                onChange={(e) => setInterviewForm(prev => ({ ...prev, type: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="presencial">Presencial</option>
+                <option value="online">Online (videollamada)</option>
+                <option value="telefonica">Telefónica</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ubicación / Enlace
+              </label>
+              <input
+                type="text"
+                value={interviewForm.location}
+                onChange={(e) => setInterviewForm(prev => ({ ...prev, location: e.target.value }))}
+                placeholder={
+                  interviewForm.type === 'presencial' ? 'Dirección de la oficina' :
+                  interviewForm.type === 'online' ? 'Enlace de videollamada' :
+                  'Número de teléfono'
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Notas adicionales
+              </label>
+              <textarea
+                value={interviewForm.notes}
+                onChange={(e) => setInterviewForm(prev => ({ ...prev, notes: e.target.value }))}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t">
+              <Button
+                onClick={handleConfirmInterview}
+                disabled={!interviewForm.date || !interviewForm.time || !interviewForm.location}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Programar Entrevista
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowInterviewModal(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para rechazar candidato */}
+      <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-600" />
+              Rechazar Candidato: {selectedStudentForAction?.student?.User?.name} {selectedStudentForAction?.student?.User?.surname}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+              <p className="text-sm text-red-800">
+                <strong>Candidato:</strong> {selectedStudentForAction?.student?.User?.name} {selectedStudentForAction?.student?.User?.surname}
+              </p>
+              <p className="text-sm text-red-800">
+                <strong>Oferta:</strong> {selectedOffer?.name}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Motivo del rechazo
+              </label>
+              <select
+                value={rejectForm.reason}
+                onChange={(e) => setRejectForm(prev => ({ ...prev, reason: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+                <option value="">Selecciona un motivo</option>
+                <option value="perfil_no_coincide">El perfil no coincide con los requisitos</option>
+                <option value="experiencia_insuficiente">Experiencia insuficiente</option>
+                <option value="formacion_inadecuada">Formación no adecuada para el puesto</option>
+                <option value="posicion_cubierta">La posición ya fue cubierta</option>
+                <option value="candidato_sobrecualificado">Candidato sobrecualificado</option>
+                <option value="disponibilidad_incompatible">Disponibilidad incompatible</option>
+                <option value="ubicacion_inadecuada">Ubicación no compatible</option>
+                <option value="otro">Otro motivo</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mensaje para el candidato
+              </label>
+              <textarea
+                value={rejectForm.message}
+                onChange={(e) => setRejectForm(prev => ({ ...prev, message: e.target.value }))}
+                rows={6}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t">
+              <Button
+                onClick={handleConfirmReject}
+                disabled={!rejectForm.reason}
+                variant="destructive"
+              >
+                <XCircle className="w-4 h-4 mr-2" />
+                Confirmar Rechazo
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowRejectModal(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
+// 🔥 AGREGAR ESTA EXPORTACIÓN AL FINAL:
 export default function CompanyOffersPage() {
   return (
     <AuthGuard allowedRoles={['company']}>

@@ -7,6 +7,8 @@ import { Student, User, Profamily, UserCompany, Company, RevealedCV, Application
 import { AffinityCalculator } from '../services/affinityCalculator.js';
 import { Op } from 'sequelize';
 
+
+
 async function getStudent(req, res) {
     const { userId } = req.user;
     console.log(userId)
@@ -53,6 +55,7 @@ async function createStudent(req, res){
         res.status(500).json({message: 'Server error creating student'})
     }
 }
+
 async function getPreference(req, res) {
     const { userId } = req.user;
     try {
@@ -84,7 +87,8 @@ async function updateStudent(req, res) {
         logger.error('Error updateStudent: '+err);
         res.status(500).json({message: 'Server error updating student'})
     }
-}
+
+  }
 
 async function activateInactivate(req, res) {
     const { userId }= req.user;
@@ -127,7 +131,7 @@ async function deleteStudent(req,res){
         logger.error('Error deleteStudent: '+err);
         res.status(500).json({message: 'Server error'})
     }
-}
+  }
 
 export const getAllStudents = async (req, res) => {
     try {
@@ -630,6 +634,31 @@ export const viewStudentCV = async (req, res) => {
       accessType = 'free';
     }
 
+    // 🔥 MARCAR AUTOMÁTICAMENTE TODAS LAS APLICACIONES COMO "CV REVISADO"
+    try {
+      const updatedApplications = await Application.update(
+        {
+          reviewedAt: new Date(),
+          status: 'reviewed' // Cambiar de 'pending' a 'reviewed'
+        },
+        {
+          where: {
+            studentId: parseInt(studentId),
+            companyId: company.id,
+            status: 'pending', // Solo cambiar las que están pendientes
+            reviewedAt: null    // Solo las que no han sido revisadas
+          }
+        }
+      );
+
+      if (updatedApplications[0] > 0) {
+        console.log(`✅ Marcadas ${updatedApplications[0]} aplicaciones como "CV revisado" para estudiante ${studentId}`);
+      }
+    } catch (updateError) {
+      console.error('⚠️ Error actualizando aplicaciones a "revisado":', updateError);
+      // No fallar la operación principal por este error
+    }
+
     // 🔥 OBTENER DATOS COMPLETOS DEL ESTUDIANTE
     const student = await Student.findByPk(studentId, {
       include: [
@@ -681,7 +710,10 @@ export const viewStudentCV = async (req, res) => {
       // 🔥 MANTENER COMPATIBILIDAD CON FRONTEND EXISTENTE
       accessType: accessType,
       tokensUsed: tokensUsed,
-      wasAlreadyRevealed: wasAlreadyRevealed
+      wasAlreadyRevealed: wasAlreadyRevealed,
+      // 🔥 AGREGAR INFO DE APLICACIONES ACTUALIZADAS
+      applicationsUpdated: true,
+      message: 'CV visto exitosamente. Aplicaciones marcadas como revisadas.'
     };
 
     console.log(`✅ CV enviado exitosamente. Tipo: ${accessType}, Tokens: ${tokensUsed}`);
@@ -976,6 +1008,106 @@ export const contactStudent = async (req, res) => {
   }
 };
 
+// AGREGAR esta función:
+
+export const getRevealedCandidates = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    console.log(`📋 Obteniendo candidatos con CVs revelados para usuario: ${userId}`);
+
+    // Obtener empresa del usuario
+    const userCompany = await UserCompany.findOne({
+      where: { userId: userId, isActive: true },
+      include: [{ model: Company, as: 'company' }],
+      raw: false
+    });
+
+    if (!userCompany || !userCompany.company) {
+      return res.status(404).json({ mensaje: 'Usuario no está asociado a ninguna empresa activa' });
+    }
+
+    const companyId = userCompany.company.id;
+    console.log(`🏢 Empresa encontrada: ${userCompany.company.name} (ID: ${companyId})`);
+
+    // Obtener todos los CVs revelados por esta empresa
+    const revealedCVs = await RevealedCV.findAll({
+      where: { companyId: companyId },
+      include: [
+        {
+          model: Student,
+          as: 'student',
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['id', 'name', 'surname', 'email', 'phone']
+            },
+            {
+              model: Profamily,
+              as: 'profamily',
+              attributes: ['id', 'name'],
+              required: false
+            }
+          ]
+        }
+      ],
+      order: [['revealedAt', 'DESC']]
+    });
+
+    console.log(`✅ Encontrados ${revealedCVs.length} CVs revelados`);
+
+    // Formatear datos para el frontend
+    const students = revealedCVs.map(revealed => ({
+      id: revealed.student.id,
+      revealedAt: revealed.revealedAt,
+      tokensUsed: revealed.tokensUsed,
+      searchMethod: revealed.searchMethod,
+      student: {
+        id: revealed.student.id,
+        grade: revealed.student.grade,
+        course: revealed.student.course,
+        car: revealed.student.car,
+        tag: revealed.student.tag,
+        description: revealed.student.description,
+        User: revealed.student.user,
+        profamily: revealed.student.profamily
+      },
+      // Verificar si el estudiante también tiene aplicaciones
+      hasApplications: false, // Se puede mejorar con una query adicional
+      revealInfo: {
+        date: revealed.revealedAt,
+        tokens: revealed.tokensUsed,
+        method: revealed.searchMethod || 'intelligent_search'
+      }
+    }));
+
+    // Calcular estadísticas
+    const totalRevealed = students.length;
+    const totalTokensSpent = revealedCVs.reduce((sum, revealed) => sum + (revealed.tokensUsed || 0), 0);
+    const averageTokensPerReveal = totalRevealed > 0 ? Math.round(totalTokensSpent / totalRevealed * 10) / 10 : 0;
+
+    const summary = {
+      totalRevealed,
+      totalTokensSpent,
+      averageTokensPerReveal
+    };
+
+    console.log(`📊 Estadísticas: ${totalRevealed} revelados, ${totalTokensSpent} tokens gastados`);
+
+    res.json({
+      students,
+      summary
+    });
+
+  } catch (error) {
+    console.error('❌ Error getRevealedCandidates:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 export default {
     getStudent,
     createStudent,
@@ -990,7 +1122,8 @@ export default {
     useTokens,
     viewStudentCV,
     contactStudent,
-    getRevealedCVs
+    getRevealedCVs,
+    getRevealedCandidates
     //getRevealedCVsWithDetails  // 🔥 AGREGAR
 }
 

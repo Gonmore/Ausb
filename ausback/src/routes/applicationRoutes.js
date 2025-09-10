@@ -34,6 +34,14 @@ router.delete('/:applicationId', (req, res, next) => {
   next();
 }, authenticateJWT, applicationController.withdrawApplication);
 
+// AGREGAR esta ruta después de las existentes:
+// Solicitar entrevista
+router.put('/:applicationId/interview', (req, res, next) => {
+  console.log('🔍 INTERVIEW route called with params:', req.params);
+  console.log('🔍 Interview details:', req.body);
+  next();
+}, authenticateJWT, applicationController.requestInterview);
+
 // 🔥 COMENTAR ESTA LÍNEA HASTA QUE EXISTA LA FUNCIÓN
 // router.get('/:id', authenticateJWT, applicationController.getApplicationById);
 

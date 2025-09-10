@@ -24,9 +24,16 @@ export const Application = sequelize.define('applications', {
         }
     },
     status: {
-        type: DataTypes.ENUM('pending', 'reviewed', 'accepted', 'rejected', 'withdrawn'),
-        defaultValue: 'pending',
-        allowNull: false
+        type: DataTypes.ENUM(
+            'pending', 
+            'reviewed', 
+            'interview_requested',  // 🔥 AGREGAR ESTE VALOR
+            'accepted', 
+            'rejected', 
+            'withdrawn'
+        ),
+        allowNull: false,
+        defaultValue: 'pending'
     },
     appliedAt: {
         type: DataTypes.DATE,

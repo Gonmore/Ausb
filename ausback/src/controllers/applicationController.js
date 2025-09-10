@@ -11,6 +11,7 @@ import logger from '../logs/logger.js';
 import { StudentToken } from '../models/studentToken.js';
 import affinityCalculator from '../services/affinityCalculator.js';
 import companyService from '../services/companyService.js';
+import { UserCompany } from '../models/relations.js';
 
 /**
  * @swagger
@@ -227,16 +228,24 @@ export const getUserApplications = async (req, res) => {
 
     console.log(`✅ Encontradas ${applications.length} aplicaciones`);
 
-    // 🔥 FORMATEAR RESPUESTA PARA EL FRONTEND
+    // 🔥 FORMATEAR RESPUESTA PARA EL FRONTEND CON DATOS COMPLETOS
     const formattedApplications = applications.map(app => ({
       id: app.id,
       offerId: app.offerId,
       status: app.status,
       appliedAt: app.appliedAt,
-      reviewedAt: app.reviewedAt,
+      reviewedAt: app.reviewedAt, // 🔥 INCLUIR reviewedAt
       message: app.message,
       companyNotes: app.companyNotes,
       rejectionReason: app.rejectionReason,
+      // 🔥 AGREGAR CAMPOS DE ESTADO
+      isReviewed: !!app.reviewedAt,
+      cvViewed: !!app.reviewedAt,
+      statusLabel: app.reviewedAt ? 'CV Revisado' : 
+                   app.status === 'pending' ? 'Pendiente' :
+                   app.status === 'accepted' ? 'Aceptado' :
+                   app.status === 'rejected' ? 'Rechazado' : 
+                   app.status,
       offer: app.offer ? {
         id: app.offer.id,
         name: app.offer.name,
@@ -1140,6 +1149,99 @@ async function getSmartCandidates(req, res) {
     }
 }
 
+// AGREGAR esta nueva función:
+
+export const requestInterview = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { applicationId } = req.params;
+    const { interviewDetails, companyNotes } = req.body;
+
+    console.log(`📅 Solicitud de entrevista - Application: ${applicationId}, User: ${userId}`);
+
+    // Obtener empresa
+    const userCompany = await UserCompany.findOne({
+      where: { userId: userId, isActive: true },
+      include: [{ model: Company, as: 'company' }],
+      raw: false
+    });
+
+    if (!userCompany || !userCompany.company) {
+      return res.status(404).json({ mensaje: 'Usuario no está asociado a ninguna empresa activa' });
+    }
+
+    // Buscar la aplicación
+    const application = await Application.findOne({
+      where: { 
+        id: applicationId,
+        companyId: userCompany.company.id 
+      },
+      include: [
+        {
+          model: Student,
+          as: 'student',
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['id', 'name', 'surname', 'email']
+            }
+          ]
+        },
+        {
+          model: Offer,
+          as: 'offer',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+
+    if (!application) {
+      return res.status(404).json({ 
+        mensaje: 'Aplicación no encontrada o no tienes permisos para modificarla' 
+      });
+    }
+
+    // Actualizar aplicación con detalles de entrevista
+    await application.update({
+      status: 'interview_requested',
+      companyNotes: companyNotes,
+      interviewDetails: JSON.stringify(interviewDetails),
+      interviewRequestedAt: new Date()
+    });
+
+    console.log(`✅ Entrevista solicitada para aplicación ${applicationId}`);
+
+    // TODO: Enviar notificación al estudiante
+    // await notificationService.sendInterviewRequest(application, interviewDetails);
+
+    res.json({
+      success: true,
+      mensaje: 'Solicitud de entrevista enviada exitosamente',
+      application: {
+        id: application.id,
+        status: 'interview_requested',
+        interviewDetails: interviewDetails,
+        student: {
+          name: application.student.user.name,
+          surname: application.student.user.surname,
+          email: application.student.user.email
+        },
+        offer: {
+          name: application.offer.name
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error requesting interview:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 export default {
     applyToOffer,
     getUserApplications,
@@ -1148,5 +1250,6 @@ export default {
     updateApplicationStatus,
     withdrawApplication,
     hireStudent,
-    getSmartCandidates // 🔥 NUEVA FUNCIÓN CON AFFINITY CALCULATOR
+    getSmartCandidates, // 🔥 NUEVA FUNCIÓN CON AFFINITY CALCULATOR
+    requestInterview
 };

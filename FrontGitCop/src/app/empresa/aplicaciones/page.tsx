@@ -18,7 +18,8 @@ import {
   Building2,
   Calendar,
   RefreshCw,
-  User
+  User,
+  AlertCircle
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -65,6 +66,21 @@ function CompanyApplicationsContent() {
   const [error, setError] = useState<string | null>(null);
   const [selectedApplication, setSelectedApplication] = useState<ApplicationWithDetails | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  
+  // 🔥 NUEVOS ESTADOS PARA LOS MODALES
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [interviewForm, setInterviewForm] = useState({
+    date: '',
+    time: '',
+    location: '',
+    type: 'presencial', // presencial, online, telefónica
+    notes: ''
+  });
+  const [rejectForm, setRejectForm] = useState({
+    reason: '',
+    message: ''
+  });
 
   // Verificar que el usuario puede acceder como empresa
   if (!canAccessRole('company')) {
@@ -158,10 +174,106 @@ function CompanyApplicationsContent() {
     }
   };
 
+  const handleRequestInterview = async () => {
+    if (!selectedApplication) return;
+
+    try {
+      setLoading(true);
+      
+      const response = await fetch(`http://localhost:5000/api/applications/${selectedApplication.id}/interview`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status: 'interview_requested',
+          interviewDetails: {
+            date: interviewForm.date,
+            time: interviewForm.time,
+            location: interviewForm.location,
+            type: interviewForm.type,
+            notes: interviewForm.notes
+          },
+          companyNotes: `Entrevista solicitada para ${interviewForm.date} a las ${interviewForm.time}`
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al solicitar entrevista');
+      }
+
+      toast.success('Solicitud de entrevista enviada exitosamente');
+      
+      // Limpiar formulario y cerrar modal
+      setInterviewForm({
+        date: '',
+        time: '',
+        location: '',
+        type: 'presencial',
+        notes: ''
+      });
+      setShowInterviewModal(false);
+      
+      // Recargar aplicaciones
+      await fetchApplications();
+      
+    } catch (error) {
+      console.error('Error requesting interview:', error);
+      toast.error('Error al solicitar la entrevista');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectWithMessage = async () => {
+    if (!selectedApplication) return;
+
+    try {
+      setLoading(true);
+      
+      const response = await fetch(`http://localhost:5000/api/applications/${selectedApplication.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status: 'rejected',
+          rejectionReason: rejectForm.reason,
+          companyNotes: rejectForm.message
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al rechazar aplicación');
+      }
+
+      toast.success('Aplicación rechazada con mensaje enviado');
+      
+      // Limpiar formulario y cerrar modal
+      setRejectForm({
+        reason: '',
+        message: ''
+      });
+      setShowRejectModal(false);
+      
+      // Recargar aplicaciones
+      await fetchApplications();
+      
+    } catch (error) {
+      console.error('Error rejecting application:', error);
+      toast.error('Error al rechazar la aplicación');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       pending: { color: 'bg-yellow-100 text-yellow-800', label: 'Pendiente', icon: Clock },
       reviewed: { color: 'bg-blue-100 text-blue-800', label: 'Revisada', icon: Eye },
+      interview_requested: { color: 'bg-purple-100 text-purple-800', label: 'Entrevista Solicitada', icon: Calendar },
       accepted: { color: 'bg-green-100 text-green-800', label: 'Aceptada', icon: CheckCircle },
       rejected: { color: 'bg-red-100 text-red-800', label: 'Rechazada', icon: XCircle },
       withdrawn: { color: 'bg-gray-100 text-gray-800', label: 'Retirada', icon: XCircle }
@@ -321,6 +433,8 @@ function CompanyApplicationsContent() {
                       </span>
                     </div>
                   </div>
+                  
+                  {/* 🔥 BOTONES DE ACCIÓN RESTAURADOS Y MEJORADOS */}
                   <div className="flex gap-2">
                     {application.status === 'pending' && (
                       <>
@@ -334,14 +448,64 @@ function CompanyApplicationsContent() {
                         </Button>
                         <Button
                           size="sm"
+                          onClick={() => {
+                            setSelectedApplication(application);
+                            setShowInterviewModal(true);
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Calendar className="w-4 h-4 mr-1" />
+                          Entrevista
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="destructive"
-                          onClick={() => handleStatusChange(application.id, 'rejected')}
+                          onClick={() => {
+                            setSelectedApplication(application);
+                            setShowRejectModal(true);
+                          }}
                         >
                           <XCircle className="w-4 h-4 mr-1" />
                           Rechazar
                         </Button>
                       </>
                     )}
+                    
+                    {application.status === 'reviewed' && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => handleStatusChange(application.id, 'accepted')}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          Aceptar
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedApplication(application);
+                            setShowInterviewModal(true);
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Calendar className="w-4 h-4 mr-1" />
+                          Entrevista
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            setSelectedApplication(application);
+                            setShowRejectModal(true);
+                          }}
+                        >
+                          <XCircle className="w-4 h-4 mr-1" />
+                          Rechazar
+                        </Button>
+                      </>
+                    )}
+                    
                     <Button
                       size="sm"
                       variant="outline"
@@ -365,98 +529,337 @@ function CompanyApplicationsContent() {
               </CardContent>
             </Card>
           ))}
-        </div>
-      )}
 
-      {/* Modal de detalles */}
-      {showDetailsModal && selectedApplication && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <h2 className="text-xl font-bold">Detalles de la Aplicación</h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    setSelectedApplication(null);
-                  }}
-                >
-                  ✕
-                </Button>
-              </div>
+          {/* Modal de detalles */}
+          {showDetailsModal && selectedApplication && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <h2 className="text-xl font-bold">Detalles de la Aplicación</h2>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowDetailsModal(false);
+                        setSelectedApplication(null);
+                      }}
+                    >
+                      ✕
+                    </Button>
+                  </div>
 
-              <div className="space-y-6">
-                {/* Información del candidato */}
-                <div>
-                  <h3 className="font-semibold mb-3">Información del Candidato</h3>
-                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                    <p><span className="font-medium">Nombre:</span> {selectedApplication.Student.User.name} {selectedApplication.Student.User.surname}</p>
-                    <p><span className="font-medium">Email:</span> {selectedApplication.Student.User.email}</p>
-                    <p><span className="font-medium">Teléfono:</span> {selectedApplication.Student.User.phone}</p>
-                    <p><span className="font-medium">Grado:</span> {selectedApplication.Student.grade}</p>
-                    <p><span className="font-medium">Curso:</span> {selectedApplication.Student.course}</p>
-                    {selectedApplication.Student.Profamily && (
-                      <p><span className="font-medium">Familia Profesional:</span> {selectedApplication.Student.Profamily.name}</p>
+                  <div className="space-y-6">
+                    {/* Información del candidato */}
+                    <div>
+                      <h3 className="font-semibold mb-3">Información del Candidato</h3>
+                      <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                        <p><span className="font-medium">Nombre:</span> {selectedApplication.Student.User.name} {selectedApplication.Student.User.surname}</p>
+                        <p><span className="font-medium">Email:</span> {selectedApplication.Student.User.email}</p>
+                        <p><span className="font-medium">Teléfono:</span> {selectedApplication.Student.User.phone}</p>
+                        <p><span className="font-medium">Grado:</span> {selectedApplication.Student.grade}</p>
+                        <p><span className="font-medium">Curso:</span> {selectedApplication.Student.course}</p>
+                        {selectedApplication.Student.Profamily && (
+                          <p><span className="font-medium">Familia Profesional:</span> {selectedApplication.Student.Profamily.name}</p>
+                        )}
+                        <p><span className="font-medium">Coche:</span> {selectedApplication.Student.car ? 'Sí' : 'No'}</p>
+                      </div>
+                    </div>
+
+                    {/* Información de la oferta */}
+                    <div>
+                      <h3 className="font-semibold mb-3">Oferta</h3>
+                      <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                        <p><span className="font-medium">Puesto:</span> {selectedApplication.offer.name}</p>
+                        <p><span className="font-medium">Ubicación:</span> {selectedApplication.offer.location}</p>
+                        <p><span className="font-medium">Tipo:</span> {selectedApplication.offer.type}</p>
+                        <p><span className="font-medium">Sector:</span> {selectedApplication.offer.sector}</p>
+                      </div>
+                    </div>
+
+                    {/* Mensaje del candidato */}
+                    {selectedApplication.message && (
+                      <div>
+                        <h3 className="font-semibold mb-3">Mensaje del Candidato</h3>
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <p>{selectedApplication.message}</p>
+                        </div>
+                      </div>
                     )}
-                    <p><span className="font-medium">Coche:</span> {selectedApplication.Student.car ? 'Sí' : 'No'}</p>
+
+                    {/* Notas de la empresa */}
+                    {selectedApplication.companyNotes && (
+                      <div>
+                        <h3 className="font-semibold mb-3">Notas de la Empresa</h3>
+                        <div className="bg-yellow-50 p-4 rounded-lg">
+                          <p>{selectedApplication.companyNotes}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Acciones */}
+                    {selectedApplication.status === 'pending' && (
+                      <div className="flex gap-3 pt-4 border-t">
+                        <Button
+                          onClick={() => handleStatusChange(selectedApplication.id, 'accepted')}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Aceptar Candidato
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={() => handleStatusChange(selectedApplication.id, 'rejected')}
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          Rechazar Candidato
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                {/* Información de la oferta */}
-                <div>
-                  <h3 className="font-semibold mb-3">Oferta</h3>
-                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                    <p><span className="font-medium">Puesto:</span> {selectedApplication.offer.name}</p>
-                    <p><span className="font-medium">Ubicación:</span> {selectedApplication.offer.location}</p>
-                    <p><span className="font-medium">Tipo:</span> {selectedApplication.offer.type}</p>
-                    <p><span className="font-medium">Sector:</span> {selectedApplication.offer.sector}</p>
-                  </div>
-                </div>
-
-                {/* Mensaje del candidato */}
-                {selectedApplication.message && (
-                  <div>
-                    <h3 className="font-semibold mb-3">Mensaje del Candidato</h3>
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <p>{selectedApplication.message}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Notas de la empresa */}
-                {selectedApplication.companyNotes && (
-                  <div>
-                    <h3 className="font-semibold mb-3">Notas de la Empresa</h3>
-                    <div className="bg-yellow-50 p-4 rounded-lg">
-                      <p>{selectedApplication.companyNotes}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Acciones */}
-                {selectedApplication.status === 'pending' && (
-                  <div className="flex gap-3 pt-4 border-t">
-                    <Button
-                      onClick={() => handleStatusChange(selectedApplication.id, 'accepted')}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Aceptar Candidato
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={() => handleStatusChange(selectedApplication.id, 'rejected')}
-                    >
-                      <XCircle className="w-4 h-4 mr-2" />
-                      Rechazar Candidato
-                    </Button>
-                  </div>
-                )}
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Modal para solicitar entrevista */}
+          {showInterviewModal && selectedApplication && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <h2 className="text-xl font-bold">Solicitar Entrevista</h2>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowInterviewModal(false);
+                        setInterviewForm({
+                          date: '',
+                          time: '',
+                          location: '',
+                          type: 'presencial',
+                          notes: ''
+                        });
+                      }}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+
+                  <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Candidato:</strong> {selectedApplication.Student.User.name} {selectedApplication.Student.User.surname}
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      <strong>Oferta:</strong> {selectedApplication.offer.name}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Fecha de la entrevista
+                        </label>
+                        <input
+                          type="date"
+                          value={interviewForm.date}
+                          onChange={(e) => setInterviewForm(prev => ({ ...prev, date: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min={new Date().toISOString().split('T')[0]}
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Hora
+                        </label>
+                        <input
+                          type="time"
+                          value={interviewForm.time}
+                          onChange={(e) => setInterviewForm(prev => ({ ...prev, time: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Tipo de entrevista
+                      </label>
+                      <select
+                        value={interviewForm.type}
+                        onChange={(e) => setInterviewForm(prev => ({ ...prev, type: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="presencial">Presencial</option>
+                        <option value="online">Online (videollamada)</option>
+                        <option value="telefonica">Telefónica</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Ubicación / Enlace
+                      </label>
+                      <input
+                        type="text"
+                        value={interviewForm.location}
+                        onChange={(e) => setInterviewForm(prev => ({ ...prev, location: e.target.value }))}
+                        placeholder={
+                          interviewForm.type === 'presencial' ? 'Dirección de la oficina' :
+                          interviewForm.type === 'online' ? 'Enlace de videollamada' :
+                          'Número de teléfono'
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Notas adicionales (opcional)
+                      </label>
+                      <textarea
+                        value={interviewForm.notes}
+                        onChange={(e) => setInterviewForm(prev => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Instrucciones adicionales, documentos a traer, etc."
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t mt-6">
+                    <Button
+                      onClick={handleRequestInterview}
+                      disabled={!interviewForm.date || !interviewForm.time || !interviewForm.location}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Solicitar Entrevista
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowInterviewModal(false);
+                        setInterviewForm({
+                          date: '',
+                          time: '',
+                          location: '',
+                          type: 'presencial',
+                          notes: ''
+                        });
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal para rechazar con mensaje */}
+          {showRejectModal && selectedApplication && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <h2 className="text-xl font-bold">Rechazar Aplicación</h2>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowRejectModal(false);
+                        setRejectForm({ reason: '', message: '' });
+                      }}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+
+                  <div className="mb-4 p-3 bg-red-50 rounded-lg">
+                    <p className="text-sm text-red-800">
+                      <strong>Candidato:</strong> {selectedApplication.Student.User.name} {selectedApplication.Student.User.surname}
+                    </p>
+                    <p className="text-sm text-red-800">
+                      <strong>Oferta:</strong> {selectedApplication.offer.name}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Motivo del rechazo
+                      </label>
+                      <select
+                        value={rejectForm.reason}
+                        onChange={(e) => setRejectForm(prev => ({ ...prev, reason: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                      >
+                        <option value="">Selecciona un motivo</option>
+                        <option value="perfil_no_coincide">El perfil no coincide con los requisitos</option>
+                        <option value="experiencia_insuficiente">Experiencia insuficiente</option>
+                        <option value="formacion_inadecuada">Formación no adecuada para el puesto</option>
+                        <option value="posicion_cubierta">La posición ya fue cubierta</option>
+                        <option value="candidato_sobrecualificado">Candidato sobrecualificado</option>
+                        <option value="disponibilidad_incompatible">Disponibilidad incompatible</option>
+                        <option value="ubicacion_inadecuada">Ubicación no compatible</option>
+                        <option value="otro">Otro motivo</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Mensaje para el candidato
+                      </label>
+                      <textarea
+                        value={rejectForm.message}
+                        onChange={(e) => setRejectForm(prev => ({ ...prev, message: e.target.value }))}
+                        placeholder="Escribe un mensaje constructivo para el candidato..."
+                        rows={5}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Este mensaje será enviado al candidato junto con la notificación de rechazo.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 mt-4">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-yellow-600" />
+                      <span className="text-sm font-medium text-yellow-800">Importante</span>
+                    </div>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      Esta acción no se puede deshacer. El candidato recibirá una notificación con el motivo del rechazo.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t mt-6">
+                    <Button
+                      onClick={handleRejectWithMessage}
+                      disabled={!rejectForm.reason}
+                      variant="destructive"
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Confirmar Rechazo
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowRejectModal(false);
+                        setRejectForm({ reason: '', message: '' });
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

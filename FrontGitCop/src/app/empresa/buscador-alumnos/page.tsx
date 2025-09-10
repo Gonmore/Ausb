@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Eye, 
   Mail, 
@@ -27,7 +28,11 @@ import {
   Building,
   MapPin,
   Clock,
-  BarChart3
+  BarChart3,
+  XCircle,
+  Brain,          // 🔥 AGREGAR
+  Star,           // 🔥 AGREGAR
+  CreditCard      // 🔥 AGREGAR
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { AuthGuard } from '@/components/auth-guard';
@@ -103,11 +108,46 @@ function CandidateSearchContent() {
     message: ''
   });
 
+  // 🔥 NUEVOS ESTADOS PARA GESTIÓN DE CANDIDATOS
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [selectedCandidateApplications, setSelectedCandidateApplications] = useState<StudentApplication[]>([]);
+  const [interviewForm, setInterviewForm] = useState({
+    applicationIds: [] as number[],
+    date: '',
+    time: '',
+    location: '',
+    type: 'presencial',
+    notes: ''
+  });
+  const [rejectForm, setRejectForm] = useState({
+    applicationIds: [] as number[],
+    reason: '',
+    message: ''
+  });
+  const [acceptForm, setAcceptForm] = useState({
+    applicationIds: [] as number[],
+    message: ''
+  });
+   // 🔥 NUEVOS ESTADOS PARA CVs REVELADOS
+  const [revealedStudents, setRevealedStudents] = useState<any[]>([]);
+  const [loadingRevealed, setLoadingRevealed] = useState(false);
+  const [revealedSummary, setRevealedSummary] = useState({ 
+    totalRevealed: 0, 
+    totalTokensSpent: 0, 
+    averageTokensPerReveal: 0 
+  });
+  const [activeTab, setActiveTab] = useState('aplicaciones');
+
   const { token } = useAuthStore();
 
   // Cargar aplicaciones agrupadas
   useEffect(() => {
-    const fetchApplications = async () => {
+    const fetchAllData = async () => {
+      if (!token) return;
+      
+      // Cargar aplicaciones
       try {
         setLoading(true);
         setError(null);
@@ -138,11 +178,12 @@ function CandidateSearchContent() {
       } finally {
         setLoading(false);
       }
+
+      // 🔥 CARGAR CVs REVELADOS
+      await fetchRevealedStudents();
     };
 
-    if (token) {
-      fetchApplications();
-    }
+    fetchAllData();
   }, [token]);
 
   // Filtrar estudiantes
@@ -268,6 +309,175 @@ function CandidateSearchContent() {
     }
   };
 
+  const handleAcceptCandidate = (student: any, applications: StudentApplication[]) => {
+    console.log('✅ Aceptar candidato:', student.User.name, 'Aplicaciones:', applications.length);
+    setSelectedStudent(student);
+    setSelectedCandidateApplications(applications);
+    setAcceptForm({
+      applicationIds: applications.map(app => app.id),
+      message: `¡Felicidades ${student.User.name}! Hemos decidido aceptar tu candidatura para ${applications.length > 1 ? 'nuestras ofertas' : applications[0].offer.name}.\n\nNos pondremos en contacto contigo pronto para coordinar los próximos pasos.\n\n¡Bienvenido/a al equipo!`
+    });
+    setShowAcceptModal(true);
+  };
+
+  const handleRequestInterview = (student: any, applications: StudentApplication[]) => {
+    console.log('📅 Solicitar entrevista:', student.User.name, 'Aplicaciones:', applications.length);
+    setSelectedStudent(student);
+    setSelectedCandidateApplications(applications);
+    setInterviewForm({
+      applicationIds: applications.map(app => app.id),
+      date: '',
+      time: '',
+      location: '',
+      type: 'presencial',
+      notes: `Entrevista para ${applications.length > 1 ? 'múltiples posiciones' : applications[0].offer.name}`
+    });
+    setShowInterviewModal(true);
+  };
+
+  const handleRejectCandidate = (student: any, applications: StudentApplication[]) => {
+    console.log('❌ Rechazar candidato:', student.User.name, 'Aplicaciones:', applications.length);
+    setSelectedStudent(student);
+    setSelectedCandidateApplications(applications);
+    setRejectForm({
+      applicationIds: applications.map(app => app.id),
+      reason: '',
+      message: `Estimado/a ${student.User.name},\n\nTe agradecemos el interés mostrado en ${applications.length > 1 ? 'nuestras ofertas' : applications[0].offer.name}.\n\nEn esta ocasión hemos decidido continuar con otros candidatos que se ajustan más al perfil que buscamos.\n\nTe animamos a seguir participando en futuras convocatorias.\n\nSaludos cordiales.`
+    });
+    setShowRejectModal(true);
+  };
+
+  const handleConfirmAccept = async () => {
+    if (!selectedStudent) return;
+
+    try {
+      console.log('✅ Confirmando aceptación para aplicaciones:', acceptForm.applicationIds);
+      
+      // Procesar cada aplicación
+      for (const applicationId of acceptForm.applicationIds) {
+        const response = await fetch(`http://localhost:5000/api/applications/${applicationId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status: 'accepted',
+            companyNotes: acceptForm.message
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error al aceptar aplicación ${applicationId}`);
+        }
+      }
+
+      alert(`✅ Candidato aceptado exitosamente para ${acceptForm.applicationIds.length} aplicación(es)`);
+      
+      // Recargar datos
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('❌ Error aceptando candidato:', error);
+      alert('Error al aceptar el candidato');
+    } finally {
+      setShowAcceptModal(false);
+      setAcceptForm({ applicationIds: [], message: '' });
+    }
+  };
+
+  const handleConfirmInterview = async () => {
+    if (!selectedStudent) return;
+
+    try {
+      console.log('📅 Confirmando entrevista para aplicaciones:', interviewForm.applicationIds);
+      
+      // Procesar cada aplicación
+      for (const applicationId of interviewForm.applicationIds) {
+        const response = await fetch(`http://localhost:5000/api/applications/${applicationId}/interview`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            interviewDetails: {
+              date: interviewForm.date,
+              time: interviewForm.time,
+              location: interviewForm.location,
+              type: interviewForm.type,
+              notes: interviewForm.notes
+            },
+            companyNotes: `Entrevista programada para ${interviewForm.date} a las ${interviewForm.time}`
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error al programar entrevista para aplicación ${applicationId}`);
+        }
+      }
+
+      alert(`📅 Entrevista programada exitosamente para ${interviewForm.applicationIds.length} aplicación(es)`);
+      
+      // Recargar datos
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('❌ Error programando entrevista:', error);
+      alert('Error al programar la entrevista');
+    } finally {
+      setShowInterviewModal(false);
+      setInterviewForm({
+        applicationIds: [],
+        date: '',
+        time: '',
+        location: '',
+        type: 'presencial',
+        notes: ''
+      });
+    }
+  };
+
+  const handleConfirmReject = async () => {
+    if (!selectedStudent) return;
+
+    try {
+      console.log('❌ Confirmando rechazo para aplicaciones:', rejectForm.applicationIds);
+      
+      // Procesar cada aplicación
+      for (const applicationId of rejectForm.applicationIds) {
+        const response = await fetch(`http://localhost:5000/api/applications/${applicationId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status: 'rejected',
+            rejectionReason: rejectForm.reason,
+            companyNotes: rejectForm.message
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error al rechazar aplicación ${applicationId}`);
+        }
+      }
+
+      alert(`❌ Candidato rechazado para ${rejectForm.applicationIds.length} aplicación(es)`);
+      
+      // Recargar datos
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('❌ Error rechazando candidato:', error);
+      alert('Error al rechazar el candidato');
+    } finally {
+      setShowRejectModal(false);
+      setRejectForm({ applicationIds: [], reason: '', message: '' });
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
       'pending': 'bg-yellow-100 text-yellow-800 border-yellow-300',
@@ -303,6 +513,43 @@ function CandidateSearchContent() {
       return <Badge className="bg-blue-100 text-blue-800">👀 {stats.reviewed} revisada{stats.reviewed > 1 ? 's' : ''}</Badge>;
     }
     return <Badge className="bg-yellow-100 text-yellow-800">⏳ {stats.pending} pendiente{stats.pending > 1 ? 's' : ''}</Badge>;
+  };
+
+  // AGREGAR esta función después de las funciones existentes:
+
+  const fetchRevealedStudents = async () => {
+    try {
+      setLoadingRevealed(true);
+      console.log('🔍 Cargando estudiantes con CVs revelados...');
+      
+      const response = await fetch('http://localhost:5000/api/students/revealed-candidates', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ CVs revelados cargados:', data);
+      
+      setRevealedStudents(data.students || []);
+      setRevealedSummary(data.summary || { 
+        totalRevealed: 0, 
+        totalTokensSpent: 0, 
+        averageTokensPerReveal: 0 
+      });
+      
+    } catch (error) {
+      console.error('❌ Error cargando CVs revelados:', error);
+      setError(error instanceof Error ? error.message : 'Error desconocido');
+    } finally {
+      setLoadingRevealed(false);
+    }
   };
 
   if (error) {
@@ -342,280 +589,536 @@ function CandidateSearchContent() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Candidatos</h1>
         <p className="text-gray-600 mb-4">
-          Estudiantes que han aplicado a tus ofertas - Vista agrupada por persona
+          Gestiona todos los candidatos: aplicaciones directas y CVs revelados con tokens
         </p>
         
-        {/* Estadísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <User className="w-5 h-5 text-blue-600" />
-                <div>
-                  <p className="text-sm text-gray-600">Candidatos únicos</p>
-                  <p className="text-2xl font-bold text-blue-600">{summary.totalStudents}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-green-600" />
-                <div>
-                  <p className="text-sm text-gray-600">Total aplicaciones</p>
-                  <p className="text-2xl font-bold text-green-600">{summary.totalApplications}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Building className="w-5 h-5 text-purple-600" />
-                <div>
-                  <p className="text-sm text-gray-600">Promedio por candidato</p>
-                  <p className="text-2xl font-bold text-purple-600">{summary.averageApplicationsPerStudent}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Pestañas */}
+        <Tabs defaultValue="aplicaciones" value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="aplicaciones" className="flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Aplicaciones Directas
+              <Badge variant="outline" className="ml-2">{summary.totalStudents}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="revelados" className="flex items-center gap-2">
+              <Brain className="w-4 h-4" />
+              CVs Revelados
+              <Badge variant="outline" className="ml-2">{revealedSummary.totalRevealed}</Badge>
+            </TabsTrigger>
+          </TabsList>
 
-        <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-green-600" />
-            <span className="text-sm text-green-800 font-medium">
-              Acceso gratuito: Puedes ver CVs completos y contactar sin costo
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Buscar candidatos por nombre, email, curso u oferta..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
-      {/* Lista de candidatos agrupados */}
-      <div className="grid gap-6">
-        {filteredStudents.map((studentData) => {
-          const student = studentData.student;
-          const isExpanded = expandedStudents.has(student.id);
-
-          return (
-            <Card key={student.id} className="hover:shadow-md transition-shadow border-l-4 border-l-green-500">
-              <CardContent className="p-6">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    {/* Información básica del estudiante */}
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
-                        {student.User.name?.charAt(0) || 'N'}{student.User.surname?.charAt(0) || 'A'}
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold">{student.User.name} {student.User.surname}</h3>
-                        <p className="text-gray-600">{student.User.email}</p>
-                        {student.User.phone && (
-                          <p className="text-gray-500 text-sm">{student.User.phone}</p>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        {getPrimaryStatusBadge(studentData.primaryStatus, studentData.stats)}
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
-                          {studentData.totalOffers} aplicacion{studentData.totalOffers > 1 ? 'es' : ''}
-                        </Badge>
-                      </div>
+          {/* Contenido de Aplicaciones Directas */}
+          <TabsContent value="aplicaciones" className="space-y-6">
+            {/* Estadísticas de aplicaciones */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <User className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <p className="text-sm text-gray-600">Candidatos únicos</p>
+                      <p className="text-2xl font-bold text-blue-600">{summary.totalStudents}</p>
                     </div>
-
-                    {/* Información académica */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div className="flex items-center text-sm text-gray-600">
-                        <GraduationCap className="w-4 h-4 mr-2" />
-                        {student.grade} - {student.course}
-                      </div>
-                      <div className="flex items-center text-sm text-gray-600">
-                        <Car className="w-4 h-4 mr-2" />
-                        {student.car ? 'Con vehículo' : 'Sin vehículo'}
-                      </div>
-                      {student.profamily && (
-                        <div className="flex items-center text-sm text-gray-600">
-                          <Briefcase className="w-4 h-4 mr-2" />
-                          {student.profamily.name}
-                        </div>
-                      )}
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-green-600" />
+                    <div>
+                      <p className="text-sm text-gray-600">Total aplicaciones</p>
+                      <p className="text-2xl font-bold text-green-600">{summary.totalApplications}</p>
                     </div>
-
-                    {/* Resumen de aplicaciones */}
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Clock className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm text-gray-600">
-                          Última aplicación: {new Date(studentData.stats.latestApplication).toLocaleDateString('es-ES')}
-                        </span>
-                        <span className="text-sm text-gray-600">
-                          • Oferta: {studentData.mostRecentOffer}
-                        </span>
-                      </div>
-                      
-                      {/* Estadísticas rápidas */}
-                      <div className="flex gap-2 text-xs">
-                        {studentData.stats.pending > 0 && (
-                          <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded">
-                            {studentData.stats.pending} pendiente{studentData.stats.pending > 1 ? 's' : ''}
-                          </span>
-                        )}
-                        {studentData.stats.reviewed > 0 && (
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
-                            {studentData.stats.reviewed} revisada{studentData.stats.reviewed > 1 ? 's' : ''}
-                          </span>
-                        )}
-                        {studentData.stats.accepted > 0 && (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded">
-                            {studentData.stats.accepted} aceptada{studentData.stats.accepted > 1 ? 's' : ''}
-                          </span>
-                        )}
-                        {studentData.stats.rejected > 0 && (
-                          <span className="px-2 py-1 bg-red-100 text-red-800 rounded">
-                            {studentData.stats.rejected} rechazada{studentData.stats.rejected > 1 ? 's' : ''}
-                          </span>
-                        )}
-                      </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <Building className="w-5 h-5 text-purple-600" />
+                    <div>
+                      <p className="text-sm text-gray-600">Promedio por candidato</p>
+                      <p className="text-2xl font-bold text-purple-600">{summary.averageApplicationsPerStudent}</p>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-                    {/* Botón para expandir aplicaciones */}
-                    <Collapsible>
-                      <CollapsibleTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleStudentExpansion(student.id)}
-                          className="mb-4"
-                        >
-                          {isExpanded ? (
-                            <>
-                              <ChevronUp className="w-4 h-4 mr-2" />
-                              Ocultar aplicaciones ({studentData.applications.length})
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="w-4 h-4 mr-2" />
-                              Ver todas las aplicaciones ({studentData.applications.length})
-                            </>
-                          )}
-                        </Button>
-                      </CollapsibleTrigger>
-                      
-                      <CollapsibleContent className={isExpanded ? 'block' : 'hidden'}>
-                        <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-                          <h4 className="font-medium text-gray-900 mb-3">Todas las aplicaciones:</h4>
-                          {studentData.applications.map((application) => (
-                            <div key={application.id} className="bg-white p-3 rounded border">
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Building className="w-4 h-4 text-gray-500" />
-                                    <span className="font-medium">{application.offer.name}</span>
-                                    {getStatusBadge(application.status)}
-                                  </div>
-                                  <div className="text-sm text-gray-600 grid grid-cols-2 gap-2">
-                                    <div className="flex items-center gap-1">
-                                      <MapPin className="w-3 h-3" />
-                                      {application.offer.location}
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <Calendar className="w-3 h-3" />
-                                      {new Date(application.appliedAt).toLocaleDateString('es-ES')}
-                                    </div>
-                                  </div>
-                                  {application.message && (
-                                    <p className="text-sm text-gray-700 mt-2 italic bg-gray-100 p-2 rounded">
-                                      "{application.message}"
-                                    </p>
+            <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                <span className="text-sm text-green-800 font-medium">
+                  Acceso gratuito: Puedes ver CVs completos y contactar sin costo
+                </span>
+              </div>
+            </div>
+
+            {/* Filtros */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar candidatos por nombre, email, curso u oferta..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            {/* Lista de candidatos con aplicaciones */}
+            <div className="grid gap-6">
+              {loading ? (
+                <div className="flex items-center justify-center min-h-[200px]">
+                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
+                </div>
+              ) : filteredStudents.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No se encontraron candidatos</h3>
+                    <p className="text-gray-600 mb-4">
+                      {searchTerm ? 'Intenta con otros términos de búsqueda' : 'Aún no hay estudiantes que hayan aplicado a tus ofertas'}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                filteredStudents.map((studentData) => {
+                  const student = studentData.student;
+                  const isExpanded = expandedStudents.has(student.id);
+
+                  return (
+                    <Card key={student.id} className="hover:shadow-md transition-shadow border-l-4 border-l-green-500">
+                      <CardContent className="p-6">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            {/* Información básica del estudiante */}
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                {student.User.name?.charAt(0) || 'N'}{student.User.surname?.charAt(0) || 'A'}
+                              </div>
+                              <div className="flex-1">
+                                <h3 className="text-lg font-semibold">{student.User.name} {student.User.surname}</h3>
+                                <p className="text-gray-600">{student.User.email}</p>
+                                {student.User.phone && (
+                                  <p className="text-gray-500 text-sm">{student.User.phone}</p>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                {getPrimaryStatusBadge(studentData.primaryStatus, studentData.stats)}
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                                  {studentData.totalOffers} aplicacion{studentData.totalOffers > 1 ? 'es' : ''}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            {/* Información académica */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                              <div className="flex items-center text-sm text-gray-600">
+                                <GraduationCap className="w-4 h-4 mr-2" />
+                                {student.grade} - {student.course}
+                              </div>
+                              <div className="flex items-center text-sm text-gray-600">
+                                <Car className="w-4 h-4 mr-2" />
+                                {student.car ? 'Con vehículo' : 'Sin vehículo'}
+                              </div>
+                              {student.profamily && (
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <Briefcase className="w-4 h-4 mr-2" />
+                                  {student.profamily.name}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Resumen de aplicaciones */}
+                            <div className="mb-4">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Clock className="w-4 h-4 text-gray-500" />
+                                <span className="text-sm text-gray-600">
+                                  Última aplicación: {new Date(studentData.stats.latestApplication).toLocaleDateString('es-ES')}
+                                </span>
+                                <span className="text-sm text-gray-600">
+                                  • Oferta: {studentData.mostRecentOffer}
+                                </span>
+                              </div>
+                              
+                              {/* Estadísticas rápidas */}
+                              <div className="flex gap-2 text-xs">
+                                {studentData.stats.pending > 0 && (
+                                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded">
+                                    {studentData.stats.pending} pendiente{studentData.stats.pending > 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {studentData.stats.reviewed > 0 && (
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                                    {studentData.stats.reviewed} revisada{studentData.stats.reviewed > 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {studentData.stats.accepted > 0 && (
+                                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded">
+                                    {studentData.stats.accepted} aceptada{studentData.stats.accepted > 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {studentData.stats.rejected > 0 && (
+                                  <span className="px-2 py-1 bg-red-100 text-red-800 rounded">
+                                    {studentData.stats.rejected} rechazada{studentData.stats.rejected > 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Botón para expandir aplicaciones */}
+                            <Collapsible>
+                              <CollapsibleTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => toggleStudentExpansion(student.id)}
+                                  className="mb-4"
+                                >
+                                  {isExpanded ? (
+                                    <>
+                                      <ChevronUp className="w-4 h-4 mr-2" />
+                                      Ocultar aplicaciones ({studentData.applications.length})
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ChevronDown className="w-4 h-4 mr-2" />
+                                      Ver todas las aplicaciones ({studentData.applications.length})
+                                    </>
                                   )}
+                                </Button>
+                              </CollapsibleTrigger>
+                              
+                              <CollapsibleContent className={isExpanded ? 'block' : 'hidden'}>
+                                <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                                  <h4 className="font-medium text-gray-900 mb-3">Todas las aplicaciones:</h4>
+                                  {studentData.applications.map((application) => (
+                                    <div key={application.id} className="bg-white p-3 rounded border">
+                                      <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2 mb-2">
+                                            <Building className="w-4 h-4 text-gray-500" />
+                                            <span className="font-medium">{application.offer.name}</span>
+                                            {getStatusBadge(application.status)}
+                                          </div>
+                                          <div className="text-sm text-gray-600 grid grid-cols-2 gap-2">
+                                            <div className="flex items-center gap-1">
+                                              <MapPin className="w-3 h-3" />
+                                              {application.offer.location}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <Calendar className="w-3 h-3" />
+                                              {new Date(application.appliedAt).toLocaleDateString('es-ES')}
+                                            </div>
+                                          </div>
+                                          {application.message && (
+                                            <p className="text-sm text-gray-700 mt-2 italic bg-gray-100 p-2 rounded">
+                                              "{application.message}"
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+
+                            {/* Habilidades */}
+                            {student.tag && (
+                              <div className="flex flex-wrap gap-2 mb-4">
+                                {student.tag.split(',').slice(0, 8).map((tag: string, index: number) => (
+                                  <Badge key={index} variant="outline" className="bg-purple-50 text-purple-700 border-purple-300">
+                                    {tag.trim()}
+                                  </Badge>
+                                ))}
+                                {student.tag.split(',').length > 8 && (
+                                  <Badge variant="outline" className="bg-gray-50 text-gray-600">
+                                    +{student.tag.split(',').length - 8} más
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Botones de acción */}
+                          <div className="flex flex-col gap-2 ml-4">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewCV(student)}
+                              className="border-green-300 text-green-700 hover:bg-green-50"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Ver CV (Gratis)
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleContactStudent(student, studentData.applications)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                              <Mail className="w-4 h-4 mr-1" />
+                              Contactar (Gratis)
+                            </Button>
+                            
+                            {/* 🔥 NUEVOS BOTONES DE GESTIÓN */}
+                            <div className="border-t pt-2 mt-2">
+                              <div className="text-xs text-gray-500 mb-2">Gestionar candidato:</div>
+                              
+                              <Button
+                                size="sm"
+                                onClick={() => handleAcceptCandidate(student, studentData.applications)}
+                                className="bg-green-600 hover:bg-green-700 text-white w-full mb-1"
+                              >
+                                <CheckCircle className="w-4 h-4 mr-1" />
+                                Aceptar
+                              </Button>
+                              
+                              <Button
+                                size="sm"
+                                onClick={() => handleRequestInterview(student, studentData.applications)}
+                                className="bg-purple-600 hover:bg-purple-700 text-white w-full mb-1"
+                              >
+                                <Calendar className="w-4 h-4 mr-1" />
+                                Entrevista
+                              </Button>
+                              
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleRejectCandidate(student, studentData.applications)}
+                                className="w-full"
+                              >
+                                <XCircle className="w-4 h-4 mr-1" />
+                                Rechazar
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
+            </div>
+          </TabsContent>
+
+          {/* 🔥 NUEVO CONTENIDO DE CVs REVELADOS */}
+          <TabsContent value="revelados" className="space-y-6">
+            {/* Estadísticas de CVs revelados */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <Brain className="w-5 h-5 text-purple-600" />
+                    <div>
+                      <p className="text-sm text-gray-600">CVs revelados</p>
+                      <p className="text-2xl font-bold text-purple-600">{revealedSummary.totalRevealed}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-orange-600" />
+                    <div>
+                      <p className="text-sm text-gray-600">Tokens gastados</p>
+                      <p className="text-2xl font-bold text-orange-600">{revealedSummary.totalTokensSpent}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <Star className="w-5 h-5 text-yellow-600" />
+                    <div>
+                      <p className="text-sm text-gray-600">Promedio por CV</p>
+                      <p className="text-2xl font-bold text-yellow-600">{revealedSummary.averageTokensPerReveal}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-purple-600" />
+                <span className="text-sm text-purple-800 font-medium">
+                  Candidatos inteligentes: Encontrados con IA y revelados usando tokens
+                </span>
+              </div>
+            </div>
+
+            {/* Lista de CVs revelados */}
+            <div className="grid gap-6">
+              {loadingRevealed ? (
+                <div className="flex items-center justify-center min-h-[200px]">
+                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600"></div>
+                </div>
+              ) : revealedStudents.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Brain className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No hay CVs revelados</h3>
+                    <p className="text-gray-600 mb-4">
+                      Aún no has revelado ningún CV usando tokens. 
+                      Usa el buscador inteligente para encontrar candidatos ideales.
+                    </p>
+                    <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => window.location.href = '/empresa/buscador-inteligente'}>
+                      <Brain className="w-4 h-4 mr-2" />
+                      Buscar Candidatos
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                revealedStudents.map((revealedData) => {
+                  const student = revealedData.student;
+
+                  return (
+                    <Card key={revealedData.id} className="hover:shadow-md transition-shadow border-l-4 border-l-purple-500">
+                      <CardContent className="p-6">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            {/* Información básica del estudiante */}
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                {student.User.name?.charAt(0) || 'N'}{student.User.surname?.charAt(0) || 'A'}
+                              </div>
+                              <div className="flex-1">
+                                <h3 className="text-lg font-semibold">{student.User.name} {student.User.surname}</h3>
+                                <p className="text-gray-600">{student.User.email}</p>
+                                {student.User.phone && (
+                                  <p className="text-gray-500 text-sm">{student.User.phone}</p>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                <Badge className="bg-purple-100 text-purple-800 border-purple-300">
+                                  <Brain className="w-3 h-3 mr-1" />
+                                  Candidato IA
+                                </Badge>
+                                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+                                  {revealedData.tokensUsed} tokens
+                                </Badge>
+                              </div>
+                            </div>
+
+                            {/* Información de revelación */}
+                            <div className="bg-purple-50 p-3 rounded-lg mb-4">
+                              <div className="flex items-center gap-4 text-sm">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-4 h-4 text-purple-600" />
+                                  <span className="text-purple-800">
+                                    Revelado: {new Date(revealedData.revealedAt).toLocaleDateString('es-ES', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <CreditCard className="w-4 h-4 text-orange-600" />
+                                  <span className="text-orange-800">
+                                    {revealedData.tokensUsed} tokens gastados
+                                  </span>
                                 </div>
                               </div>
                             </div>
-                          ))}
+
+                            {/* Información académica */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                              <div className="flex items-center text-sm text-gray-600">
+                                <GraduationCap className="w-4 h-4 mr-2" />
+                                {student.grade} - {student.course}
+                              </div>
+                              <div className="flex items-center text-sm text-gray-600">
+                                <Car className="w-4 h-4 mr-2" />
+                                {student.car ? 'Con vehículo' : 'Sin vehículo'}
+                              </div>
+                              {student.profamily && (
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <Briefcase className="w-4 h-4 mr-2" />
+                                  {student.profamily.name}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Habilidades */}
+                            {student.tag && (
+                              <div className="flex flex-wrap gap-2 mb-4">
+                                {student.tag.split(',').slice(0, 8).map((tag: string, index: number) => (
+                                  <Badge key={index} variant="outline" className="bg-purple-50 text-purple-700 border-purple-300">
+                                    {tag.trim()}
+                                  </Badge>
+                                ))}
+                                {student.tag.split(',').length > 8 && (
+                                  <Badge variant="outline" className="bg-gray-50 text-gray-600">
+                                    +{student.tag.split(',').length - 8} más
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Botones de acción para CVs revelados */}
+                          <div className="flex flex-col gap-2 ml-4">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewCV(student)}
+                              className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Ver CV (Ya revelado)
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleContactStudent(student, [])} // Sin aplicaciones
+                              className="bg-purple-600 hover:bg-purple-700 text-white"
+                            >
+                              <Mail className="w-4 h-4 mr-1" />
+                              Contactar Candidato
+                            </Button>
+
+                            {/* Nota: Los CVs revelados no tienen aplicaciones, pero podrías agregar funcionalidad para invitarlos a aplicar */}
+                            <div className="border-t pt-2 mt-2">
+                              <div className="text-xs text-gray-500 mb-2">Acciones especiales:</div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  // Funcionalidad para invitar a aplicar a una oferta específica
+                                  alert('Funcionalidad de invitar a aplicar próximamente');
+                                }}
+                                className="w-full text-xs"
+                              >
+                                Invitar a Aplicar
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-
-                    {/* Habilidades */}
-                    {student.tag && (
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {student.tag.split(',').slice(0, 8).map((tag: string, index: number) => (
-                          <Badge key={index} variant="outline" className="bg-purple-50 text-purple-700 border-purple-300">
-                            {tag.trim()}
-                          </Badge>
-                        ))}
-                        {student.tag.split(',').length > 8 && (
-                          <Badge variant="outline" className="bg-gray-50 text-gray-600">
-                            +{student.tag.split(',').length - 8} más
-                          </Badge>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Botones de acción */}
-                  <div className="flex flex-col gap-2 ml-4">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleViewCV(student)}
-                      className="border-green-300 text-green-700 hover:bg-green-50"
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      Ver CV (Gratis)
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleContactStudent(student, studentData.applications)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      <Mail className="w-4 h-4 mr-1" />
-                      Contactar (Gratis)
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
-      {filteredStudents.length === 0 && !loading && (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No se encontraron candidatos</h3>
-            <p className="text-gray-600 mb-4">
-              {searchTerm ? 'Intenta con otros términos de búsqueda' : 'Aún no hay estudiantes que hayan aplicado a tus ofertas'}
-            </p>
-            {!searchTerm && (
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  💡 <strong>Sugerencia:</strong> Publica ofertas para recibir aplicaciones, 
-                  o usa el "Buscador Inteligente" para encontrar candidatos proactivamente.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Modal CV - Mismo que antes */}
+      {/* MANTENER TODOS LOS MODALES EXISTENTES */}
+      {/* Modal CV, Modal Contactar, Modal Aceptar, Modal Entrevista, Modal Rechazar */}
       <Dialog open={showCVModal} onOpenChange={setShowCVModal}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -773,7 +1276,7 @@ function CandidateSearchContent() {
             <div className="bg-green-50 p-3 rounded-lg border border-green-200">
               <div className="flex items-center gap-2 mb-1">
                 <CheckCircle className="w-4 h-4 text-green-600" />
-                <span className="text-sm font-medium text-green-800">Contacto gratuito</span>
+                <span className="text-sm text-green-800 font-medium">Contacto gratuito</span>
               </div>
               <p className="text-sm text-green-700">
                 <strong>Para:</strong> {selectedStudent?.User?.email}
@@ -787,6 +1290,261 @@ function CandidateSearchContent() {
               <Button onClick={handleSendEmail} className="bg-blue-600 hover:bg-blue-700">
                 <Send className="w-4 h-4 mr-2" />
                 Enviar Email
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para aceptar candidato */}
+      <Dialog open={showAcceptModal} onOpenChange={setShowAcceptModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              Aceptar Candidato: {selectedStudent?.User?.name} {selectedStudent?.User?.surname}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <p className="text-sm text-green-800">
+                <strong>Candidato:</strong> {selectedStudent?.User?.name} {selectedStudent?.User?.surname}
+              </p>
+              <p className="text-sm text-green-800">
+                <strong>Aplicaciones a aceptar:</strong> {selectedCandidateApplications.length}
+              </p>
+              <div className="mt-2">
+                {selectedCandidateApplications.map(app => (
+                  <div key={app.id} className="text-sm text-green-700">
+                    • {app.offer.name} ({app.offer.location})
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mensaje de aceptación
+              </label>
+              <textarea
+                value={acceptForm.message}
+                onChange={(e) => setAcceptForm(prev => ({ ...prev, message: e.target.value }))}
+                rows={6}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t">
+              <Button
+                onClick={handleConfirmAccept}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Confirmar Aceptación
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowAcceptModal(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para solicitar entrevista */}
+      <Dialog open={showInterviewModal} onOpenChange={setShowInterviewModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-600" />
+              Solicitar Entrevista: {selectedStudent?.User?.name} {selectedStudent?.User?.surname}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+              <p className="text-sm text-purple-800">
+                <strong>Candidato:</strong> {selectedStudent?.User?.name} {selectedStudent?.User?.surname}
+              </p>
+              <p className="text-sm text-purple-800">
+                <strong>Aplicaciones:</strong> {selectedCandidateApplications.length}
+              </p>
+              <div className="mt-2">
+                {selectedCandidateApplications.map(app => (
+                  <div key={app.id} className="text-sm text-purple-700">
+                    • {app.offer.name} ({app.offer.location})
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha
+                </label>
+                <input
+                  type="date"
+                  value={interviewForm.date}
+                  onChange={(e) => setInterviewForm(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hora
+                </label>
+                <input
+                  type="time"
+                  value={interviewForm.time}
+                  onChange={(e) => setInterviewForm(prev => ({ ...prev, time: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de entrevista
+              </label>
+              <select
+                value={interviewForm.type}
+                onChange={(e) => setInterviewForm(prev => ({ ...prev, type: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="presencial">Presencial</option>
+                <option value="online">Online (videollamada)</option>
+                <option value="telefonica">Telefónica</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ubicación / Enlace
+              </label>
+              <input
+                type="text"
+                value={interviewForm.location}
+                onChange={(e) => setInterviewForm(prev => ({ ...prev, location: e.target.value }))}
+                placeholder={
+                  interviewForm.type === 'presencial' ? 'Dirección de la oficina' :
+                  interviewForm.type === 'online' ? 'Enlace de videollamada' :
+                  'Número de teléfono'
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Notas adicionales
+              </label>
+              <textarea
+                value={interviewForm.notes}
+                onChange={(e) => setInterviewForm(prev => ({ ...prev, notes: e.target.value }))}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t">
+              <Button
+                onClick={handleConfirmInterview}
+                disabled={!interviewForm.date || !interviewForm.time || !interviewForm.location}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Programar Entrevista
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowInterviewModal(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para rechazar candidato */}
+      <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-600" />
+              Rechazar Candidato: {selectedStudent?.User?.name} {selectedStudent?.User?.surname}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+              <p className="text-sm text-red-800">
+                <strong>Candidato:</strong> {selectedStudent?.User?.name} {selectedStudent?.User?.surname}
+              </p>
+              <p className="text-sm text-red-800">
+                <strong>Aplicaciones a rechazar:</strong> {selectedCandidateApplications.length}
+              </p>
+              <div className="mt-2">
+                {selectedCandidateApplications.map(app => (
+                  <div key={app.id} className="text-sm text-red-700">
+                    • {app.offer.name} ({app.offer.location})
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Motivo del rechazo
+              </label>
+              <select
+                value={rejectForm.reason}
+                onChange={(e) => setRejectForm(prev => ({ ...prev, reason: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+                <option value="">Selecciona un motivo</option>
+                <option value="perfil_no_coincide">El perfil no coincide con los requisitos</option>
+                <option value="experiencia_insuficiente">Experiencia insuficiente</option>
+                <option value="formacion_inadecuada">Formación no adecuada para el puesto</option>
+                <option value="posicion_cubierta">La posición ya fue cubierta</option>
+                <option value="candidato_sobrecualificado">Candidato sobrecualificado</option>
+                <option value="disponibilidad_incompatible">Disponibilidad incompatible</option>
+                <option value="ubicacion_inadecuada">Ubicación no compatible</option>
+                <option value="otro">Otro motivo</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mensaje para el candidato
+              </label>
+              <textarea
+                value={rejectForm.message}
+                onChange={(e) => setRejectForm(prev => ({ ...prev, message: e.target.value }))}
+                rows={6}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t">
+              <Button
+                onClick={handleConfirmReject}
+                disabled={!rejectForm.reason}
+                variant="destructive"
+              >
+                <XCircle className="w-4 h-4 mr-2" />
+                Confirmar Rechazo
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowRejectModal(false)}
+              >
+                Cancelar
               </Button>
             </div>
           </div>

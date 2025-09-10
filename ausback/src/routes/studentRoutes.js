@@ -10,6 +10,7 @@ router.post('/search-intelligent', authenticateJWT, studentController.searchInte
 router.get('/tokens/balance', authenticateJWT, studentController.getTokenBalance);
 router.post('/tokens/use', authenticateJWT, studentController.useTokens);
 router.get('/revealed-cvs', authenticateJWT, studentController.getRevealedCVs);
+router.get('/revealed-candidates', authenticateJWT, studentController.getRevealedCandidates); // Nueva ruta agregada
 
 // 🔥 RUTAS EXISTENTES GENERALES
 router.get('/', authenticateJWT, studentController.getAllStudents);
