@@ -6,6 +6,7 @@ import logger from '../logs/logger.js';
 import { comparar, encriptar } from '../common/bcrypt.js';
 import jwt from 'jsonwebtoken';
 import 'dotenv/config';
+import { parsePhoneNumber } from 'libphonenumber-js';
 
 async function login (req, res, next) {
     try{
@@ -67,7 +68,18 @@ async function login (req, res, next) {
 
 async function register(req, res, next) {
     try {
-        const { username, email, password, role, name, surname, phone, description } = req.body;
+        const { 
+            username, 
+            email, 
+            password, 
+            role, 
+            name, 
+            surname, 
+            phone, 
+            description, 
+            countryCode,  // 🔥 NUEVO
+            cityId        // 🔥 NUEVO
+        } = req.body;
         
         // Verificar si el usuario ya existe
         const existingUser = await User.findOne({ 
@@ -83,17 +95,38 @@ async function register(req, res, next) {
             return res.status(400).json({ message: 'El usuario o email ya existe' });
         }
         
-        // Crear el usuario (la contraseña se encriptará automáticamente por el hook)
+        // Validar y formatear teléfono
+        let formattedPhone = phone;
+        let detectedCountryCode = countryCode;
+        
+        if (phone) {
+            try {
+                const phoneNumber = parsePhoneNumber(phone);
+                if (phoneNumber && phoneNumber.isValid()) {
+                    formattedPhone = phoneNumber.formatInternational();
+                    
+                    // Si no se proporcionó país, usar el detectado del teléfono
+                    if (!countryCode && phoneNumber.country) {
+                        detectedCountryCode = phoneNumber.country;
+                    }
+                }
+            } catch (parseError) {
+                logger.warn('Error parsing phone during registration:', parseError);
+            }
+        }
+        
+        // Crear el usuario
         const newUser = await User.create({
             username,
             email,
-            password, // Sin encriptar, se hace en el hook beforeCreate
+            password,
             role: role || 'student',
             name,
             surname,
-            phone,
+            phone: formattedPhone,
             description,
-            active: true
+            active: true,
+            profileCompleted: false // 🔥 El onboarding determinará esto
         });
         
         // Crear registro específico según el rol
@@ -101,25 +134,19 @@ async function register(req, res, next) {
             await Student.create({
                 userId: newUser.id,
                 grade: '1º',
-                course: 'Desarrollo Web',
-                disp: new Date(),
-                name: newUser.name,
-                surname: newUser.surname,
-                phone: newUser.phone,
-                email: newUser.email
+                course: 'Por definir',
+                disp: new Date()
             });
         } else if (newUser.role === 'company') {
-            const company = await Company.create({
+            await Company.create({
                 name: newUser.name || 'Empresa de Prueba',
                 code: `EMP${newUser.id}`,
                 address: 'Dirección de prueba',
                 phone: newUser.phone || '123456789',
                 email: newUser.email,
-                description: newUser.description || 'Empresa dedicada a ofrecer prácticas profesionales'
+                description: newUser.description || 'Empresa dedicada a ofrecer prácticas profesionales',
+                userId: newUser.id
             });
-            
-            // Crear la asociación en la tabla UserCompany
-            await newUser.addCompany(company);
         }
         
         // Generar token
@@ -137,9 +164,12 @@ async function register(req, res, next) {
                 role: newUser.role,
                 name: newUser.name,
                 surname: newUser.surname,
-                phone: newUser.phone,
+                phone: formattedPhone,
+                profileCompleted: newUser.profileCompleted,
                 active: newUser.active
-            }
+            },
+            detectedCountry: detectedCountryCode,
+            message: 'Usuario registrado exitosamente'
         });
         
     } catch (err) {

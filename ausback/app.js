@@ -28,6 +28,7 @@ import tokenRouter from './src/routes/tokenRoutes.js'
 import adminTempRouter from './src/routes/adminRoutes.temp.js'
 import swaggerDocs from './src/swagger.js'
 import cors from 'cors';
+import geographyRoutes from './src/routes/geographyRoutes.js';
 
 const app = express();
 
@@ -103,6 +104,7 @@ app.use('/login', authRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/students', studentRouter); // Nueva ruta
 app.use('/api/debug', debugRouter);
+app.use('/api/geography', geographyRoutes); // Nueva ruta para geografía
 
 // Ruta de ejemplo 
 app.get('/', (req, res) => { 
