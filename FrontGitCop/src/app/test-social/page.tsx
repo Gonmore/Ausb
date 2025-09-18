@@ -84,8 +84,7 @@ export default function TestSocialLoginPage() {
             
             <Button 
               onClick={testToasts}
-              variant="outline"
-              className="w-full"
+              className="w-full border border-input bg-background hover:bg-accent hover:text-accent-foreground"
             >
               Probar Toasts
             </Button>
