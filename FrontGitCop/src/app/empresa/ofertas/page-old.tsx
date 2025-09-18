@@ -64,8 +64,7 @@ function OfferManagementContent() {
     car: false,
     sector: 'Tecnología',
     tag: 'programacion',
-    jobs: ''
-  });
+    jobs: '',
     requirements: '',
     salary: '',
     location: '',
