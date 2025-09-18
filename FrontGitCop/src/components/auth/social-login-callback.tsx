@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth'
 
-export function SocialLoginCallback() {
+function SocialLoginCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { setUser, setToken } = useAuthStore()
@@ -54,5 +54,20 @@ export function SocialLoginCallback() {
         <p className="text-gray-600">Procesando autenticación...</p>
       </div>
     </div>
+  )
+}
+
+export function SocialLoginCallback() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    }>
+      <SocialLoginCallbackContent />
+    </Suspense>
   )
 }

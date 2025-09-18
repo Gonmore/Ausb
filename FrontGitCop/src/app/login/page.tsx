@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ import { SimpleSocialButton } from '@/components/auth/simple-social-button'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { FpraxLogo } from '@/components/ui/logos/FpraxLogo'
 
-function LoginForm() {
+function LoginForm({ errorFromUrl }: { errorFromUrl?: string | null }) {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -21,13 +21,11 @@ function LoginForm() {
   
   const { login, isLoading, error } = useAuthStore()
   const router = useRouter()
-  const searchParams = useSearchParams()
 
-  // Check for social login errors in URL params
+  // Check for social login errors passed as prop
   useEffect(() => {
-    const errorParam = searchParams.get('error')
-    if (errorParam) {
-      switch (errorParam) {
+    if (errorFromUrl) {
+      switch (errorFromUrl) {
         case 'social_login_failed':
           setSocialError('Error en el inicio de sesión con redes sociales')
           break
@@ -41,7 +39,7 @@ function LoginForm() {
           setSocialError('Error desconocido en el inicio de sesión')
       }
     }
-  }, [searchParams])
+  }, [errorFromUrl])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -173,10 +171,10 @@ function LoginForm() {
   )
 }
 
-export default function LoginPage() {
+// Componente que maneja los search params y debe estar envuelto en Suspense
+function LoginPageContent() {
   const [showExpiredMessage, setShowExpiredMessage] = useState(false);
   const searchParams = useSearchParams();
-  const { clearError } = useAuthStore();
 
   useEffect(() => {
     const expired = searchParams.get('expired');
@@ -187,32 +185,43 @@ export default function LoginPage() {
     }
   }, [searchParams]);
 
+  const errorFromUrl = searchParams.get('error');
+
   return (
-    <AuthGuard requireAuth={false} redirectTo="/dashboard">
-      <div className="login-container">
-        {/* Mensaje de sesión expirada */}
-        {showExpiredMessage && (
-          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">
-                  Sesión Expirada
-                </h3>
-                <div className="mt-2 text-sm text-yellow-700">
-                  <p>Tu sesión ha expirado. Por favor, inicia sesión nuevamente.</p>
-                </div>
+    <div className="login-container">
+      {/* Mensaje de sesión expirada */}
+      {showExpiredMessage && (
+        <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800">
+                Sesión Expirada
+              </h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>Tu sesión ha expirado. Por favor, inicia sesión nuevamente.</p>
               </div>
             </div>
           </div>
-        )}
-        
-        <LoginForm />
-      </div>
+        </div>
+      )}
+      
+      <LoginForm errorFromUrl={errorFromUrl} />
+    </div>
+  )
+}
+
+// Componente principal envuelto en Suspense
+export default function LoginPage() {
+  return (
+    <AuthGuard requireAuth={false} redirectTo="/dashboard">
+      <Suspense fallback={<div>Cargando...</div>}>
+        <LoginPageContent />
+      </Suspense>
     </AuthGuard>
   )
 }

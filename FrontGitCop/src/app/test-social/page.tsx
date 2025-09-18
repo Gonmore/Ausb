@@ -4,44 +4,43 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuthStore } from '@/stores/auth'
-import { useToast } from '@/contexts/toast-context'
+import { toast } from 'react-toastify'
 
 export default function TestSocialLoginPage() {
   const [isTestingGoogle, setIsTestingGoogle] = useState(false)
   const [isTestingFacebook, setIsTestingFacebook] = useState(false)
   const { user, token, isAuthenticated } = useAuthStore()
-  const { success, error, info } = useToast()
 
   const testGoogleLogin = async () => {
     setIsTestingGoogle(true)
-    info('Probando login con Google...')
+    toast.info('Probando login con Google...')
     
     try {
       // Simular click en Google login
       window.location.href = 'http://localhost:5000/auth/google'
     } catch (err) {
-      error('Error al probar Google login')
+      toast.error('Error al probar Google login')
       setIsTestingGoogle(false)
     }
   }
 
   const testFacebookLogin = async () => {
     setIsTestingFacebook(true)
-    info('Probando login con Facebook...')
+    toast.info('Probando login con Facebook...')
     
     try {
       // Simular click en Facebook login
       window.location.href = 'http://localhost:5000/auth/facebook'
     } catch (err) {
-      error('Error al probar Facebook login')
+      toast.error('Error al probar Facebook login')
       setIsTestingFacebook(false)
     }
   }
 
   const testToasts = () => {
-    success('¡Mensaje de éxito!')
-    error('Mensaje de error')
-    info('Mensaje informativo')
+    toast.success('¡Mensaje de éxito!')
+    toast.error('Mensaje de error')
+    toast.info('Mensaje informativo')
   }
 
   return (
