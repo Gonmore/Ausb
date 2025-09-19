@@ -2,7 +2,8 @@ import axios from 'axios';
 import { tokenUtils } from './token-utils';
 import { useAuthStore } from '@/stores/auth';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+// ⚠️ CAMBIAR LA URL BASE
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'; // ← AGREGAR /api
 
 // Create axios instance
 export const apiClient = axios.create({
@@ -69,5 +70,24 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const onboardingApi = {
+  checkStatus: () => {
+    console.log('🔍 Calling checkStatus');
+    return apiClient.get('/onboarding/status'); // ← Sin /api, igual que auth
+  },
+  getNextStep: () => apiClient.get('/onboarding/next-step'),
+  completeStep: (step: string) => apiClient.post('/onboarding/complete-step', { step }),
+  getRecommendedOffers: () => apiClient.get('/onboarding/recommended-offers'),
+};
+
+export const authApi = {
+  login: (credentials: { email: string; password: string }) => 
+    apiClient.post('/auth/login', credentials), // ← Sin /api
+  register: (userData: any) => 
+    apiClient.post('/auth/register', userData),
+  logout: () => 
+    apiClient.post('/auth/logout'),
+};
 
 export default apiClient;

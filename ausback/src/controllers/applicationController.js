@@ -195,29 +195,46 @@ async function applyToOffer(req, res) {
  */
 export const getUserApplications = async (req, res) => {
   try {
-    const { userId } = req.user;
-    console.log(`📋 Obteniendo aplicaciones para usuario: ${userId}`);
+    const { userId } = req.user; // Del middleware de autenticación
+    console.log(`📋 Fetching applications for user: ${userId}`);
 
-    // Obtener el estudiante primero
+    // 🔥 PASO 1: Encontrar el Student asociado al User
     const student = await Student.findOne({
-      where: { userId }
+      where: { userId: userId },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id', 'name', 'email']
+      }]
     });
 
     if (!student) {
-      return res.status(404).json({ mensaje: 'Perfil de estudiante no encontrado' });
+      console.log(`❌ No student profile found for user ${userId}`);
+      return res.json({
+        success: true,
+        applications: [],
+        total: 0,
+        pending: 0,
+        accepted: 0,
+        rejected: 0,
+        reviewed: 0
+      });
     }
 
-    // 🔥 USAR LOS ALIAS CORRECTOS SEGÚN relations.js
+    console.log(`👤 Student found: ${student.id} for user ${userId}`);
+
+    // 🔥 PASO 2: Buscar aplicaciones del studentId (no userId)
     const applications = await Application.findAll({
       where: { studentId: student.id },
       include: [
         {
           model: Offer,
-          as: 'offer', // 🔥 ALIAS CORRECTO
+          as: 'offer', // Usar el alias correcto de relations.js
+          attributes: ['id', 'name', 'location', 'sector', 'type', 'description'],
           include: [
             {
               model: Company,
-              as: 'company', // 🔥 VERIFICAR QUE ESTE ALIAS EXISTA EN relations.js
+              // 🔥 VERIFICAR si existe este alias en relations.js o usar sin alias
               attributes: ['id', 'name', 'sector', 'city']
             }
           ]
@@ -226,44 +243,48 @@ export const getUserApplications = async (req, res) => {
       order: [['appliedAt', 'DESC']]
     });
 
-    console.log(`✅ Encontradas ${applications.length} aplicaciones`);
+    console.log(`📋 Found ${applications.length} applications for student ${student.id}`);
 
-    // 🔥 FORMATEAR RESPUESTA PARA EL FRONTEND CON DATOS COMPLETOS
+    // 🔥 PASO 3: Formatear para el frontend
     const formattedApplications = applications.map(app => ({
       id: app.id,
-      offerId: app.offerId,
-      status: app.status,
+      status: app.status || 'pending',
       appliedAt: app.appliedAt,
-      reviewedAt: app.reviewedAt, // 🔥 INCLUIR reviewedAt
+      reviewedAt: app.reviewedAt,
+      cvViewed: app.cvViewed || false,
       message: app.message,
-      companyNotes: app.companyNotes,
-      rejectionReason: app.rejectionReason,
-      // 🔥 AGREGAR CAMPOS DE ESTADO
-      isReviewed: !!app.reviewedAt,
-      cvViewed: !!app.reviewedAt,
-      statusLabel: app.reviewedAt ? 'CV Revisado' : 
-                   app.status === 'pending' ? 'Pendiente' :
-                   app.status === 'accepted' ? 'Aceptado' :
-                   app.status === 'rejected' ? 'Rechazado' : 
-                   app.status,
       offer: app.offer ? {
         id: app.offer.id,
         name: app.offer.name,
-        sector: app.offer.sector,
         location: app.offer.location,
-        type: app.offer.type,
-        salary: app.offer.salary,
-        description: app.offer.description,
-        company: app.offer.company
+        sector: app.offer.sector,
+        type: app.offer.type
       } : null
     }));
 
-    res.json(formattedApplications);
+    // 🔥 PASO 4: Calcular estadísticas
+    const stats = {
+      total: formattedApplications.length,
+      pending: formattedApplications.filter(app => app.status === 'pending' || !app.status).length,
+      accepted: formattedApplications.filter(app => app.status === 'accepted').length,
+      rejected: formattedApplications.filter(app => app.status === 'rejected').length,
+      reviewed: formattedApplications.filter(app => app.status === 'reviewed').length,
+    };
+
+    console.log(`📊 Application stats:`, stats);
+
+    // 🔥 RESPUESTA COMPATIBLE CON EL FRONTEND
+    res.json({
+      success: true,
+      applications: formattedApplications,
+      ...stats
+    });
 
   } catch (error) {
     console.error('❌ Error getUserApplications:', error);
-    res.status(500).json({ 
-      mensaje: 'Error interno del servidor',
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener aplicaciones del usuario',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -773,48 +794,36 @@ async function updateApplicationStatus(req, res) {
  *       500:
  *         description: Error interno del servidor
  */
+// En la misma función withdrawApplication, asegúrate de que use el flujo correcto:
 export const withdrawApplication = async (req, res) => {
   try {
-    // 🔥 USAR applicationId EN LUGAR DE id (según la ruta)
     const { applicationId } = req.params;
     const { userId } = req.user;
 
-    console.log(`🗑️ Intentando retirar aplicación - ApplicationID: ${applicationId}, UserID: ${userId}`);
-    console.log(`🔍 req.params:`, req.params);
+    console.log(`🗑️ Attempting to withdraw application - ApplicationID: ${applicationId}, UserID: ${userId}`);
 
-    if (!applicationId || applicationId === 'undefined') {
-      return res.status(400).json({ 
-        mensaje: 'ID de aplicación no válido',
-        receivedId: applicationId 
-      });
-    }
-
-    if (!userId) {
-      return res.status(401).json({ mensaje: 'Usuario no autenticado' });
-    }
-
-    // Obtener el estudiante primero
+    // 🔥 ENCONTRAR STUDENT PRIMERO
     const student = await Student.findOne({
-      where: { userId }
+      where: { userId: userId }
     });
 
     if (!student) {
-      return res.status(404).json({ mensaje: 'Perfil de estudiante no encontrado' });
+      return res.status(404).json({ 
+        success: false,
+        mensaje: 'Perfil de estudiante no encontrado' 
+      });
     }
 
-    console.log(`👤 Estudiante encontrado: ${student.id}`);
-
-    // 🔥 BUSCAR LA APLICACIÓN
+    // 🔥 BUSCAR APLICACIÓN POR STUDENT_ID
     const application = await Application.findOne({
       where: { 
         id: parseInt(applicationId),
-        studentId: student.id 
+        studentId: student.id // Usar studentId, no userId
       },
       include: [
         {
           model: Offer,
           as: 'offer',
-          required: false,
           attributes: ['id', 'name', 'sector']
         }
       ]
@@ -822,28 +831,23 @@ export const withdrawApplication = async (req, res) => {
 
     if (!application) {
       return res.status(404).json({ 
-        mensaje: 'Aplicación no encontrada o no tienes permisos para eliminarla',
-        searchedId: applicationId,
-        studentId: student.id
+        success: false,
+        mensaje: 'Aplicación no encontrada'
       });
     }
 
-    console.log(`📋 Aplicación encontrada: ${application.id}, Estado: ${application.status}`);
-
-    // Verificar que solo se puedan retirar aplicaciones pendientes
     if (application.status !== 'pending') {
       return res.status(400).json({ 
+        success: false,
         mensaje: `Solo se pueden retirar aplicaciones pendientes. Estado actual: ${application.status}` 
       });
     }
 
-    // 🔥 ACTUALIZAR A WITHDRAWN
     await application.update({
-      status: 'withdrawn',
-      withdrawnAt: new Date()
+      status: 'withdrawn'
     });
 
-    console.log(`✅ Aplicación ${applicationId} retirada exitosamente`);
+    console.log(`✅ Application ${applicationId} withdrawn successfully`);
 
     res.json({
       success: true,
@@ -851,7 +855,6 @@ export const withdrawApplication = async (req, res) => {
       application: {
         id: application.id,
         status: 'withdrawn',
-        withdrawnAt: application.withdrawnAt,
         offerName: application.offer?.name
       }
     });
@@ -859,12 +862,11 @@ export const withdrawApplication = async (req, res) => {
   } catch (error) {
     console.error('❌ Error withdrawApplication:', error);
     res.status(500).json({ 
-      mensaje: 'Error interno del servidor',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      success: false,
+      mensaje: 'Error interno del servidor'
     });
   }
 };
-
 /**
  * @swagger
  * /api/applications/{applicationId}/hire:

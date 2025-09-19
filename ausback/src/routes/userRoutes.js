@@ -10,4 +10,8 @@ router.route('/:id').get(authenticateJWT, userController.getUser)
                     .patch(authenticateJWT, userController.activateInactivate)
                     .delete(authenticateJWT, userController.deleteUser)
 
+   // 🆕 NUEVAS RUTAS PARA PERFIL CON UBICACIÓN
+router.get('/profile/me', authenticateJWT, userController.getUserProfile);     // GET /api/users/profile/me
+router.put('/profile/me', authenticateJWT, userController.updateUserProfile);  // PUT /api/users/profile/me
+                 
 export default router;

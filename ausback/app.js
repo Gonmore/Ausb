@@ -1,8 +1,7 @@
 // app.js 
 import 'dotenv/config'
-
 import sequelize from './src/database/database.js'
-import './src/models/relations.js' // Importar las relaciones
+import './src/models/relations.js'
 import logger from './src/logs/logger.js'
 import https from 'https';
 import fs from 'fs-extra';
@@ -28,13 +27,14 @@ import tokenRouter from './src/routes/tokenRoutes.js'
 import adminTempRouter from './src/routes/adminRoutes.temp.js'
 import swaggerDocs from './src/swagger.js'
 import cors from 'cors';
+import onboardingRoutes from './src/routes/onboardingRoutes.js';
 import geographyRoutes from './src/routes/geographyRoutes.js';
 
 const app = express();
 
 // Configurar CORS
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'], // Permitir ambos puertos del frontend
+  origin: ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -47,12 +47,13 @@ const options = {
   cert: fs.readFileSync('./server.cert')
 };
 
-//Iniciando relaciones de DB 
+// Iniciando relaciones de DB 
 sequelize.sync({force: false}).then(async () => {
-  console.log("Base de datos sincronizada")})
+  console.log("Base de datos sincronizada")
+});
 
+const SequelizeStoreSession = SequelizeStore(session.Store)
 
-  const SequelizeStoreSession = SequelizeStore(session.Store)
 // Configurar middleware de sesión
 app.use(session({
     secret: 'tu_secreto',
@@ -63,34 +64,27 @@ app.use(session({
       tableName: 'Session',
     })
 }));
+
 app.use(express.json())
-
-// Para parsear datos de formularios (x-www-form-urlencoded)
 app.use(express.urlencoded({ extended: true }));
-
-// Usa la configuracion para authentication
 app.use(passport.initialize());
 app.use(passport.session());
-
-//middleware necesario para acceder a las cookies
 app.use(cookieParser())
-
-//Usa la configuracion de Morgan
 app.use(morgan_dev_log)
 app.use(morgan_file_access)
 
-// Usa el administrador en la ruta /admin
+// Admin routes
 app.use(adminRouter);
 
-// Usa las rutas de autenticación
+// Auth routes
 app.use(authRouter);
+app.use('/login', authRouter);
+app.use('/api/auth', authRouter);
 
-// Usa las rutas de la API
-app.use(express.json()); //para el body del post
-
-//routes
+// API routes
 app.use('/api/users', userRouter);
 app.use('/api/student', studentRouter);
+app.use('/api/students', studentRouter);
 app.use('/api/scenter', scenterRouter);
 app.use('/api/company', companyRouter);
 app.use('/api/offers', offerRouter);
@@ -100,13 +94,13 @@ app.use('/api/applications', applicationRouter);
 app.use('/api/tokens', tokenRouter);
 app.use('/api/admin-temp', adminTempRouter);
 app.use('/api/dev', seedRouter);
-app.use('/login', authRouter);
-app.use('/api/auth', authRouter);
-app.use('/api/students', studentRouter); // Nueva ruta
 app.use('/api/debug', debugRouter);
-app.use('/api/geography', geographyRoutes); // Nueva ruta para geografía
+app.use('/api/geography', geographyRoutes);
 
-// Ruta de ejemplo 
+// Onboarding routes
+app.use('/onboarding', onboardingRoutes);
+
+// Static routes
 app.get('/', (req, res) => { 
     res.send('¡Hola, Mundo!');
 });
@@ -123,12 +117,24 @@ app.get('/clear_user', (req, res) => {
     res.send('Como eliminar tus datos de usuario');
 });
 
-// Servidor escuchando en el puerto 3000 
+// Error handling middleware
+app.use((error, req, res, next) => {
+    console.error('🚨 GLOBAL ERROR HANDLER:', error);
+    console.error('🚨 Stack trace:', error.stack);
+    console.error('🚨 Request URL:', req.url);
+    console.error('🚨 Request Method:', req.method);
+    
+    res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+});
+
+// Servidor escuchando en el puerto
 app.listen(port, () => { 
   console.log(`Aplicación escuchando en http://localhost:${port}`);
   logger.info(`Server started on port: ${port}`);
-  logger.error('error');
-  logger.warn('warn');
-  logger.fatal('fatal');
   swaggerDocs(app, port)
 });

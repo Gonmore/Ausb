@@ -1,437 +1,518 @@
 'use client';
 
-import Link from 'next/link';
-import { UserRole } from '@/types';
 import { useAuthStore } from '@/stores/auth';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+// import { useOnboarding } from '@/hooks/useOnboarding'; // 🗑️ YA NO NECESARIO
+import { useApplications } from '@/hooks/useApplications';
+import { useCV } from '@/hooks/useCV';
+// import { OnboardingGuide } from '@/components/onboarding/OnboardingGuide'; // 🗑️ ELIMINAR
+import { RecommendedOffers } from '@/components/onboarding/RecommendedOffers';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  GraduationCap, 
-  Building2, 
-  School, 
-  Users, 
-  Shield,
-  BarChart3,
-  TrendingUp,
-  Target,
-  Clock
-} from 'lucide-react';
-
-// Importar los dashboards específicos cuando los creemos
-// import StudentDashboard from './dashboards/student-dashboard';
-// import CompanyDashboard from './dashboards/company-dashboard';
-// import StudyCenterDashboard from './dashboards/study-center-dashboard';
-// import TutorDashboard from './dashboards/tutor-dashboard';
-// import AdminDashboard from './dashboards/admin-dashboard';
+import { AlertCircle, CheckCircle, Clock, TrendingUp, FileText, Users, Building, Loader2, User, Phone } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { UserRole } from '@/types';
 
 interface DashboardFactoryProps {
-  role: UserRole;
+  role?: UserRole;
 }
 
-// Dashboard temporal para estudiantes (ya existente)
 function StudentDashboard() {
+  const router = useRouter();
   const { user } = useAuthStore();
-  
-  return (
-    <div className="space-y-6 fprax-fade-in">
-      <div className="flex items-center gap-3">
-        <div className="p-3 text-white rounded-lg" style={{ background: 'var(--fprax-gradient-primary)' }}>
-          <GraduationCap className="w-6 h-6" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-dark-gray)' }}>
-            Dashboard Estudiante
-          </h1>
-          <p className="text-muted-foreground font-fprax">
-            Bienvenido/a <span style={{ color: 'var(--fprax-blue)' }}>{user?.name || 'Estudiante'}</span>
-          </p>
+  // const { status, loading: onboardingLoading, shouldShowGuide } = useOnboarding(); // 🗑️ ELIMINAR
+  const { applications, total, pending, accepted, rejected, loading: applicationsLoading, hasApplications } = useApplications();
+  const { completionPercentage, isComplete, hasPersonalInfo, hasContactInfo, hasEducation, hasSkills, hasExperience, missingFields, loading: cvLoading } = useCV();
+
+  // if (onboardingLoading || cvLoading) { // 🗑️ CAMBIAR
+  if (cvLoading) { // ✅ SOLO ESPERAR CV
+    return (
+      <div className="space-y-6">
+        <div className="animate-pulse">
+          <div className="h-32 bg-gray-200 rounded-lg mb-4"></div>
+          <div className="h-64 bg-gray-200 rounded-lg"></div>
         </div>
       </div>
+    );
+  }
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="fprax-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2" 
-                     style={{ background: 'var(--fprax-blue)', color: 'white', borderRadius: '12px 12px 0 0' }}>
-            <CardTitle className="text-sm font-medium text-white">Aplicaciones</CardTitle>
-            <Target className="h-4 w-4 text-white" />
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-blue)' }}>12</div>
-            <p className="text-xs text-muted-foreground">+2 esta semana</p>
-          </CardContent>
-        </Card>
+  return (
+    <div className="space-y-6">
+      {/* Header limpio */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            ¡Hola {user?.name || 'Estudiante'}! 👋
+          </h1>
+          <p className="text-gray-600">
+            {!isComplete 
+              ? `Completa tu perfil (${Math.round(completionPercentage)}%) para acceder a mejores oportunidades` 
+              : 'Explora oportunidades de prácticas profesionales'
+            }
+          </p>
+        </div>
+        
+        <Badge variant={isComplete ? 'default' : 'secondary'} className="text-sm">
+          {isComplete ? (
+            <>
+              <CheckCircle className="w-4 h-4 mr-1" />
+              Perfil completo
+            </>
+          ) : (
+            <>
+              <AlertCircle className="w-4 h-4 mr-1" />
+              Perfil al {Math.round(completionPercentage)}%
+            </>
+          )}
+        </Badge>
+      </div>
 
-        <Card className="fprax-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"
-                     style={{ background: 'var(--fprax-purple)', color: 'white', borderRadius: '12px 12px 0 0' }}>
-            <CardTitle className="text-sm font-medium text-white">Ofertas Vistas</CardTitle>
-            <BarChart3 className="h-4 w-4 text-white" />
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-purple)' }}>47</div>
-            <p className="text-xs text-muted-foreground">+12 esta semana</p>
-          </CardContent>
-        </Card>
+      {/* 🗑️ ELIMINAR COMPLETAMENTE ESTA SECCIÓN */}
+      {/* {shouldShowGuide && !isComplete && (
+        <OnboardingGuide />
+      )} */}
 
-        <Card className="fprax-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"
-                     style={{ background: 'var(--fprax-pink)', color: 'white', borderRadius: '12px 12px 0 0' }}>
-            <CardTitle className="text-sm font-medium text-white">Perfil Completado</CardTitle>
-            <TrendingUp className="h-4 w-4 text-white" />
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-pink)' }}>85%</div>
-            <p className="text-xs text-muted-foreground">Muy bueno</p>
-          </CardContent>
-        </Card>
+      {/* Dashboard Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Columna principal */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Estado del perfil REAL basado en CV */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {isComplete ? (
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-yellow-500" />
+                )}
+                Estado del Perfil
+                <Badge variant={isComplete ? "default" : "secondary"} className="ml-2">
+                  {Math.round(completionPercentage)}%
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Tu progreso real en la plataforma
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Barra de progreso visual */}
+              <div className="mb-4">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-600">Completitud del perfil</span>
+                  <span className="font-medium">{Math.round(completionPercentage)}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className={`h-2 rounded-full ${
+                      completionPercentage >= 80 ? 'bg-green-500' :
+                      completionPercentage >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${completionPercentage}%` }}
+                  ></div>
+                </div>
+              </div>
 
-        <Card className="fprax-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"
-                     style={{ background: 'var(--fprax-orange)', color: 'white', borderRadius: '12px 12px 0 0' }}>
-            <CardTitle className="text-sm font-medium text-white">Última Actividad</CardTitle>
-            <Clock className="h-4 w-4 text-white" />
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-orange)' }}>2h</div>
-            <p className="text-xs text-muted-foreground">Hace 2 horas</p>
-          </CardContent>
-        </Card>
+              {/* Grid de estado de secciones */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="text-center">
+                  <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center ${
+                    hasPersonalInfo ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    <User className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs mt-2 text-gray-600">Info básica</p>
+                  <p className="text-xs text-gray-500">{hasPersonalInfo ? 'Completa' : 'Incompleta'}</p>
+                </div>
+                
+                <div className="text-center">
+                  <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center ${
+                    hasContactInfo ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs mt-2 text-gray-600">Contacto</p>
+                  <p className="text-xs text-gray-500">{hasContactInfo ? 'Completo' : 'Incompleto'}</p>
+                </div>
+                
+                <div className="text-center">
+                  <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center ${
+                    hasEducation ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs mt-2 text-gray-600">Educación</p>
+                  <p className="text-xs text-gray-500">{hasEducation ? 'Completa' : 'Vacía'}</p>
+                </div>
+                
+                <div className="text-center">
+                  <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center ${
+                    hasSkills ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs mt-2 text-gray-600">Skills</p>
+                  <p className="text-xs text-gray-500">{hasSkills ? 'Agregadas' : 'Sin skills'}</p>
+                </div>
+              </div>
+
+              {/* Campos faltantes */}
+              {missingFields.length > 0 && (
+                <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <p className="text-sm font-medium text-yellow-800 mb-2">
+                    Para completar tu perfil, agrega:
+                  </p>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {missingFields.slice(0, 5).map((field, index) => (
+                      <Badge key={index} variant="outline" className="text-xs text-yellow-700 border-yellow-300">
+                        {field}
+                      </Badge>
+                    ))}
+                    {missingFields.length > 5 && (
+                      <Badge variant="outline" className="text-xs text-yellow-700 border-yellow-300">
+                        +{missingFields.length - 5} más
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {/* 🔥 BOTÓN MEJORADO CON MÁS REALCE */}
+                  <Button 
+                    size="sm" 
+                    className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-medium shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 border-0"
+                    onClick={() => router.push('/mi-cv')}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Completar ahora
+                    <TrendingUp className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
+              )}
+
+              {/* Mensaje de éxito si está completo */}
+              {isComplete && (
+                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-800">
+                    ✅ ¡Excelente! Tu perfil está completo y listo para recibir ofertas
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 🆕 OFERTAS RECOMENDADAS - Solo si perfil está razonablemente completo */}
+          {completionPercentage >= 50 && (
+            <RecommendedOffers />
+          )}
+
+          {/* Mis aplicaciones */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Mis Aplicaciones
+                {total > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {total}
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                Estado de tus postulaciones
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {applicationsLoading ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 mx-auto text-gray-400 animate-spin mb-3" />
+                  <p className="text-sm text-gray-600">Cargando aplicaciones...</p>
+                </div>
+              ) : hasApplications ? (
+                <div className="space-y-4">
+                  {/* Estadísticas */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-blue-50 rounded-lg">
+                      <div className="text-lg font-semibold text-blue-600">{total}</div>
+                      <div className="text-xs text-blue-600">Total</div>
+                    </div>
+                    <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                      <div className="text-lg font-semibold text-yellow-600">{pending}</div>
+                      <div className="text-xs text-yellow-600">Pendientes</div>
+                    </div>
+                    <div className="text-center p-3 bg-green-50 rounded-lg">
+                      <div className="text-lg font-semibold text-green-600">{accepted}</div>
+                      <div className="text-xs text-green-600">Aceptadas</div>
+                    </div>
+                    <div className="text-center p-3 bg-red-50 rounded-lg">
+                      <div className="text-lg font-semibold text-red-600">{rejected}</div>
+                      <div className="text-xs text-red-600">Rechazadas</div>
+                    </div>
+                  </div>
+
+                  {/* Aplicaciones recientes */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-gray-700">Aplicaciones recientes:</h4>
+                    {applications.slice(0, 3).map((app) => (
+                      <div key={app.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="text-sm font-medium">{app.offer?.name || 'Oferta sin nombre'}</p>
+                          <p className="text-xs text-gray-600">{app.offer?.location} • {app.offer?.sector}</p>
+                        </div>
+                        <Badge variant={
+                          app.status === 'accepted' ? 'default' :
+                          app.status === 'rejected' ? 'destructive' :
+                          app.status === 'reviewed' ? 'secondary' : 'outline'
+                        }>
+                          {app.status || 'Pendiente'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => router.push('/aplicaciones')}
+                  >
+                    Ver todas las aplicaciones
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                  <p className="text-sm">No has aplicado a ninguna oferta aún</p>
+                  <p className="text-xs mt-1">¡Explora las ofertas disponibles!</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-3"
+                    onClick={() => router.push('/ofertas')}
+                    disabled={completionPercentage < 30} // Deshabilitar si perfil muy incompleto
+                  >
+                    {completionPercentage < 30 ? 'Completa tu perfil primero' : 'Ver ofertas disponibles'}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Quick stats REALES */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Estadísticas</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Perfil completado</span>
+                <span className={`text-sm font-medium ${
+                  isComplete ? 'text-green-600' : 'text-yellow-600'
+                }`}>
+                  {Math.round(completionPercentage)}%
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Aplicaciones</span>
+                <span className="text-sm font-medium">{total}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Campos faltantes</span>
+                <span className={`text-sm font-medium ${
+                  missingFields.length === 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {missingFields.length}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Acciones rápidas */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Acciones Rápidas</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              
+              {/* BOTÓN DE CV MEJORADO */}
+              <Button 
+                size="sm" 
+                className={`w-full justify-start font-medium shadow-sm hover:shadow-md transform hover:scale-105 transition-all duration-200 ${
+                  isComplete 
+                    ? 'bg-green-50 hover:bg-green-100 text-green-700 border border-green-200' 
+                    : 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white border-0'
+                }`}
+                onClick={() => router.push('/mi-cv')}
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                {isComplete ? (
+                  <>
+                    Ver mi CV
+                    <CheckCircle className="w-4 h-4 ml-auto" />
+                  </>
+                ) : (
+                  <>
+                    Completar CV ({Math.round(completionPercentage)}%)
+                    <AlertCircle className="w-4 h-4 ml-auto" />
+                  </>
+                )}
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start hover:shadow-md transition-shadow duration-200"
+                onClick={() => router.push('/ofertas')}
+                disabled={completionPercentage < 30}
+              >
+                <TrendingUp className="w-4 h-4 mr-2" />
+                {completionPercentage < 30 ? 'Completa tu perfil primero' : 'Buscar ofertas'}
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start hover:shadow-md transition-shadow duration-200"
+                onClick={() => router.push('/aplicaciones')}
+              >
+                <Clock className="w-4 h-4 mr-2" />
+                Mis aplicaciones {hasApplications && `(${total})`}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* 🗑️ ELIMINAR COMPLETAMENTE ESTA SECCIÓN */}
+          {/* {!isComplete && (
+            <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+              <CardContent className="p-4">
+                <h4 className="font-medium text-blue-900 mb-2">💡 Consejo</h4>
+                <p className="text-sm text-blue-700">
+                  {completionPercentage < 30 && 'Completa tu información básica para empezar'}
+                  {completionPercentage >= 30 && completionPercentage < 60 && 'Agrega tu educación y skills para destacar'}
+                  {completionPercentage >= 60 && completionPercentage < 80 && 'Casi listo! Completa tu experiencia'}
+                  {completionPercentage >= 80 && 'Solo faltan algunos detalles para el 100%'}
+                </p>
+                {missingFields.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs text-blue-600 mb-2">
+                      Próximo: {missingFields[0]}
+                    </p>
+                    <Button 
+                      size="sm" 
+                      className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-medium shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 border-0"
+                      onClick={() => router.push('/mi-cv')}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Completar perfil
+                      <CheckCircle className="w-4 h-4 ml-2" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )} */}
+        </div>
       </div>
     </div>
   );
 }
 
-// Dashboard temporal para empresas
+// CompanyDashboard, CenterDashboard y DefaultDashboard mantienen el mismo código...
 function CompanyDashboard() {
+  const router = useRouter();
   const { user } = useAuthStore();
   
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-3 text-white rounded-lg" style={{ background: 'var(--fprax-gradient-primary)' }}>
-          <Building2 className="w-6 h-6" />
-        </div>
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-fprax" style={{ color: 'var(--fprax-dark-gray)' }}>
-            Dashboard Empresa
+          <h1 className="text-2xl font-bold text-gray-900">
+            Panel de Empresa 🏢
           </h1>
-          <p className="text-muted-foreground font-fprax">
-            Bienvenido/a <span style={{ color: 'var(--fprax-blue)' }}>{user?.name || 'Empresa'}</span>
+          <p className="text-gray-600">
+            Gestiona tus ofertas y encuentra los mejores candidatos
           </p>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ofertas Activas</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">5</div>
-            <p className="text-xs text-muted-foreground">+1 esta semana</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Aplicaciones</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">38</div>
-            <p className="text-xs text-muted-foreground">+15 esta semana</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">CVs Revelados</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">12</div>
-            <p className="text-xs text-muted-foreground">€240 gastados</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tasa de Respuesta</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">68%</div>
-            <p className="text-xs text-muted-foreground">Buena respuesta</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Acciones Rápidas</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Link href="/empresa/ofertas" className="block">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer">
-                <span className="font-medium">Crear Nueva Oferta</span>
-                <Target className="w-5 h-5 text-blue-600" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Bienvenido, {user?.name}</CardTitle>
+              <CardDescription>
+                Dashboard dinámico para empresas será implementado aquí
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <Button onClick={() => router.push('/empresa/ofertas')} className="w-full">
+                  <Building className="w-4 h-4 mr-2" />
+                  Gestionar Ofertas
+                </Button>
+                <Button onClick={() => router.push('/empresa/buscador-inteligente')} variant="outline" className="w-full">
+                  <Users className="w-4 h-4 mr-2" />
+                  Buscador Inteligente
+                </Button>
               </div>
-            </Link>
-            <Link href="/empresa/buscador-alumnos" className="block">
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors cursor-pointer">
-                <span className="font-medium">Buscar Estudiantes</span>
-                <Users className="w-5 h-5 text-green-600" />
-              </div>
-            </Link>
-            <Link href="/empresa/aplicaciones" className="block">
-              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors cursor-pointer">
-                <span className="font-medium">Ver Aplicaciones</span>
-                <BarChart3 className="w-5 h-5 text-purple-600" />
-              </div>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Ofertas Más Populares</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Desarrollador Web</p>
-                <p className="text-sm text-muted-foreground">15 aplicaciones</p>
-              </div>
-              <Badge variant="secondary">Activa</Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Diseñador UX/UI</p>
-                <p className="text-sm text-muted-foreground">12 aplicaciones</p>
-              </div>
-              <Badge variant="secondary">Activa</Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Marketing Digital</p>
-                <p className="text-sm text-muted-foreground">8 aplicaciones</p>
-              </div>
-              <Badge variant="secondary">Activa</Badge>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
 }
 
-// Dashboard temporal para centros de estudios
-function StudyCenterDashboard() {
+function CenterDashboard() {
   const { user } = useAuthStore();
   
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-3 bg-purple-500 text-white rounded-lg">
-          <School className="w-6 h-6" />
-        </div>
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard Centro de Estudios</h1>
-          <p className="text-muted-foreground">
-            Bienvenido/a {user?.name || 'Centro'}
+          <h1 className="text-2xl font-bold text-gray-900">
+            Panel de Centro de Estudios 🎓
+          </h1>
+          <p className="text-gray-600">
+            Gestiona tus estudiantes y programas académicos
           </p>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Estudiantes</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">156</div>
-            <p className="text-xs text-muted-foreground">+8 este mes</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Colocaciones</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">89</div>
-            <p className="text-xs text-muted-foreground">57% tasa de éxito</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tutores</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">12</div>
-            <p className="text-xs text-muted-foreground">Activos</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Programas</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">8</div>
-            <p className="text-xs text-muted-foreground">Formativos</p>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Bienvenido, {user?.name}</CardTitle>
+          <CardDescription>
+            Dashboard dinámico para centros de estudios será implementado aquí
+          </CardDescription>
+        </CardHeader>
+      </Card>
     </div>
   );
 }
 
-// Dashboard temporal para tutores
-function TutorDashboard() {
-  const { user } = useAuthStore();
-  
+function DefaultDashboard() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-3 bg-orange-500 text-white rounded-lg">
-          <Users className="w-6 h-6" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard Tutor</h1>
-          <p className="text-muted-foreground">
-            Bienvenido/a {user?.name || 'Tutor'}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Mis Estudiantes</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">24</div>
-            <p className="text-xs text-muted-foreground">Asignados</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">En Prácticas</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">18</div>
-            <p className="text-xs text-muted-foreground">Activamente</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Incidencias</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">3</div>
-            <p className="text-xs text-muted-foreground">Pendientes</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completado</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">6</div>
-            <p className="text-xs text-muted-foreground">Este mes</p>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// Dashboard temporal para administradores
-function AdminDashboard() {
-  const { user } = useAuthStore();
-  
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-3 bg-red-500 text-white rounded-lg">
-          <Shield className="w-6 h-6" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard Administrador</h1>
-          <p className="text-muted-foreground">
-            Bienvenido/a {user?.name || 'Administrador'}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Usuarios Totales</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">1,234</div>
-            <p className="text-xs text-muted-foreground">+12% este mes</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Empresas</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">89</div>
-            <p className="text-xs text-muted-foreground">+5 este mes</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Centros</CardTitle>
-            <School className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">23</div>
-            <p className="text-xs text-muted-foreground">Activos</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ingresos</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">€2,450</div>
-            <p className="text-xs text-muted-foreground">Este mes</p>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Dashboard</CardTitle>
+          <CardDescription>
+            Panel de control general
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p>Contenido del dashboard por defecto</p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 export default function DashboardFactory({ role }: DashboardFactoryProps) {
-  const { activeRole, user } = useAuthStore();
-  
-  const currentRole = role || activeRole || user?.role || 'student';
+  const { user } = useAuthStore();
+  const currentRole = role || user?.role || 'student';
 
   switch (currentRole) {
     case 'student':
@@ -439,12 +520,11 @@ export default function DashboardFactory({ role }: DashboardFactoryProps) {
     case 'company':
       return <CompanyDashboard />;
     case 'scenter':
-      return <StudyCenterDashboard />;
-    case 'tutor':
-      return <TutorDashboard />;
-    case 'admin':
-      return <AdminDashboard />;
+      return <CenterDashboard />;
     default:
-      return <StudentDashboard />;
+      return <DefaultDashboard />;
   }
 }
+
+// Para compatibilidad con imports existentes
+export { DashboardFactory };

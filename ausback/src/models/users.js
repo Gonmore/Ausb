@@ -54,34 +54,54 @@ export const User = sequelize.define('users', {
     },
     image: {type: DataTypes.STRING,allowNull: true,
     },
-    status: {type: DataTypes.STRING,defaultValue: Status.ACTIVE,
+    status: {
+        type: DataTypes.STRING,
+        defaultValue: Status.ACTIVE,
         validate: {
-            isIn:{
-                args: [[Status.ACTIVE], [Status.INACTIVE]],
+            isIn: {
+                // ⚠️ ARREGLAR VALIDACIÓN - Era incorrecta
+                args: [[Status.ACTIVE, Status.INACTIVE]], // ← CAMBIAR ESTO
                 msg: 'Status must be active or inactive',
             },
         },
     },
-
+    // 🌍 CAMPOS GEOGRÁFICOS
+    countryCode: {
+        type: DataTypes.STRING(2),
+        allowNull: true,
+        comment: 'Código ISO del país (ej: BO, AR, BR)'
+    },
+    
+    cityId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'ID de la ciudad de GeoNames'
+    }
+}, {
+    tableName: 'users',
+    timestamps: true
 })
-//Abajo la encipcion del password al crear o actualizar
+
+// Hooks para encriptar contraseña
 User.beforeCreate(async (user) => {
-    if (user.password) { // Verifica si el usuario tiene una contraseña
+    if (user.password) {
         try {
+            logger.info('Encrypting password for new user');
             user.password = await encriptar(user.password);
         } catch (error) {
-            logger.error(error.message);
+            logger.error('Error encrypting password:', error.message);
             throw new Error('Error al crear contraseña');
         }
     }
 });
 
 User.beforeUpdate(async (user) => {
-    if (user.password) { // Verifica si el usuario tiene una contraseña
+    if (user.changed('password') && user.password) { // ← SOLO SI LA CONTRASEÑA CAMBIÓ
         try {
+            logger.info('Encrypting password for user update');
             user.password = await encriptar(user.password);
         } catch (error) {
-            logger.error(error.message);
+            logger.error('Error encrypting password:', error.message);
             throw new Error('Error al actualizar contraseña');
         }
     }

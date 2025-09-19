@@ -108,10 +108,10 @@ export default function RegisterPage() {
         
         // Redirigir según el rol
         if (formData.role === 'student') {
-          router.push('/auth/complete-profile/student');
-        } else if (formData.role === 'company') {
-          router.push('/auth/complete-profile/company');
-        } else {
+        //  router.push('/auth/complete-profile/student');
+        //} else if (formData.role === 'company') {
+        //  router.push('/auth/complete-profile/company');
+        //} else 
           router.push('/dashboard');
         }
       } else {

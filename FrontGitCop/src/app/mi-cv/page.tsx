@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AuthGuard } from '@/components/auth/auth-guard';
+import { useAuthStore } from '@/stores/auth'; // 🆕 IMPORTAR STORE
 import { 
   User, 
   Mail, 
@@ -28,6 +29,11 @@ interface CVData {
     address: string;
     dateOfBirth: string;
     summary: string;
+    // 🆕 CAMPOS DE UBICACIÓN
+    countryCode: string;
+    cityId: string;
+    cityName: string;
+    countryName: string;
   };
   education: Array<{
     id: string;
@@ -53,7 +59,7 @@ interface CVData {
 }
 
 function MiCVContent() {
-  const [user, setUser] = useState<any>(null);
+  const { user } = useAuthStore(); // 🆕 USAR STORE DE AUTH
   const [cvData, setCvData] = useState<CVData>({
     personalInfo: {
       name: '',
@@ -61,7 +67,11 @@ function MiCVContent() {
       phone: '',
       address: '',
       dateOfBirth: '',
-      summary: ''
+      summary: '',
+      countryCode: '',
+      cityId: '',
+      cityName: '',
+      countryName: ''
     },
     education: [],
     experience: [],
@@ -73,45 +83,92 @@ function MiCVContent() {
   const router = useRouter();
 
   useEffect(() => {
-    // Cargar datos del usuario
-    try {
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        const parsed = JSON.parse(authData);
-        if (parsed.state && parsed.state.user) {
-          const userData = parsed.state.user;
-          setUser(userData);
-          
-          // Inicializar CV con datos del usuario
-          setCvData(prev => ({
-            ...prev,
+    // 🔥 CARGAR DATOS DEL USUARIO DESDE EL STORE
+    if (user) {
+      console.log('👤 Usuario cargado:', user);
+      
+      // 🔥 CONSTRUIR DIRECCIÓN AUTOMÁTICAMENTE
+      let autoAddress = '';
+      if (user.cityName && user.countryName) {
+        autoAddress = `${user.cityName}, ${user.countryName}`;
+      } else if (user.countryName) {
+        autoAddress = user.countryName;
+      }
+
+      // Inicializar CV con datos del usuario del registro
+      const initialCVData = {
+        personalInfo: {
+          name: user.username || user.name || '',
+          email: user.email || '',
+          phone: user.phone || '', // ✅ TELÉFONO DEL REGISTRO
+          address: autoAddress, // ✅ UBICACIÓN DEL REGISTRO
+          dateOfBirth: '',
+          summary: '',
+          // 🆕 DATOS DE UBICACIÓN
+          countryCode: user.countryCode || '',
+          cityId: user.cityId || '',
+          cityName: user.cityName || '',
+          countryName: user.countryName || ''
+        },
+        education: [],
+        experience: [],
+        skills: [],
+        languages: []
+      };
+
+      setCvData(initialCVData);
+
+      // 🔥 CARGAR CV GUARDADO Y MEZCLAR CON DATOS DEL USUARIO
+      const savedCV = localStorage.getItem('cv-data');
+      if (savedCV) {
+        try {
+          const parsedCV = JSON.parse(savedCV);
+          setCvData({
+            ...parsedCV,
             personalInfo: {
-              ...prev.personalInfo,
-              name: userData.username || userData.name || '',
-              email: userData.email || ''
+              ...parsedCV.personalInfo,
+              // ✅ SIEMPRE MANTENER DATOS ACTUALIZADOS DEL USUARIO
+              name: parsedCV.personalInfo.name || user.username || user.name || '',
+              email: parsedCV.personalInfo.email || user.email || '',
+              phone: parsedCV.personalInfo.phone || user.phone || '', // ✅ Del registro
+              address: parsedCV.personalInfo.address || autoAddress, // ✅ Del registro
+              countryCode: user.countryCode || parsedCV.personalInfo.countryCode || '',
+              cityId: user.cityId || parsedCV.personalInfo.cityId || '',
+              cityName: user.cityName || parsedCV.personalInfo.cityName || '',
+              countryName: user.countryName || parsedCV.personalInfo.countryName || ''
             }
-          }));
+          });
+        } catch (error) {
+          console.error('Error cargando CV guardado:', error);
+          setCvData(initialCVData);
         }
       }
-    } catch (error) {
-      console.error('Error loading user data:', error);
     }
-
-    // Cargar CV existente del localStorage (simulado)
-    const savedCV = localStorage.getItem('cv-data');
-    if (savedCV) {
-      try {
-        setCvData(JSON.parse(savedCV));
-      } catch (error) {
-        console.error('Error loading CV data:', error);
-      }
-    }
-  }, []);
+  }, [user]);
 
   const saveCV = () => {
     localStorage.setItem('cv-data', JSON.stringify(cvData));
     setIsEditing(false);
     setEditingSection(null);
+    console.log('💾 CV guardado:', cvData);
+  };
+
+  // 🔥 FUNCIÓN PARA CALCULAR PROGRESO REAL
+  const calculateProgress = () => {
+    const { personalInfo, education, experience } = cvData;
+    
+    const checks = [
+      personalInfo.name ? 15 : 0,        // Nombre (15%)
+      personalInfo.email ? 10 : 0,       // Email (10%)
+      personalInfo.phone ? 10 : 0,       // Teléfono (10%)
+      personalInfo.address ? 5 : 0,      // Dirección (5%)
+      personalInfo.summary ? 20 : 0,     // Resumen (20%)
+      personalInfo.dateOfBirth ? 5 : 0,  // Fecha nacimiento (5%)
+      education.length > 0 ? 20 : 0,     // Educación (20%)
+      experience.length > 0 ? 15 : 0     // Experiencia (15%)
+    ];
+    
+    return checks.reduce((sum, value) => sum + value, 0);
   };
 
   const addEducation = () => {
@@ -158,6 +215,8 @@ function MiCVContent() {
     }));
   };
 
+  const progress = calculateProgress();
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -174,7 +233,16 @@ function MiCVContent() {
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <FileText className="h-4 w-4 text-blue-600" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">Mi CV</h1>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Mi CV</h1>
+                {/* 🆕 MOSTRAR DATOS DEL REGISTRO */}
+                {user && (
+                  <p className="text-sm text-gray-600">
+                    📍 {user.cityName && user.countryName ? `${user.cityName}, ${user.countryName}` : 'Ubicación no especificada'}
+                    {user.phone && ` • 📞 ${user.phone}`}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="flex items-center space-x-4">
               {isEditing ? (
@@ -272,44 +340,60 @@ function MiCVContent() {
                     )}
                   </div>
 
+                  {/* 🔥 TELÉFONO CON INDICADOR DE ORIGEN */}
                   <div className="flex items-center space-x-3">
                     <Phone className="h-4 w-4 text-gray-500" />
-                    {isEditing ? (
-                      <input
-                        type="tel"
-                        value={cvData.personalInfo.phone}
-                        onChange={(e) => setCvData(prev => ({
-                          ...prev,
-                          personalInfo: { ...prev.personalInfo, phone: e.target.value }
-                        }))}
-                        className="text-sm text-gray-700 border rounded px-2 py-1 flex-1"
-                        placeholder="Tu teléfono"
-                      />
-                    ) : (
-                      <span className="text-sm text-gray-700">
-                        {cvData.personalInfo.phone || 'Teléfono no proporcionado'}
-                      </span>
-                    )}
+                    <div className="flex-1">
+                      {isEditing ? (
+                        <input
+                          type="tel"
+                          value={cvData.personalInfo.phone}
+                          onChange={(e) => setCvData(prev => ({
+                            ...prev,
+                            personalInfo: { ...prev.personalInfo, phone: e.target.value }
+                          }))}
+                          className="text-sm text-gray-700 border rounded px-2 py-1 w-full"
+                          placeholder="Tu teléfono"
+                        />
+                      ) : (
+                        <div>
+                          <span className="text-sm text-gray-700">
+                            {cvData.personalInfo.phone || 'Teléfono no proporcionado'}
+                          </span>
+                          {cvData.personalInfo.phone && user?.phone === cvData.personalInfo.phone && (
+                            <span className="text-xs text-green-600 block">✓ Del registro</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
+                  {/* 🔥 DIRECCIÓN CON INDICADOR DE ORIGEN */}
                   <div className="flex items-center space-x-3">
                     <MapPin className="h-4 w-4 text-gray-500" />
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={cvData.personalInfo.address}
-                        onChange={(e) => setCvData(prev => ({
-                          ...prev,
-                          personalInfo: { ...prev.personalInfo, address: e.target.value }
-                        }))}
-                        className="text-sm text-gray-700 border rounded px-2 py-1 flex-1"
-                        placeholder="Tu dirección"
-                      />
-                    ) : (
-                      <span className="text-sm text-gray-700">
-                        {cvData.personalInfo.address || 'Dirección no proporcionada'}
-                      </span>
-                    )}
+                    <div className="flex-1">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={cvData.personalInfo.address}
+                          onChange={(e) => setCvData(prev => ({
+                            ...prev,
+                            personalInfo: { ...prev.personalInfo, address: e.target.value }
+                          }))}
+                          className="text-sm text-gray-700 border rounded px-2 py-1 w-full"
+                          placeholder="Tu dirección"
+                        />
+                      ) : (
+                        <div>
+                          <span className="text-sm text-gray-700">
+                            {cvData.personalInfo.address || 'Dirección no proporcionada'}
+                          </span>
+                          {cvData.personalInfo.address && user?.cityName && (
+                            <span className="text-xs text-green-600 block">✓ Del registro</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex items-center space-x-3">
@@ -357,7 +441,7 @@ function MiCVContent() {
             </div>
           </div>
 
-          {/* Experiencia y Educación */}
+          {/* Experiencia y Educación - MANTENER IGUAL */}
           <div className="lg:col-span-2 space-y-8">
             
             {/* Educación */}
@@ -483,7 +567,7 @@ function MiCVContent() {
               </div>
             </div>
 
-            {/* Experiencia Laboral */}
+            {/* Experiencia Laboral - MANTENER IGUAL */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -606,7 +690,7 @@ function MiCVContent() {
               </div>
             </div>
 
-            {/* Estado del CV */}
+            {/* 🔥 ESTADO DEL CV ACTUALIZADO */}
             <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
@@ -614,17 +698,14 @@ function MiCVContent() {
                   <p className="text-blue-100">
                     Mantén tu CV actualizado para mejorar tus oportunidades
                   </p>
+                  {/* 🆕 MOSTRAR INFORMACIÓN DE DATOS HEREDADOS */}
+                  <div className="mt-2 text-sm text-blue-100">
+                    ✓ Datos del registro: {user?.phone ? 'Teléfono' : ''} {user?.cityName ? 'Ubicación' : ''}
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold">
-                    {Math.round(
-                      ((cvData.personalInfo.name ? 20 : 0) +
-                       (cvData.personalInfo.email ? 10 : 0) +
-                       (cvData.personalInfo.phone ? 10 : 0) +
-                       (cvData.personalInfo.summary ? 20 : 0) +
-                       (cvData.education.length > 0 ? 20 : 0) +
-                       (cvData.experience.length > 0 ? 20 : 0))
-                    )}%
+                    {Math.round(progress)}%
                   </div>
                   <div className="text-blue-100 text-sm">Completado</div>
                 </div>
