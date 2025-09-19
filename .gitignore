@@ -37,3 +37,11 @@ build/
 
 # Imagen corporativa
 lineamientodeimagencorporativafprax/
+
+#Docker
+docker*
+Docker*
+
+# Nginex
+ngine*
+Ngine*
