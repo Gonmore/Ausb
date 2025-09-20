@@ -11,6 +11,7 @@ export interface User {
   name: string;
   surname?: string;
   phone?: string;
+  countryCode?: string; // Código de país de la empresa
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -164,7 +165,8 @@ export interface CreateOfferData {
   type: string;
   period: string;
   schedule: string;
-  min_hr?: number;
+    min_hr?: number;
+    skills?: number[]; // IDs de skills seleccionados
   car?: boolean;
   sector: string;
   tag: string;

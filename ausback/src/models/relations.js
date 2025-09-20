@@ -1,3 +1,7 @@
+import { Skill } from './skill.js';
+// Relación muchos a muchos: Offer-Skill
+Offer.belongsToMany(Skill, { through: 'OfferSkill' });
+Skill.belongsToMany(Offer, { through: 'OfferSkill' });
 import { User } from "./users.js";
 import { Scenter } from "./scenter.js";
 import { Tutor } from "./tutor.js";

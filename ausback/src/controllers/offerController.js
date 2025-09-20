@@ -101,6 +101,7 @@ import sequelize from '../database/database.js';
  */
 async function listOffers(req, res) {
     try {
+        const { Skill } = await import('../models/skill.js');
         const offers = await Offer.findAll({
             include: [
                 {
@@ -110,6 +111,10 @@ async function listOffers(req, res) {
                 {
                     model: Company,
                     attributes: ['id', 'name', 'city', 'sector']
+                },
+                {
+                    model: Skill,
+                    attributes: ['id', 'name']
                 }
             ]
         });
@@ -137,6 +142,7 @@ async function getOffer(req, res) {
     }
     
     try {
+        const { Skill } = await import('../models/skill.js');
         const offer = await Offer.findByPk(id, {
             include: [
                 {
@@ -146,6 +152,10 @@ async function getOffer(req, res) {
                 {
                     model: Company,
                     attributes: ['id', 'name', 'city', 'sector']
+                },
+                {
+                    model: Skill,
+                    attributes: ['id', 'name']
                 }
             ]
         });
@@ -166,7 +176,7 @@ async function createOffer(req, res) {
     const { 
         name, location, mode, type, period, schedule, 
         min_hr, car, sector, tag, description, jobs, 
-        requisites, profamilyId 
+        requisites, profamilyId, skills 
     } = req.body;
     
     try {
@@ -190,9 +200,13 @@ async function createOffer(req, res) {
                 profamilyId,
                 companyId: company.id
             }, { transaction: t });
-            
+
+            // Asociar skills si se reciben
+            if (skills && Array.isArray(skills) && skills.length > 0) {
+                await offer.setSkills(skills, { transaction: t });
+            }
+
             logger.info({ userId, companyId: company.id, offerId: offer.id }, "Offer created and associated with company");
-            
             res.json(offer);
         });
     } catch (err) {
@@ -204,25 +218,30 @@ async function createOffer(req, res) {
 async function updateOffer(req, res) {
     const { userId } = req.user;
     const { id } = req.params;
-    const { 
-        name, location, mode, type, period, schedule, 
-        min_hr, car, sector, tag, description, jobs, 
-        requisites, profamilyId 
+    const {
+        name, location, mode, type, period, schedule,
+        min_hr, car, sector, tag, description, jobs,
+        requisites, profamilyId, skills
     } = req.body;
-    
+
     try {
         const offer = await Offer.findByPk(id);
-        
+
         if (!offer) {
             return res.status(404).json({ mensaje: 'Oferta no encontrada' });
         }
-        
+
         await offer.update({
             name, location, mode, type, period, schedule,
-            min_hr, car, sector, tag, description, jobs, 
+            min_hr, car, sector, tag, description, jobs,
             requisites, profamilyId
         });
-        
+
+        // Update skills association if provided
+        if (skills && Array.isArray(skills)) {
+            await offer.setSkills(skills);
+        }
+
         logger.info({ userId }, "Offer updated");
         res.json({ mensaje: 'Oferta actualizada exitosamente', offer });
     } catch (error) {
@@ -287,8 +306,9 @@ async function getMyCompanyOffers(req, res) {
         // 🔥 REEMPLAZAR EL MAPEO MANUAL CON EL SERVICE
         const company = await companyService.getCompanyByUserId(userId);
         
+        const { Skill } = await import('../models/skill.js');
         const offers = await Offer.findAll({
-            where: { companyId: company.id }, // 🔥 USAR company.id del service
+            where: { companyId: company.id },
             include: [
                 {
                     model: Profamily,
@@ -297,11 +317,14 @@ async function getMyCompanyOffers(req, res) {
                 {
                     model: Company,
                     attributes: ['id', 'name', 'city', 'sector']
+                },
+                {
+                    model: Skill,
+                    attributes: ['id', 'name']
                 }
             ],
             order: [['createdAt', 'DESC']]
         });
-        
         res.json(offers);
     } catch (error) {
         console.error('❌ Error getMyCompanyOffers:', error);
@@ -435,10 +458,16 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
         const company = await companyService.getCompanyByUserId(req.user.userId);
         console.log(`🏢 Empresa encontrada: ${company.name} (ID: ${company.id}) para usuario ${req.user.userId}`);
 
-        // Obtener ofertas SIN includes complejos
+        // Obtener ofertas con skills y candidatos
+        const { Skill } = await import('../models/skill.js');
         const offers = await Offer.findAll({
             where: { companyId: company.id },
-            raw: true,
+            include: [
+                {
+                    model: Skill,
+                    attributes: ['id', 'name']
+                }
+            ],
             order: [['createdAt', 'DESC']]
         });
 
@@ -446,7 +475,6 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
 
         // Para cada oferta, obtener aplicaciones separadamente
         const results = [];
-        
         for (const offer of offers) {
             // Obtener aplicaciones con raw data
             const applications = await Application.findAll({
@@ -457,12 +485,9 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
             console.log(`Oferta "${offer.name}" (ID: ${offer.id}): ${applications.length} aplicaciones`);
 
             const candidates = [];
-            
             for (const app of applications) {
-                // Obtener student y user separadamente con raw data
                 const student = await Student.findByPk(app.studentId, { raw: true });
                 const user = student ? await User.findByPk(student.userId, { raw: true }) : null;
-                
                 if (student && user) {
                     candidates.push({
                         id: app.id,
@@ -518,13 +543,11 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
                 createdAt: offer.createdAt,
                 candidates: candidates,
                 candidateStats: candidateStats,
-                offerSkills: offer.tag ? offer.tag.split(',').map(s => s.trim()) : []
+                skills: offer.skills ? offer.skills.map(s => ({ id: s.id, name: s.name })) : []
             });
         }
 
         console.log(`✅ Ofertas procesadas: ${results.length}`);
-
-        // 🔥 ENVIAR RESPUESTA UNA SOLA VEZ
         res.json(results);
 
     } catch (error) {

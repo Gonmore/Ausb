@@ -1,3 +1,10 @@
+// UserCompany Service
+export const userCompanyService = {
+  create: (data: { userId: number; companyId: number; role?: string }) =>
+    apiClient.post('/api/user-company', data),
+  getByUserId: (userId: number) =>
+    apiClient.get(`/api/user-company/user/${userId}`),
+};
 import apiClient from '@/lib/api';
 import {
   Offer,

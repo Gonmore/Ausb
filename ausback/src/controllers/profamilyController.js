@@ -16,9 +16,8 @@ async function listProfamilies(req, res) {
         console.log(`📋 Familias profesionales encontradas: ${profamilies.length}`);
         
         if (!profamilies || profamilies.length === 0) {
-            return res.status(404).json({ mensaje: 'No hay familias profesionales disponibles' });
+            return res.status(200).json([]);
         }
-        
         return res.json(profamilies);
     } catch (error) {
         console.error('❌ Error obteniendo familias profesionales:', error);

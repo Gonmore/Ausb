@@ -31,27 +31,33 @@ export const verifyToken = (req, res, next) => {
 }
 
 export const authenticateJWT = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({
-            success: false,
-            message: 'Token de acceso requerido'
-        });
-    }
+  const authHeader = req.headers.authorization;
 
-    const token = authHeader.substring(7);
-    
-    try {
-        const decoded = jwt.verify(token, secret);
-        req.user = decoded;
-        next();
-    } catch (error) {
-        return res.status(401).json({
-            success: false,
-            message: 'Token inválido'
-        });
-    }
+  console.log('🟡 [DEBUG] Autenticación: Header recibido:', authHeader);
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('🔴 [ERROR] No se recibió el token o formato incorrecto');
+    return res.status(401).json({
+      success: false,
+      message: 'Token de acceso requerido'
+    });
+  }
+
+  const token = authHeader.substring(7);
+  console.log('🟡 [DEBUG] Token extraído:', token);
+
+  try {
+    const decoded = jwt.verify(token, secret);
+    req.user = decoded;
+    console.log('🟢 [DEBUG] Token válido, usuario autenticado:', decoded);
+    next();
+  } catch (error) {
+    console.log('🔴 [ERROR] Fallo al verificar el token:', error.message);
+    return res.status(401).json({
+      success: false,
+      message: 'Token inválido'
+    });
+  }
 };
 
 // ← AGREGAR MIDDLEWARE PARA ONBOARDING

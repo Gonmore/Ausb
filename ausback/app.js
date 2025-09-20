@@ -17,6 +17,7 @@ import userRouter from './src/routes/userRoutes.js'
 import studentRouter from './src/routes/studentRoutes.js'
 import scenterRouter from './src/routes/scenterRoutes.js'
 import companyRouter from './src/routes/companyRoutes.js'
+import userCompanyRouter from './src/routes/userCompanyRoutes.js'
 import debugRouter from './src/routes/debugRoutes.js'
 import offerRouter from './src/routes/offerRoutes.js'
 import profamilyRouter from './src/routes/profamilyRoutes.js'
@@ -29,6 +30,9 @@ import swaggerDocs from './src/swagger.js'
 import cors from 'cors';
 import onboardingRoutes from './src/routes/onboardingRoutes.js';
 import geographyRoutes from './src/routes/geographyRoutes.js';
+import skillRoutes from './src/routes/skillRoutes.js';
+// Skills API
+
 
 const app = express();
 
@@ -87,6 +91,7 @@ app.use('/api/student', studentRouter);
 app.use('/api/students', studentRouter);
 app.use('/api/scenter', scenterRouter);
 app.use('/api/company', companyRouter);
+app.use('/api/user-company', userCompanyRouter);
 app.use('/api/offers', offerRouter);
 app.use('/api/profamilies', profamilyRouter);
 app.use('/api/tutors', tutorRouter);
@@ -96,6 +101,7 @@ app.use('/api/admin-temp', adminTempRouter);
 app.use('/api/dev', seedRouter);
 app.use('/api/debug', debugRouter);
 app.use('/api/geography', geographyRoutes);
+app.use('/api/skills', skillRoutes);
 
 // Onboarding routes
 app.use('/onboarding', onboardingRoutes);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -81,9 +82,11 @@ interface Offer {
     };
   };
   offerSkills: {[key: string]: number};
+  skills?: { id: number; name: string }[];
 }
 
 function CompanyOffersContent() {
+  const router = useRouter();
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
@@ -618,47 +621,83 @@ function CompanyOffersContent() {
                   )}
 
                   {/* Skills de la oferta */}
-                  {offer.tag && (
-                    <div className="mb-4">
-                      <h4 className="font-medium text-gray-700 mb-2">Habilidades requeridas:</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {offer.tag.split(',').map((tag: string, index: number) => (
-                          <Badge key={index} variant="outline">{tag.trim()}</Badge>
-                        ))}
-                      </div>
+                  <div className="mb-4">
+                    <h4 className="font-medium text-gray-700 mb-2">Habilidades requeridas:</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {(offer.skills && offer.skills.length > 0)
+                        ? offer.skills.map((skill: any, index: number) => (
+                            <Badge key={index} variant="outline">{skill.name}</Badge>
+                          ))
+                        : <span className="text-gray-400">Sin skills asignados</span>
+                      }
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Botones de acción */}
                 <div className="flex flex-col gap-2 ml-4">
-                  {offer.candidateStats.total > 0 ? (
-                    <>
+                  <div className="flex flex-col gap-2">
+                    {offer.candidateStats.total > 0 ? (
+                      <>
+                        <Button
+                          onClick={() => handleViewCandidates(offer)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          <Users className="w-4 h-4 mr-2" />
+                          Ver Candidatos ({offer.candidateStats.total})
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleSearchBetterCandidates(offer)}
+                          className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                        >
+                          <Search className="w-4 h-4 mr-2" />
+                          Buscar Mejores
+                        </Button>
+                      </>
+                    ) : (
                       <Button
-                        onClick={() => handleViewCandidates(offer)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                      >
-                        <Users className="w-4 h-4 mr-2" />
-                        Ver Candidatos ({offer.candidateStats.total})
-                      </Button>
-                      <Button
-                        variant="outline"
                         onClick={() => handleSearchBetterCandidates(offer)}
-                        className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                        className="bg-purple-600 hover:bg-purple-700 text-white"
                       >
                         <Search className="w-4 h-4 mr-2" />
-                        Buscar Mejores
+                        Buscar Candidatos
                       </Button>
-                    </>
-                  ) : (
+                    )}
                     <Button
-                      onClick={() => handleSearchBetterCandidates(offer)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      variant="destructive"
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                      onClick={async () => {
+                        if (window.confirm('¿Seguro que quieres eliminar esta oferta?')) {
+                          try {
+                            const response = await fetch(`http://localhost:5000/api/offers/${offer.id}`, {
+                              method: 'DELETE',
+                              headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json',
+                              },
+                            });
+                            if (response.ok) {
+                              setOffers((prev) => prev.filter((o) => o.id !== offer.id));
+                            } else {
+                              alert('Error al eliminar la oferta');
+                            }
+                          } catch (error) {
+                            alert('Error al eliminar la oferta');
+                          }
+                        }
+                      }}
                     >
-                      <Search className="w-4 h-4 mr-2" />
-                      Buscar Candidatos
+                      Eliminar
                     </Button>
-                  )}
+                    <Button
+                      variant="outline"
+                      className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                      onClick={() => router.push(`/empresa/ofertas/edit/${offer.id}`)}
+                    >
+                      Editar
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -672,7 +711,7 @@ function CompanyOffersContent() {
             <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No tienes ofertas publicadas</h3>
             <p className="text-gray-600 mb-4">Crea tu primera oferta para empezar a recibir candidatos</p>
-            <Button className="bg-blue-600 hover:bg-blue-700">
+            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => router.push('/empresa/ofertas/new')}>
               <Plus className="w-4 h-4 mr-2" />
               Crear Oferta
             </Button>

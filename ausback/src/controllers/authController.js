@@ -59,6 +59,7 @@ class AuthController {
             console.log('5. Intentando crear usuario...');
             const user = await User.create(userData);
             console.log('6. Usuario creado:', { id: user.id });
+            
 
             // Si llegamos aquí, el usuario se creó bien
             const token = jwt.sign({

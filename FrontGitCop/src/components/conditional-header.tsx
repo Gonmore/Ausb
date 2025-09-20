@@ -201,7 +201,7 @@ export function ConditionalHeader() {
         ];
       case 'company':
         return [
-          { href: '/empresa/dashboard', label: 'Dashboard', icon: Home },
+          { href: '/dashboard', label: 'Dashboard', icon: Home },
           { href: '/ofertas', label: 'Ofertas', icon: Search },
           { href: '/empresa/ofertas', label: 'Mis Ofertas', icon: Building2 },
           { href: '/empresa/buscador-alumnos', label: 'Candidatos', icon: Users },

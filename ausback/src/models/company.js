@@ -22,7 +22,7 @@ export const Company = sequelize.define('companies', {
     phone:{
         type: DataTypes.STRING, allowNull: false,
         validate:{
-            notNull:{msg:'Type must not be null'}}
+            notNull:{msg:'Phone must not be null'}}
     },
     email:{type: DataTypes.STRING,allowNull: true},
     web:{type: DataTypes.STRING,allowNull: true}, 

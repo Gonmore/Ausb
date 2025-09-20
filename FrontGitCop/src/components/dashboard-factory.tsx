@@ -419,48 +419,123 @@ function StudentDashboard() {
 }
 
 // CompanyDashboard, CenterDashboard y DefaultDashboard mantienen el mismo código...
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { useEffect, useState } from 'react';
+import { companyService, profamiliesService, userCompanyService } from '@/lib/services';
+
 function CompanyDashboard() {
   const router = useRouter();
   const { user } = useAuthStore();
-  
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Panel de Empresa 🏢
-          </h1>
-          <p className="text-gray-600">
-            Gestiona tus ofertas y encuentra los mejores candidatos
-          </p>
-        </div>
-      </div>
+  const [showModal, setShowModal] = useState(false);
+  const [company, setCompany] = useState<any>(null);
+  const [profamilies, setProfamilies] = useState<any[]>([]);
+  const [form, setForm] = useState<import("@/types").CreateCompanyData & { profamilyId: string }>({
+    name: '', code: '', city: '', address: '', phone: '', email: '', sector: '', profamilyId: '',
+  });
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Bienvenido, {user?.name}</CardTitle>
-              <CardDescription>
-                Dashboard dinámico para empresas será implementado aquí
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <Button onClick={() => router.push('/empresa/ofertas')} className="w-full">
-                  <Building className="w-4 h-4 mr-2" />
-                  Gestionar Ofertas
-                </Button>
-                <Button onClick={() => router.push('/empresa/buscador-inteligente')} variant="outline" className="w-full">
-                  <Users className="w-4 h-4 mr-2" />
-                  Buscador Inteligente
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+  useEffect(() => {
+    if (user?.id) {
+      // Consultar la relación UserCompany para el usuario actual
+      userCompanyService.getByUserId(user.id).then(res => {
+        const userCompanies = res.data || [];
+        // Si el usuario tiene al menos una empresa asociada, no mostrar el modal
+        if (userCompanies.length > 0 && userCompanies[0].companyId) {
+          setCompany(userCompanies[0].companyId);
+          setShowModal(false);
+        } else {
+          setCompany(null);
+          setShowModal(true);
+        }
+      });
+    }
+    profamiliesService.getAll().then(res => setProfamilies(res.data));
+  }, [user]);
+
+  const handleChange = (field: keyof typeof form, value: string) => setForm(f => ({ ...f, [field]: value }));
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    // Crear empresa (usando los campos correctos)
+    const { profamilyId, ...companyData } = form;
+    const res = await companyService.create(companyData);
+    const companyId = res.data?.id;
+    // Asociar usuario a empresa en UserCompany
+    if (companyId) {
+      await userCompanyService.create({ userId: user.id, companyId, role: 'company' });
+    }
+    setShowModal(false);
+    window.location.reload();
+  };
+
+  return (
+    <>
+      {/* Modal para completar datos de empresa */}
+      <Dialog open={showModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Completa los datos de tu empresa</DialogTitle>
+            <DialogDescription>Para acceder al dashboard, primero ingresa los datos básicos de tu empresa.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input type="text" placeholder="Nombre" value={form.name} onChange={e => handleChange('name', e.target.value)} required className="w-full border p-2 rounded" />
+            <input type="text" placeholder="Código" value={form.code} onChange={e => handleChange('code', e.target.value)} required className="w-full border p-2 rounded" />
+            <input type="text" placeholder="Ciudad" value={form.city} onChange={e => handleChange('city', e.target.value)} required className="w-full border p-2 rounded" />
+            <input type="text" placeholder="Dirección" value={form.address} onChange={e => handleChange('address', e.target.value)} required className="w-full border p-2 rounded" />
+            <input type="text" placeholder="Teléfono" value={form.phone} onChange={e => handleChange('phone', e.target.value)} required className="w-full border p-2 rounded" />
+            <input type="email" placeholder="Email" value={form.email} onChange={e => handleChange('email', e.target.value)} className="w-full border p-2 rounded" />
+            <input type="text" placeholder="Sector" value={form.sector} onChange={e => handleChange('sector', e.target.value)} className="w-full border p-2 rounded" />
+            <select value={form.profamilyId} onChange={e => handleChange('profamilyId', e.target.value)} required className="w-full border p-2 rounded">
+              <option value="">Selecciona familia profesional</option>
+              {profamilies.map((f: any) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+            <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded">Guardar empresa</button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dashboard normal si empresa existe */}
+      {!showModal && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Panel de Empresa 🏢
+              </h1>
+              <p className="text-gray-600">
+                Gestiona tus ofertas y encuentra los mejores candidatos
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Bienvenido, {user?.name}</CardTitle>
+                  <CardDescription>
+                    Dashboard dinámico para empresas será implementado aquí
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <Button onClick={() => router.push('/empresa/ofertas')} className="w-full">
+                      <Building className="w-4 h-4 mr-2" />
+                      Gestionar Ofertas
+                    </Button>
+                    <Button onClick={() => router.push('/empresa/buscador-inteligente')} variant="outline" className="w-full">
+                      <Users className="w-4 h-4 mr-2" />
+                      Buscador Inteligente
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 

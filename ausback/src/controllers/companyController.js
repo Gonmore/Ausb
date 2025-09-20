@@ -5,21 +5,23 @@ import sequelize from '../database/database.js';
 import logger from '../logs/logger.js'
 
 async function getCompanys(req, res) {
-    const { userId } = req.user;
-    
     try {
-        // Buscar la empresa directamente por userId usando la relación one-to-one
-        const company = await Company.findOne({
-            where: { userId: userId }
-        });
-        
-        if (!company) {
-            return res.status(404).json({ mensaje: 'Empresa no encontrada para este usuario' });
+        // Si hay usuario autenticado, filtrar por userId; si no, devolver todas las empresas
+        if (req.user && req.user.userId) {
+            const company = await Company.findOne({
+                where: { userId: req.user.userId }
+            });
+            if (!company) {
+                return res.status(404).json({ mensaje: 'Empresa no encontrada para este usuario' });
+            }
+            return res.json([company]);
+        } else {
+            // Proceso de registro: devolver todas las empresas
+            const companies = await Company.findAll();
+            return res.json(companies);
         }
-        
-        return res.json([company]); // Retornar como array para mantener consistencia
     } catch (error) {
-        console.error('Error obteniendo empresa del usuario:', error);
+        console.error('Error obteniendo empresa:', error);
         return res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
@@ -42,28 +44,46 @@ async function getCompany(req, res) {
 }
 
 async function createCompany(req, res){
-    const { userId } = req.user;
-    const { name,code,city,address,
-        phone,email} = req.body;
-    
-        
-    try {
-        await sequelize.transaction(async (t) => {
-            const usuario = await User.findByPk(userId)
-            const company = await Company.create({
-                name,code,city,address,
-                phone,email
-            },
-            { tansaction: t}
-            );
-            logger.info({ userId }, "Company created");
-            usuario.addCompany(company)
-            res.json(company);
-        })
-    }catch(err){
-        logger.error('Error createCompany: '+err);
-        res.status(500).json({message: 'Server error creating company'})
-    }
+        const { userId } = req.user;
+        // Recoger todos los campos obligatorios y opcionales
+        const {
+            name,
+            code,
+            city,
+            address,
+            phone,
+            email,
+            web,
+            sector,
+            main,
+            description,
+            type // <- Si existe en el modelo
+        } = req.body;
+
+        try {
+            await sequelize.transaction(async (t) => {
+                // Crear la empresa asociando el userId
+                const company = await Company.create({
+                    name,
+                    code,
+                    city,
+                    address,
+                    phone,
+                    email,
+                    web,
+                    sector,
+                    main,
+                    description,
+                    userId,
+                    type: type || 'default' // Si el modelo requiere type
+                }, { transaction: t });
+                logger.info({ userId }, "Company created");
+                res.json(company);
+            });
+        } catch (err) {
+            logger.error('Error createCompany: ' + err);
+            res.status(500).json({ message: 'Server error creating company' });
+        }
 }
 
 async function updateCompany(req, res) {
