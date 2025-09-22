@@ -6,6 +6,7 @@ import { useApplications } from '@/hooks/useApplications';
 import { useCV } from '@/hooks/useCV';
 // import { OnboardingGuide } from '@/components/onboarding/OnboardingGuide'; // 🗑️ ELIMINAR
 import { RecommendedOffers } from '@/components/onboarding/RecommendedOffers';
+import StudentSkillsManager from '@/components/StudentSkillsManager';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -295,6 +296,14 @@ function StudentDashboard() {
               )}
             </CardContent>
           </Card>
+
+          {/* Gestión de Skills */}
+          {user?.role === 'student' && user?.studentId && (
+            <StudentSkillsManager 
+              studentId={user.studentId}
+              readonly={false}
+            />
+          )}
         </div>
 
         {/* Sidebar */}

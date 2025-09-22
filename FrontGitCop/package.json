@@ -56,6 +56,7 @@
     "react-dom": "^19.1.0",
     "react-hook-form": "^7.59.0",
     "react-phone-number-input": "^3.4.12",
+    "react-select": "^5.10.2",
     "react-toastify": "^11.0.5",
     "sonner": "^2.0.6",
     "tailwind-merge": "^3.3.1",

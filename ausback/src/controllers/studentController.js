@@ -3,7 +3,7 @@ import sequelize from '../database/database.js';
 import logger from '../logs/logger.js'
 import { TokenService } from '../services/tokenService.js';
 import * as companyService from '../services/companyService.js'; // 🔥 AGREGAR ESTA LÍNEA
-import { Student, User, Profamily, UserCompany, Company, RevealedCV, Application, Offer } from '../models/relations.js';
+import { Student, User, Profamily, UserCompany, Company, RevealedCV, Application, Offer, Skill, StudentSkill } from '../models/relations.js';
 import { AffinityCalculator } from '../services/affinityCalculator.js';
 import { Op } from 'sequelize';
 
@@ -245,14 +245,14 @@ export const searchIntelligentStudents = async (req, res) => {
       }
 
       console.log(`📋 Oferta encontrada: "${offer.name}"`);
-      console.log(`🏷️ Skills de la oferta (tag):`, offer.tag);
+      // ELIMINADO: lógica de tag hardcodeado
+      console.log(`🔗 Skills de la oferta (desde relación):`, offer.Skills ? offer.Skills.length : 0);
 
-      if (offer.tag) {
-        const offerSkills = offer.tag.split(',').map(skill => skill.trim().toLowerCase());
-        console.log('🔍 Skills de la oferta procesados:', offerSkills);
+      if (offer.Skills && offer.Skills.length > 0) {
+        console.log('🔍 Skills de la oferta profesionales:', offer.Skills.map(s => s.name));
         
-        offerSkills.forEach(skill => {
-          companySkillsObject[skill] = 3; // nivel requerido
+        offer.Skills.forEach(skill => {
+          companySkillsObject[skill.name.toLowerCase()] = 3; // nivel requerido
         });
       }
 
@@ -1108,6 +1108,258 @@ export const getRevealedCandidates = async (req, res) => {
   }
 };
 
+/**
+ * @swagger
+ * /api/student/skills:
+ *   get:
+ *     summary: Obtener skills del estudiante actual
+ *     tags: [Student Skills]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Skills del estudiante
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 skills:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       area:
+ *                         type: string
+ *                       proficiencyLevel:
+ *                         type: string
+ *                         enum: [beginner, intermediate, advanced, expert]
+ *                       yearsOfExperience:
+ *                         type: number
+ */
+export const getStudentSkills = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    
+    // Buscar el estudiante
+    const student = await Student.findOne({
+      where: { userId },
+      include: [{
+        model: Skill,
+        as: 'skills',
+        through: {
+          attributes: ['proficiencyLevel', 'yearsOfExperience', 'isVerified', 'notes', 'addedAt']
+        }
+      }]
+    });
+
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    const formattedSkills = student.skills.map(skill => ({
+      id: skill.id,
+      name: skill.name,
+      area: skill.area,
+      proficiencyLevel: skill.student_skills.proficiencyLevel,
+      yearsOfExperience: skill.student_skills.yearsOfExperience,
+      isVerified: skill.student_skills.isVerified,
+      notes: skill.student_skills.notes,
+      addedAt: skill.student_skills.addedAt
+    }));
+
+    res.json({
+      skills: formattedSkills,
+      totalSkills: formattedSkills.length
+    });
+
+  } catch (error) {
+    console.error('❌ Error getStudentSkills:', error);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
+/**
+ * @swagger
+ * /api/student/skills:
+ *   post:
+ *     summary: Agregar skills al perfil del estudiante
+ *     tags: [Student Skills]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - skills
+ *             properties:
+ *               skills:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - skillId
+ *                     - proficiencyLevel
+ *                   properties:
+ *                     skillId:
+ *                       type: integer
+ *                     proficiencyLevel:
+ *                       type: string
+ *                       enum: [beginner, intermediate, advanced, expert]
+ *                     yearsOfExperience:
+ *                       type: number
+ *                       minimum: 0
+ *                     notes:
+ *                       type: string
+ */
+export const addStudentSkills = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { skills } = req.body;
+
+    if (!skills || !Array.isArray(skills) || skills.length === 0) {
+      return res.status(400).json({ mensaje: 'Se requiere un array de skills' });
+    }
+
+    // Buscar el estudiante
+    const student = await Student.findOne({ where: { userId } });
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    await sequelize.transaction(async (t) => {
+      // Agregar cada skill
+      for (const skillData of skills) {
+        const { skillId, proficiencyLevel, yearsOfExperience = 0, notes } = skillData;
+
+        // Verificar que la skill existe
+        const skill = await Skill.findByPk(skillId, { transaction: t });
+        if (!skill) {
+          throw new Error(`Skill con ID ${skillId} no encontrada`);
+        }
+
+        // Verificar si ya existe la relación
+        const existingRelation = await StudentSkill.findOne({
+          where: { studentId: student.id, skillId },
+          transaction: t
+        });
+
+        if (existingRelation) {
+          // Actualizar si ya existe
+          await existingRelation.update({
+            proficiencyLevel,
+            yearsOfExperience,
+            notes,
+            lastUpdated: new Date()
+          }, { transaction: t });
+        } else {
+          // Crear nueva relación
+          await StudentSkill.create({
+            studentId: student.id,
+            skillId,
+            proficiencyLevel,
+            yearsOfExperience,
+            notes,
+            isVerified: false
+          }, { transaction: t });
+        }
+      }
+    });
+
+    // Obtener las skills actualizadas
+    const updatedStudent = await Student.findOne({
+      where: { userId },
+      include: [{
+        model: Skill,
+        as: 'skills',
+        through: {
+          attributes: ['proficiencyLevel', 'yearsOfExperience', 'isVerified', 'notes']
+        }
+      }]
+    });
+
+    const formattedSkills = updatedStudent.skills.map(skill => ({
+      id: skill.id,
+      name: skill.name,
+      area: skill.area,
+      proficiencyLevel: skill.student_skills.proficiencyLevel,
+      yearsOfExperience: skill.student_skills.yearsOfExperience,
+      isVerified: skill.student_skills.isVerified,
+      notes: skill.student_skills.notes
+    }));
+
+    res.json({
+      mensaje: 'Skills actualizadas exitosamente',
+      skills: formattedSkills,
+      totalSkills: formattedSkills.length
+    });
+
+  } catch (error) {
+    console.error('❌ Error addStudentSkills:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @swagger
+ * /api/student/skills/{skillId}:
+ *   delete:
+ *     summary: Eliminar skill del perfil del estudiante
+ *     tags: [Student Skills]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: skillId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de la skill a eliminar
+ *     responses:
+ *       200:
+ *         description: Skill eliminada exitosamente
+ */
+export const removeStudentSkill = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { skillId } = req.params;
+
+    // Buscar el estudiante
+    const student = await Student.findOne({ where: { userId } });
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    // Eliminar la relación
+    const deleted = await StudentSkill.destroy({
+      where: { 
+        studentId: student.id, 
+        skillId: parseInt(skillId) 
+      }
+    });
+
+    if (deleted === 0) {
+      return res.status(404).json({ mensaje: 'Skill no encontrada en el perfil del estudiante' });
+    }
+
+    res.json({ mensaje: 'Skill eliminada exitosamente' });
+
+  } catch (error) {
+    console.error('❌ Error removeStudentSkill:', error);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
 export default {
     getStudent,
     createStudent,
@@ -1123,7 +1375,10 @@ export default {
     viewStudentCV,
     contactStudent,
     getRevealedCVs,
-    getRevealedCandidates
+    getRevealedCandidates,
+    getStudentSkills,
+    addStudentSkills,
+    removeStudentSkill
     //getRevealedCVsWithDetails  // 🔥 AGREGAR
 }
 

@@ -15,6 +15,11 @@ export interface User {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  // Relaciones con otros modelos según el rol
+  studentId?: number; // ID del estudiante si role = 'student'
+  companyId?: number; // ID de la empresa si role = 'company'
+  scenterId?: number; // ID del centro educativo si role = 'scenter'
+  tutorId?: number; // ID del tutor si role = 'tutor'
 }
 
 // Student types
@@ -110,6 +115,14 @@ export interface Offer {
   updatedAt: string;
   profamily?: Profamily;
   companies?: Company;
+  Skills?: Array<{
+    id: number;
+    name: string;
+  }>;
+  skills?: Array<{
+    id: number;
+    name: string;
+  }>;
   // Campos adicionales para aplicaciones
   requirements?: string[];
   benefits?: string[];
@@ -117,6 +130,16 @@ export interface Offer {
   postedDate?: string;
   deadline?: string;
   contactEmail?: string;
+  // Campo para aptitud/compatibilidad para estudiantes
+  aptitude?: number;
+  aptitudeDetails?: {
+    level: string;
+    score: number;
+    matches: number;
+    coverage: number;
+    explanation: string;
+    matchingSkills: string[];
+  };
 }
 
 // CV types

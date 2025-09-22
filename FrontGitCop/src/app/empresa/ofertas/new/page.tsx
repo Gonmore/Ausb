@@ -9,10 +9,28 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { offerService, profamiliesService, companyService } from '@/lib/services';
 import { apiClient } from '@/lib/api';
 import { Profamily, CreateOfferData } from '@/types/index';
-import  SelectRS  from 'react-select';
+import SelectRS from 'react-select';
+import { 
+  Building2, 
+  MapPin, 
+  Clock, 
+  Users, 
+  Calendar, 
+  Briefcase, 
+  Star,
+  Plus,
+  X,
+  Save,
+  ArrowLeft,
+  Target,
+  DollarSign
+} from 'lucide-react';
 
 export default function EmpresaOfertasNewPage() {
 	const router = useRouter();
@@ -142,125 +160,451 @@ export default function EmpresaOfertasNewPage() {
 				};
 
 	return (
-		<div className="min-h-screen bg-gray-50 flex items-center justify-center">
-			<Card className="w-full max-w-2xl">
-								<CardHeader>
-									<CardTitle>{editId ? 'Actualizar Oferta' : 'Crear Nueva Oferta'}</CardTitle>
-								</CardHeader>
-				<CardContent>
-					<form onSubmit={handleSubmit} className="space-y-4">
-												<Input placeholder="Título de la oferta" value={newOffer.name} onChange={e => handleChange('name', e.target.value)} required />
-																					<div className="mb-4">
-																						<label className="block font-semibold mb-2">Skills requeridos</label>
-																										{skills.length > 0 ? (
-																											<SelectRS
-																												isMulti
-																												options={skills.map(skill => ({ value: skill.id, label: skill.name }))}
-																												value={(newOffer.skills || []).map(id => {
-																													const skill = skills.find(s => s.id === id);
-																													return skill ? { value: skill.id, label: skill.name } : null;
-																												}).filter(Boolean)}
-																												onChange={selected => {
-																													setNewOffer(prev => ({
-																														...prev,
-																														skills: selected ? (Array.isArray(selected) ? selected.map((s: any) => s.value) : []) : [],
-																													}));
-																												}}
-																												placeholder="Selecciona o escribe skills..."
-																											/>
-																										) : (
-																											<div className="text-gray-400">Cargando skills...</div>
-																										)}
-																						<div className="mt-2">
-																							<label className="block text-sm">Agregar nuevos skills (separa con ;)</label>
-																							<Input
-																								type="text"
-																								placeholder="Ejemplo: Python; React; Comunicación"
-																								onBlur={async (e) => {
-																									const value = e.target.value.trim();
-																									if (!value) return;
-																									const newSkills = value.split(';').map(s => s.trim()).filter(Boolean);
-																									for (const skillName of newSkills) {
-																										await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/skills`, {
-																											method: 'POST',
-																											headers: { 'Content-Type': 'application/json' },
-																											body: JSON.stringify({ name: skillName }),
-																										});
-																									}
-																									e.target.value = '';
-																									// Recargar skills
-																									fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/skills`)
-																										.then(r => r.json())
-																										.then(data => {
-																											if (data.success) setSkills(data.data);
-																										});
-																								}}
-																							/>
-																						</div>
-																					</div>
-						<Textarea placeholder="Descripción" value={newOffer.description} onChange={e => handleChange('description', e.target.value)} required />
-						<Select value={String(newOffer.profamilyId)} onValueChange={v => handleChange('profamilyId', Number(v))}>
-							<SelectTrigger><SelectValue placeholder="Familia profesional" /></SelectTrigger>
-							<SelectContent>
-								{profamilies.map((fam) => (
-									<SelectItem key={fam.id} value={String(fam.id)}>{fam.name}</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-						<Select value={newOffer.mode} onValueChange={v => handleChange('mode', v)}>
-							<SelectTrigger><SelectValue placeholder="Modalidad" /></SelectTrigger>
-							<SelectContent>
-								<SelectItem value="presencial">Presencial</SelectItem>
-								<SelectItem value="remoto">Remoto</SelectItem>
-							</SelectContent>
-						</Select>
-						{newOffer.mode === 'presencial' && (
-							<Select value={newOffer.location} onValueChange={v => handleChange('location', v)}>
-								<SelectTrigger><SelectValue placeholder="Ciudad" /></SelectTrigger>
-								<SelectContent>
-									{cities.map(city => (
-										<SelectItem key={city.id} value={city.name}>{city.name}</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						)}
-						<Select value={newOffer.type} onValueChange={v => handleChange('type', v)}>
-							<SelectTrigger><SelectValue placeholder="Tipo de contrato" /></SelectTrigger>
-							<SelectContent>
-								<SelectItem value="full-time">Tiempo completo</SelectItem>
-								<SelectItem value="part-time">Medio tiempo</SelectItem>
-								<SelectItem value="internship">Prácticas</SelectItem>
-								<SelectItem value="freelance">Freelance</SelectItem>
-							</SelectContent>
-						</Select>
-						<Select value={newOffer.period} onValueChange={v => handleChange('period', v)}>
-							<SelectTrigger><SelectValue placeholder="Periodo" /></SelectTrigger>
-							<SelectContent>
-								<SelectItem value="3 meses">3 meses</SelectItem>
-								<SelectItem value="6 meses">6 meses</SelectItem>
-								<SelectItem value="12 meses">12 meses</SelectItem>
-							</SelectContent>
-						</Select>
-						<Select value={newOffer.schedule} onValueChange={v => handleChange('schedule', v)}>
-							<SelectTrigger><SelectValue placeholder="Horario" /></SelectTrigger>
-							<SelectContent>
-								<SelectItem value="Mañana">Mañana</SelectItem>
-								<SelectItem value="Tarde">Tarde</SelectItem>
-								<SelectItem value="Mixto">Mixto</SelectItem>
-							</SelectContent>
-						</Select>
-						<Input type="number" placeholder="Horas mínimas" value={newOffer.min_hr} onChange={e => handleChange('min_hr', Number(e.target.value))} />
-						<Input placeholder="Sector" value={newOffer.sector} onChange={e => handleChange('sector', e.target.value)} />
-						<Input placeholder="Etiqueta" value={newOffer.tag} onChange={e => handleChange('tag', e.target.value)} />
-						<Input placeholder="Puesto" value={newOffer.jobs} onChange={e => handleChange('jobs', e.target.value)} />
-						<Input placeholder="Requisitos" value={newOffer.requisites} onChange={e => handleChange('requisites', e.target.value)} />
-						{error && <div className="text-red-500">{error}</div>}
-										<Button type="submit" className="w-full" disabled={submitting}>
-											{submitting ? (editId ? 'Actualizando...' : 'Crear Oferta') : (editId ? 'Actualizar Oferta' : 'Crear Oferta')}
-										</Button>
-					</form>
-				</CardContent>
-			</Card>
+		<div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+			<div className="container mx-auto px-4 max-w-4xl">
+				{/* Header */}
+				<div className="mb-8">
+					<Button 
+						variant="ghost" 
+						onClick={() => router.back()}
+						className="mb-4 text-gray-600 hover:text-gray-900"
+					>
+						<ArrowLeft className="w-4 h-4 mr-2" />
+						Volver
+					</Button>
+					<div className="flex items-center gap-3 mb-2">
+						<div className="p-2 bg-blue-600 rounded-lg">
+							<Briefcase className="w-6 h-6 text-white" />
+						</div>
+						<h1 className="text-3xl font-bold text-gray-900">
+							{editId ? 'Actualizar Oferta' : 'Crear Nueva Oferta'}
+						</h1>
+					</div>
+					<p className="text-gray-600">
+						{editId ? 'Modifica los detalles de tu oferta' : 'Crea una nueva oferta de trabajo para atraer talento'}
+					</p>
+				</div>
+
+				<form onSubmit={handleSubmit} className="space-y-8">
+					{/* Información Básica */}
+					<Card className="shadow-lg border-0">
+						<CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-lg">
+							<CardTitle className="flex items-center gap-2">
+								<Target className="w-5 h-5" />
+								Información Básica
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="p-6 space-y-6">
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+								<div className="md:col-span-2">
+									<Label htmlFor="title" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Título de la Oferta *
+									</Label>
+									<Input 
+										id="title"
+										placeholder="ej. Desarrollador Frontend React" 
+										value={newOffer.name} 
+										onChange={e => handleChange('name', e.target.value)} 
+										required 
+										className="text-lg"
+									/>
+								</div>
+								
+								<div className="md:col-span-2">
+									<Label htmlFor="description" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Descripción *
+									</Label>
+									<Textarea 
+										id="description"
+										placeholder="Describe las responsabilidades, objetivos y lo que ofreces..." 
+										value={newOffer.description} 
+										onChange={e => handleChange('description', e.target.value)} 
+										required 
+										rows={4}
+										className="resize-none"
+									/>
+								</div>
+
+								<div>
+									<Label htmlFor="profamily" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Familia Profesional *
+									</Label>
+									<Select value={String(newOffer.profamilyId)} onValueChange={v => handleChange('profamilyId', Number(v))}>
+										<SelectTrigger id="profamily">
+											<SelectValue placeholder="Selecciona una familia profesional" />
+										</SelectTrigger>
+										<SelectContent>
+											{profamilies.map((fam) => (
+												<SelectItem key={fam.id} value={String(fam.id)}>{fam.name}</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div>
+									<Label htmlFor="sector" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Sector
+									</Label>
+									<Input 
+										id="sector"
+										placeholder="ej. Tecnología, Salud, Educación" 
+										value={newOffer.sector} 
+										onChange={e => handleChange('sector', e.target.value)} 
+									/>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					{/* Skills Requeridos */}
+					<Card className="shadow-lg border-0">
+						<CardHeader className="bg-gradient-to-r from-green-600 to-green-700 text-white">
+							<CardTitle className="flex items-center gap-2">
+								<Star className="w-5 h-5" />
+								Skills Requeridos
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="p-6 space-y-4">
+							<div>
+								<Label className="text-sm font-semibold text-gray-700 mb-2 block">
+									Selecciona Skills
+								</Label>
+								{skills.length > 0 ? (
+									<SelectRS
+										isMulti
+										options={skills.map(skill => ({ value: skill.id, label: skill.name }))}
+										value={(newOffer.skills || []).map(id => {
+											const skill = skills.find(s => s.id === id);
+											return skill ? { value: skill.id, label: skill.name } : null;
+										}).filter(Boolean)}
+										onChange={selected => {
+											setNewOffer(prev => ({
+												...prev,
+												skills: selected ? (Array.isArray(selected) ? selected.map((s: any) => s.value) : []) : [],
+											}));
+										}}
+										placeholder="Selecciona o escribe skills..."
+										className="react-select-container"
+										classNamePrefix="react-select"
+										styles={{
+											control: (base) => ({
+												...base,
+												border: '2px solid #e2e8f0',
+												borderRadius: '8px',
+												padding: '4px',
+												boxShadow: 'none',
+												'&:hover': {
+													border: '2px solid #cbd5e1'
+												},
+												'&:focus-within': {
+													border: '2px solid #3b82f6',
+													boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)'
+												}
+											}),
+											multiValue: (base) => ({
+												...base,
+												backgroundColor: '#dbeafe',
+												borderRadius: '6px'
+											}),
+											multiValueLabel: (base) => ({
+												...base,
+												color: '#1e40af',
+												fontWeight: '500'
+											}),
+											multiValueRemove: (base) => ({
+												...base,
+												color: '#1e40af',
+												'&:hover': {
+													backgroundColor: '#bfdbfe',
+													color: '#1e3a8a'
+												}
+											})
+										}}
+									/>
+								) : (
+									<div className="text-gray-400 p-4 text-center border-2 border-dashed border-gray-200 rounded-lg">
+										Cargando skills...
+									</div>
+								)}
+							</div>
+							
+							<Separator />
+							
+							<div>
+								<Label className="text-sm font-semibold text-gray-700 mb-2 block">
+									Agregar Nuevos Skills
+								</Label>
+								<Input
+									type="text"
+									placeholder="Ejemplo: Python; React; Comunicación (separa con ;)"
+									onBlur={async (e) => {
+										const value = e.target.value.trim();
+										if (!value) return;
+										const newSkills = value.split(';').map(s => s.trim()).filter(Boolean);
+										for (const skillName of newSkills) {
+											await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/skills`, {
+												method: 'POST',
+												headers: { 'Content-Type': 'application/json' },
+												body: JSON.stringify({ name: skillName }),
+											});
+										}
+										e.target.value = '';
+										// Recargar skills
+										fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/skills`)
+											.then(r => r.json())
+											.then(data => {
+												if (data.success) setSkills(data.data);
+											});
+									}}
+									className="border-dashed"
+								/>
+								<p className="text-xs text-gray-500 mt-1">
+									Separa múltiples skills con punto y coma (;)
+								</p>
+							</div>
+						</CardContent>
+					</Card>
+					{/* Modalidad y Ubicación */}
+					<Card className="shadow-lg border-0">
+						<CardHeader className="bg-gradient-to-r from-purple-600 to-purple-700 text-white">
+							<CardTitle className="flex items-center gap-2">
+								<MapPin className="w-5 h-5" />
+								Modalidad y Ubicación
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="p-6 space-y-6">
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+								<div>
+									<Label htmlFor="mode" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Modalidad de Trabajo
+									</Label>
+									<Select value={newOffer.mode} onValueChange={v => handleChange('mode', v)}>
+										<SelectTrigger id="mode">
+											<SelectValue placeholder="Modalidad" />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="presencial">
+												<div className="flex items-center gap-2">
+													<Building2 className="w-4 h-4" />
+													Presencial
+												</div>
+											</SelectItem>
+											<SelectItem value="remoto">
+												<div className="flex items-center gap-2">
+													<Users className="w-4 h-4" />
+													Remoto
+												</div>
+											</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+
+								{newOffer.mode === 'presencial' && (
+									<div>
+										<Label htmlFor="location" className="text-sm font-semibold text-gray-700 mb-2 block">
+											Ciudad
+										</Label>
+										<Select value={newOffer.location} onValueChange={v => handleChange('location', v)}>
+											<SelectTrigger id="location">
+												<SelectValue placeholder="Selecciona una ciudad" />
+											</SelectTrigger>
+											<SelectContent>
+												{cities.map(city => (
+													<SelectItem key={city.id} value={city.name}>{city.name}</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+								)}
+
+								<div>
+									<Label htmlFor="type" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Tipo de Contrato
+									</Label>
+									<Select value={newOffer.type} onValueChange={v => handleChange('type', v)}>
+										<SelectTrigger id="type">
+											<SelectValue placeholder="Tipo de contrato" />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="full-time">Tiempo completo</SelectItem>
+											<SelectItem value="part-time">Medio tiempo</SelectItem>
+											<SelectItem value="internship">Prácticas</SelectItem>
+											<SelectItem value="freelance">Freelance</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div>
+									<Label htmlFor="period" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Periodo de Duración
+									</Label>
+									<Select value={newOffer.period} onValueChange={v => handleChange('period', v)}>
+										<SelectTrigger id="period">
+											<SelectValue placeholder="Periodo" />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="3 meses">3 meses</SelectItem>
+											<SelectItem value="6 meses">6 meses</SelectItem>
+											<SelectItem value="12 meses">12 meses</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					{/* Condiciones de Trabajo */}
+					<Card className="shadow-lg border-0">
+						<CardHeader className="bg-gradient-to-r from-orange-600 to-orange-700 text-white">
+							<CardTitle className="flex items-center gap-2">
+								<Clock className="w-5 h-5" />
+								Condiciones de Trabajo
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="p-6 space-y-6">
+							<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+								<div>
+									<Label htmlFor="schedule" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Horario
+									</Label>
+									<Select value={newOffer.schedule} onValueChange={v => handleChange('schedule', v)}>
+										<SelectTrigger id="schedule">
+											<SelectValue placeholder="Horario" />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="Mañana">Mañana</SelectItem>
+											<SelectItem value="Tarde">Tarde</SelectItem>
+											<SelectItem value="Mixto">Mixto</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div>
+									<Label htmlFor="min_hr" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Horas Mínimas
+									</Label>
+									<div className="relative">
+										<DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+										<Input 
+											id="min_hr"
+											type="number" 
+											placeholder="200" 
+											value={newOffer.min_hr} 
+											onChange={e => handleChange('min_hr', Number(e.target.value))} 
+											className="pl-10"
+										/>
+									</div>
+								</div>
+
+								<div className="flex items-center space-x-2 pt-8">
+									<input
+										type="checkbox"
+										id="car"
+										checked={newOffer.car}
+										onChange={e => handleChange('car', e.target.checked)}
+										className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+									/>
+									<Label htmlFor="car" className="text-sm font-medium text-gray-700">
+										Requiere vehículo propio
+									</Label>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					{/* Información Adicional */}
+					<Card className="shadow-lg border-0">
+						<CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white">
+							<CardTitle className="flex items-center gap-2">
+								<Plus className="w-5 h-5" />
+								Información Adicional
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="p-6 space-y-6">
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+								<div>
+									<Label htmlFor="tag" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Etiqueta Principal
+									</Label>
+									<Input 
+										id="tag"
+										placeholder="ej. frontend, backend, diseño" 
+										value={newOffer.tag} 
+										onChange={e => handleChange('tag', e.target.value)} 
+									/>
+								</div>
+
+								<div>
+									<Label htmlFor="jobs" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Puesto Específico
+									</Label>
+									<Input 
+										id="jobs"
+										placeholder="ej. Junior Frontend Developer" 
+										value={newOffer.jobs} 
+										onChange={e => handleChange('jobs', e.target.value)} 
+									/>
+								</div>
+
+								<div className="md:col-span-2">
+									<Label htmlFor="requisites" className="text-sm font-semibold text-gray-700 mb-2 block">
+										Requisitos Específicos
+									</Label>
+									<Textarea 
+										id="requisites"
+										placeholder="Menciona requisitos específicos, experiencia requerida, certificaciones, etc."
+										value={newOffer.requisites} 
+										onChange={e => handleChange('requisites', e.target.value)} 
+										rows={3}
+										className="resize-none"
+									/>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					{/* Error Display */}
+					{error && (
+						<Card className="border-red-200 bg-red-50">
+							<CardContent className="p-4">
+								<div className="flex items-center gap-2 text-red-700">
+									<X className="w-4 h-4" />
+									<span className="font-medium">{error}</span>
+								</div>
+							</CardContent>
+						</Card>
+					)}
+
+					{/* Submit Button */}
+					<div className="flex justify-end space-x-4 pt-6">
+						<Button 
+							type="button" 
+							variant="outline" 
+							onClick={() => router.back()}
+							className="px-8"
+						>
+							Cancelar
+						</Button>
+						<Button 
+							type="submit" 
+							disabled={submitting}
+							className="px-8 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+						>
+							{submitting ? (
+								<div className="flex items-center gap-2">
+									<div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+									{editId ? 'Actualizando...' : 'Creando...'}
+								</div>
+							) : (
+								<div className="flex items-center gap-2">
+									<Save className="w-4 h-4" />
+									{editId ? 'Actualizar Oferta' : 'Crear Oferta'}
+								</div>
+							)}
+						</Button>
+					</div>
+				</form>
+			</div>
 		</div>
 	);
 }

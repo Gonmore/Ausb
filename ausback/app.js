@@ -31,6 +31,10 @@ import cors from 'cors';
 import onboardingRoutes from './src/routes/onboardingRoutes.js';
 import geographyRoutes from './src/routes/geographyRoutes.js';
 import skillRoutes from './src/routes/skillRoutes.js';
+import studentSkillRoutes from './src/routes/studentSkillRoutes.js';
+import notificationRoutes from './src/routes/notifications.js';
+import http from 'http';
+import websocketController from './src/controllers/websocketController.js';
 // Skills API
 
 
@@ -89,6 +93,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/student', studentRouter);
 app.use('/api/students', studentRouter);
+app.use('/api/students', studentSkillRoutes);
 app.use('/api/scenter', scenterRouter);
 app.use('/api/company', companyRouter);
 app.use('/api/user-company', userCompanyRouter);
@@ -102,6 +107,8 @@ app.use('/api/dev', seedRouter);
 app.use('/api/debug', debugRouter);
 app.use('/api/geography', geographyRoutes);
 app.use('/api/skills', skillRoutes);
+app.use('/api/students', studentSkillRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Onboarding routes
 app.use('/onboarding', onboardingRoutes);
@@ -109,6 +116,24 @@ app.use('/onboarding', onboardingRoutes);
 // Static routes
 app.get('/', (req, res) => { 
     res.send('¡Hola, Mundo!');
+});
+
+// 🏥 HEALTH CHECK ENDPOINT
+app.get('/health', (req, res) => {
+    const healthCheck = {
+        timestamp: new Date().toISOString(),
+        status: 'OK',
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || 'development',
+        version: process.env.npm_package_version || '1.0.0',
+        checks: {
+            database: 'OK', // TODO: Verificar conexión a BD
+            cache: 'OK',     // TODO: Verificar Redis si se usa
+            websocket: 'OK'  // TODO: Verificar WebSocket
+        }
+    };
+    
+    res.status(200).json(healthCheck);
 });
 
 app.get('/privacy', (req, res) => { 
@@ -139,8 +164,14 @@ app.use((error, req, res, next) => {
 });
 
 // Servidor escuchando en el puerto
-app.listen(port, () => { 
-  console.log(`Aplicación escuchando en http://localhost:${port}`);
-  logger.info(`Server started on port: ${port}`);
+const server = http.createServer(app);
+
+// Inicializar WebSocket controller
+websocketController.initialize(server);
+
+server.listen(port, () => { 
+  console.log(`🚀 Aplicación escuchando en http://localhost:${port}`);
+  console.log(`🔌 WebSocket server inicializado`);
+  logger.info(`Server started on port: ${port} with WebSocket support`);
   swaggerDocs(app, port)
 });

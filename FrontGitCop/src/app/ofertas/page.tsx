@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,7 @@ export default function OfertasPage() {
   const [loadingApplications, setLoadingApplications] = useState(true);
   
   const { user, token } = useAuthStore();
+  const queryClient = useQueryClient();
 
   // Debug logging
   console.log('🔍 OfertasPage render - User:', user);
@@ -31,10 +32,37 @@ export default function OfertasPage() {
   console.log('🔍 Is user a student?', user?.role === 'student');
 
   const { data: offers = [], isLoading, error } = useQuery({
-    queryKey: ['offers'],
-    queryFn: () => {
+    queryKey: ['offers', user?.role],
+    queryFn: async () => {
       console.log('🔍 Fetching offers...');
-      return offerService.getAllOffers();
+      
+      // 🔥 Si es estudiante, usar endpoint con aptitud
+      if (user?.role === 'student' && token) {
+        try {
+          console.log('👨‍🎓 Fetching offers with aptitude for student...');
+          const response = await fetch('http://localhost:5000/api/offers/with-aptitude', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Offers with aptitude loaded:', data);
+            return data;
+          } else {
+            console.log('⚠️ Aptitude endpoint failed, falling back to regular offers');
+            return offerService.getAllOffers();
+          }
+        } catch (error) {
+          console.log('⚠️ Aptitude endpoint error, falling back to regular offers:', error);
+          return offerService.getAllOffers();
+        }
+      } else {
+        // 🔥 Para otros roles o sin autenticación, usar endpoint regular
+        return offerService.getAllOffers();
+      }
     },
     retry: 1,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -46,14 +74,15 @@ export default function OfertasPage() {
     console.log('🔄 Offers data changed:', offers);
     if (offers.length > 0) {
       console.log('📋 First offer structure:', offers[0]);
-      const filtered = offers.filter(offer => {
+      const filtered = offers.filter((offer: any) => {
         const searchLower = searchTerm.toLowerCase();
         return (
           offer.name?.toLowerCase().includes(searchLower) ||
           offer.description?.toLowerCase().includes(searchLower) ||
           offer.sector?.toLowerCase().includes(searchLower) ||
           offer.type?.toLowerCase().includes(searchLower) ||
-          offer.location?.toLowerCase().includes(searchLower)
+          offer.location?.toLowerCase().includes(searchLower) ||
+          offer.tag?.toLowerCase().includes(searchLower)
         );
       });
       console.log('🎯 Filtered offers:', filtered.length);
@@ -80,8 +109,13 @@ export default function OfertasPage() {
         });
 
         if (response.ok) {
-          const applications = await response.json();
-          console.log('📋 Applications loaded:', applications);
+          const applicationsData = await response.json();
+          console.log('📋 Applications loaded:', applicationsData);
+          
+          // 🔥 VERIFICAR QUE SEA UN ARRAY ANTES DE PROCESAR  
+          const applications = Array.isArray(applicationsData) 
+            ? applicationsData 
+            : applicationsData?.applications || [];
           
           // 🔥 CREAR MAPA DE APLICACIONES MÁS ROBUSTO
           const applicationsMap: {[key: string]: any} = {};
@@ -94,6 +128,8 @@ export default function OfertasPage() {
                 status: app.status,
                 appliedAt: app.appliedAt,
                 reviewedAt: app.reviewedAt,
+                cvViewed: app.cvViewed || false,
+                cvViewedAt: app.cvViewedAt,
                 message: app.message,
                 companyNotes: app.companyNotes,
                 rejectionReason: app.rejectionReason
@@ -154,12 +190,52 @@ export default function OfertasPage() {
         setUserApplications(prev => ({
           ...prev,
           [offer.id.toString()]: {
-            id: result.id || result.application?.id,
+            id: result.application?.id || Date.now(), // Usar el ID real si está disponible
             status: 'pending',
             appliedAt: new Date().toISOString(),
-            message: `Aplicación a ${offer.name}`
+            message: `Aplicación a ${offer.name}`,
+            reviewedAt: null,
+            cvViewed: false
           }
         }));
+
+        // 🔥 REFRESCAR DATOS DE OFERTAS Y APLICACIONES
+        queryClient.invalidateQueries({ queryKey: ['offers'] });
+        queryClient.invalidateQueries({ queryKey: ['applications'] });
+        
+        // 🔥 RECARGAR APLICACIONES DEL USUARIO INMEDIATAMENTE
+        const updatedApplicationsResponse = await fetch('http://localhost:5000/api/applications/user', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        if (updatedApplicationsResponse.ok) {
+          const updatedApplicationsData = await updatedApplicationsResponse.json();
+          const updatedApplications = Array.isArray(updatedApplicationsData) ? updatedApplicationsData : [];
+          
+          const updatedApplicationsMap: {[key: string]: any} = {};
+          updatedApplications.forEach((app: any) => {
+            const offerId = app.offerId || app.offer?.id;
+            if (offerId) {
+              updatedApplicationsMap[offerId.toString()] = {
+                id: app.id,
+                status: app.status,
+                appliedAt: app.appliedAt,
+                reviewedAt: app.reviewedAt,
+                cvViewed: app.cvViewed || false,
+                cvViewedAt: app.cvViewedAt,
+                message: app.message,
+                companyNotes: app.companyNotes,
+                rejectionReason: app.rejectionReason
+              };
+            }
+          });
+          
+          setUserApplications(updatedApplicationsMap);
+          console.log('🔄 Applications refreshed after apply:', updatedApplicationsMap);
+        }
 
         alert(`¡Aplicación enviada exitosamente!\n\nOferta: ${offer.name}\nEmpresa: ${offer.sector || 'N/A'}\n\nTe contactaremos pronto.`);
         
@@ -307,7 +383,7 @@ export default function OfertasPage() {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Buscar ofertas por título, descripción o empresa..."
+                  placeholder="Buscar ofertas por título, descripción, empresa, ubicación o skills..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -383,6 +459,20 @@ export default function OfertasPage() {
                           <Badge className="bg-green-100 text-green-800">
                             Disponible
                           </Badge>
+                          {/* 🔥 MOSTRAR APTITUD PARA ESTUDIANTES */}
+                          {user?.role === 'student' && offer.aptitude !== undefined && (
+                            <div className="text-sm font-medium">
+                              <Badge 
+                                className={
+                                  offer.aptitude >= 80 ? 'bg-green-100 text-green-800' :
+                                  offer.aptitude >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-red-100 text-red-800'
+                                }
+                              >
+                                {offer.aptitude}% compatibilidad
+                              </Badge>
+                            </div>
+                          )}
                           {offer.min_hr && (
                             <div className="text-sm font-medium text-gray-900">
                               {offer.min_hr} horas mínimas
@@ -395,6 +485,47 @@ export default function OfertasPage() {
                       <p className="text-gray-700 mb-4 line-clamp-3">
                         {offer.description}
                       </p>
+                      
+                      {/* Mostrar skills requeridos en lugar de tags */}
+                      {(() => {
+                        const skillsArray = offer.skills || offer.Skills || [];
+                        return skillsArray.length > 0 ? (
+                          <div className="mb-4">
+                            <h4 className="text-sm font-medium text-gray-700 mb-2">Habilidades requeridas:</h4>
+                            <div className="flex flex-wrap gap-1">
+                              {skillsArray.slice(0, 3).map((skill: any, index: number) => (
+                                <Badge key={skill.id} variant="secondary" className="text-xs bg-purple-100 text-purple-700">
+                                  <Tag className="h-3 w-3 mr-1" />
+                                  {skill.name}
+                                </Badge>
+                              ))}
+                              {skillsArray.length > 3 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{skillsArray.length - 3} habilidades más
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        ) : offer.tag ? (
+                        <div className="mb-4">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Tags:</h4>
+                          <div className="flex flex-wrap gap-1">
+                            {offer.tag.split(',').slice(0, 3).map((tag, index) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                <Tag className="h-3 w-3 mr-1" />
+                                {tag.trim()}
+                              </Badge>
+                            ))}
+                            {offer.tag.split(',').length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{offer.tag.split(',').length - 3} más
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ) : null;
+                      })()}
+                      
                       <div className="flex justify-between items-center">
                         <div className="flex space-x-2">
                           {offer.requisites && (
@@ -424,9 +555,20 @@ export default function OfertasPage() {
                               <span className="text-xs text-gray-500 mt-1">
                                 {new Date(userApplications[offer.id].appliedAt).toLocaleDateString()}
                               </span>
-                              {userApplications[offer.id].reviewedAt && (
-                                <span className="text-xs text-green-600">
+                              {/* 🔥 MEJORAR INDICADOR DE CV REVISADO */}
+                              {userApplications[offer.id].cvViewed && (
+                                <span className="text-xs text-green-600 flex items-center">
                                   ✓ CV revisado
+                                  {userApplications[offer.id].cvViewedAt && (
+                                    <span className="ml-1 text-gray-500">
+                                      ({new Date(userApplications[offer.id].cvViewedAt).toLocaleDateString()})
+                                    </span>
+                                  )}
+                                </span>
+                              )}
+                              {userApplications[offer.id].reviewedAt && !userApplications[offer.id].cvViewed && (
+                                <span className="text-xs text-blue-600">
+                                  📋 Aplicación revisada
                                 </span>
                               )}
                             </div>
@@ -458,7 +600,7 @@ export default function OfertasPage() {
                             >
                               Solo estudiantes
                             </Button>
-                          ) : userApplications[offer.id] ? (
+                          ) : userApplications[offer.id] && userApplications[offer.id].status !== 'withdrawn' ? (
                             <Button 
                               size="sm"
                               disabled
@@ -550,9 +692,24 @@ export default function OfertasPage() {
                   </div>
                 )}
 
-                {selectedOffer.tag && (
+                {/* Mostrar skills requeridos en el modal */}
+                {(() => {
+                  const skillsArray = selectedOffer.skills || selectedOffer.Skills || [];
+                  return skillsArray.length > 0 ? (
+                    <div>
+                      <h3 className="font-semibold mb-2">Habilidades requeridas</h3>
+                      <div className="flex flex-wrap gap-1">
+                        {skillsArray.map((skill: any) => (
+                        <Badge key={skill.id} variant="secondary" className="text-xs bg-purple-100 text-purple-700">
+                          <Tag className="h-3 w-3 mr-1" />
+                          {skill.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : selectedOffer.tag ? (
                   <div>
-                    <h3 className="font-semibold mb-2">Tecnologías/Habilidades</h3>
+                    <h3 className="font-semibold mb-2">Tecnologías/Habilidades (Tags)</h3>
                     <div className="flex flex-wrap gap-1">
                       {selectedOffer.tag.split(',').map((tag, index) => (
                         <Badge key={index} variant="secondary" className="text-xs">
@@ -562,7 +719,8 @@ export default function OfertasPage() {
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null;
+                })()}
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>

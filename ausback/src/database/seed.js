@@ -275,70 +275,12 @@ async function seedDatabase() {
             }
         ], { ignoreDuplicates: true });
 
-        // 7. Crear Ofertas
-        logger.info('💼 Creando ofertas de prácticas...');
-        const offers = await Offer.bulkCreate([
-            {
-                name: "Prácticas Desarrollo Frontend",
-                location: "Madrid",
-                mode: "Presencial", 
-                type: "Desarrollo Web",
-                period: "6 meses",
-                schedule: "Mañana",
-                min_hr: 400,
-                car: false,
-                sector: "Tecnología",
-                tag: "React, JavaScript",
-                description: "Oportunidad de prácticas en desarrollo frontend con React y tecnologías modernas",
-                jobs: "Desarrollo de interfaces, maquetación, testing",
-                requisites: "Conocimientos en HTML, CSS, JavaScript. Valorable React"
-            },
-            {
-                name: "Prácticas Marketing Digital",
-                location: "Barcelona",
-                mode: "Híbrido",
-                type: "Marketing",
-                period: "4 meses", 
-                schedule: "Tarde",
-                min_hr: 300,
-                car: false,
-                sector: "Marketing",
-                tag: "SEO, SEM, Redes Sociales",
-                description: "Prácticas en agencia de marketing digital especializada en e-commerce",
-                jobs: "Gestión de campañas, análisis de métricas, content marketing",
-                requisites: "Formación en marketing digital. Conocimientos de Google Ads y Analytics"
-            },
-            {
-                name: "Prácticas Administración",
-                location: "Valencia",
-                mode: "Presencial",
-                type: "Gestión",
-                period: "5 meses",
-                schedule: "Mañana",
-                min_hr: 350, 
-                car: true,
-                sector: "Consultoría",
-                tag: "Contabilidad, RRHH",
-                description: "Prácticas en departamento de administración de consultora",
-                jobs: "Gestión documental, apoyo contable, procesos de RRHH",
-                requisites: "Estudios en administración. Nivel intermedio de Excel"
-            },
-            {
-                name: "Prácticas Soporte IT",
-                location: "Sevilla", 
-                mode: "Presencial",
-                type: "Tecnología",
-                period: "6 meses",
-                schedule: "Mañana",
-                min_hr: 400,
-                car: false,
-                sector: "Tecnología",
-                tag: "Hardware, Software, Redes",
-                description: "Soporte técnico en empresa de servicios informáticos",
-                jobs: "Resolución de incidencias, mantenimiento equipos, configuración redes",
-                requisites: "Formación en sistemas informáticos. Conocimientos de redes y hardware"
-            }
-        ], { ignoreDuplicates: true });
+        // 7. Ofertas de prácticas
+        // ELIMINADO: datos hardcodeados de ofertas de prueba
+        // Las ofertas deben ser creadas por las empresas registradas a través de la interfaz
+        // usando el sistema profesional de Skills y OfferSkill
+        logger.info('💼 Sistema de ofertas preparado - las empresas crearán ofertas con skills profesionales');
+        const offers = []; // No crear ofertas hardcodeadas
 
         logger.info('✅ Seed completado exitosamente!');
         logger.info(`📊 Datos creados:
@@ -348,7 +290,7 @@ async function seedDatabase() {
         - ${users.length} usuarios
         - ${students.length} perfiles de estudiantes
         - ${tutors.length} tutores
-        - ${offers.length} ofertas de prácticas`);
+        - Sistema de ofertas preparado (las empresas crearán ofertas profesionales)`);
 
         return {
             success: true,

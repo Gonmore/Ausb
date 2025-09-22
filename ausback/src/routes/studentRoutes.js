@@ -12,6 +12,11 @@ router.post('/tokens/use', authenticateJWT, studentController.useTokens);
 router.get('/revealed-cvs', authenticateJWT, studentController.getRevealedCVs);
 router.get('/revealed-candidates', authenticateJWT, studentController.getRevealedCandidates); // Nueva ruta agregada
 
+// 🔥 RUTAS PARA GESTIÓN DE SKILLS DE ESTUDIANTES
+router.get('/skills', authenticateJWT, studentController.getStudentSkills);
+router.post('/skills', authenticateJWT, studentController.addStudentSkills);
+router.delete('/skills/:skillId', authenticateJWT, studentController.removeStudentSkill);
+
 // 🔥 RUTAS EXISTENTES GENERALES
 router.get('/', authenticateJWT, studentController.getAllStudents);
 

@@ -286,7 +286,8 @@ async function searchStudents(req, res) {
             if (grade) whereClause.grade = grade;
             if (course) whereClause.course = course;
             if (car !== undefined) whereClause.car = car;
-            if (tag) whereClause.tag = { [sequelize.Op.like]: `%${tag}%` };
+            // ELIMINADO: búsqueda por tag hardcodeado - usar Skills profesionales
+            // if (tag) whereClause.tag = { [sequelize.Op.like]: `%${tag}%` };
 
             // Buscar estudiantes
             const students = await Student.findAll({

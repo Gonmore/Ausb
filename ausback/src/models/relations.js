@@ -1,7 +1,42 @@
 import { Skill } from './skill.js';
+import { StudentSkill } from './studentSkill.js';
 // Relación muchos a muchos: Offer-Skill
 Offer.belongsToMany(Skill, { through: 'OfferSkill' });
 Skill.belongsToMany(Offer, { through: 'OfferSkill' });
+
+// Relación muchos a muchos: Student-Skill
+Student.belongsToMany(Skill, { 
+    through: StudentSkill,
+    foreignKey: 'studentId',
+    otherKey: 'skillId',
+    as: 'skills'
+});
+Skill.belongsToMany(Student, { 
+    through: StudentSkill,
+    foreignKey: 'skillId',
+    otherKey: 'studentId',
+    as: 'students'
+});
+
+// Relaciones directas con StudentSkill
+Student.hasMany(StudentSkill, { 
+    foreignKey: 'studentId',
+    as: 'studentSkills'
+});
+StudentSkill.belongsTo(Student, { 
+    foreignKey: 'studentId',
+    as: 'student'
+});
+
+Skill.hasMany(StudentSkill, { 
+    foreignKey: 'skillId',
+    as: 'studentSkills'
+});
+StudentSkill.belongsTo(Skill, { 
+    foreignKey: 'skillId',
+    as: 'skill'
+});
+
 import { User } from "./users.js";
 import { Scenter } from "./scenter.js";
 import { Tutor } from "./tutor.js";
@@ -183,5 +218,7 @@ export {
     TokenTransaction,
     UserCompany,
     StudentToken,
-    RevealedCV
+    RevealedCV,
+    Skill,
+    StudentSkill
 };

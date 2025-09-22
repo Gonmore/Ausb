@@ -11,6 +11,7 @@ import logger from '../logs/logger.js';
 import { StudentToken } from '../models/studentToken.js';
 import affinityCalculator from '../services/affinityCalculator.js';
 import companyService from '../services/companyService.js';
+import notificationService from '../services/notificationService.js';
 import { UserCompany } from '../models/relations.js';
 
 /**
@@ -94,9 +95,14 @@ async function applyToOffer(req, res) {
 
     try {
         await sequelize.transaction(async (t) => {
-            // Buscar el estudiante
+            // Buscar el estudiante con información del usuario
             const student = await Student.findOne({
                 where: { userId },
+                include: [{
+                    model: User,
+                    as: 'user',
+                    attributes: ['name', 'surname', 'email']
+                }],
                 transaction: t
             });
 
@@ -148,7 +154,25 @@ async function applyToOffer(req, res) {
                 status: 'pending'
             }, { transaction: t });
 
-            logger.info({ userId, applicationId: application.id }, "Application created");
+            // 🚀 ENVIAR NOTIFICACIÓN A LA EMPRESA (Simplificado temporalmente)
+            try {
+                await notificationService.sendNotificationToUser(company.id, {
+                    title: 'Nueva aplicación recibida',
+                    message: `${student.user.name} se ha postulado a la oferta "${offer.name}"`,
+                    type: 'new_application',
+                    priority: 'medium',
+                    metadata: {
+                        applicationId: application.id,
+                        studentName: student.user.name,
+                        offerName: offer.name
+                    }
+                });
+            } catch (notificationError) {
+                console.log('⚠️ Error sending notification (not critical):', notificationError.message);
+                // No fallar la aplicación por error de notificación
+            }
+
+            logger.info({ userId, applicationId: application.id }, "Application created with notification sent");
             res.status(201).json({
                 mensaje: 'Aplicación enviada exitosamente',
                 application: {
@@ -230,11 +254,10 @@ export const getUserApplications = async (req, res) => {
         {
           model: Offer,
           as: 'offer', // Usar el alias correcto de relations.js
-          attributes: ['id', 'name', 'location', 'sector', 'type', 'description'],
+          attributes: ['id', 'name', 'location', 'sector', 'type', 'description', 'jobs', 'requisites'],
           include: [
             {
               model: Company,
-              // 🔥 VERIFICAR si existe este alias en relations.js o usar sin alias
               attributes: ['id', 'name', 'sector', 'city']
             }
           ]
@@ -252,13 +275,25 @@ export const getUserApplications = async (req, res) => {
       appliedAt: app.appliedAt,
       reviewedAt: app.reviewedAt,
       cvViewed: app.cvViewed || false,
+      cvViewedAt: app.cvViewedAt,
       message: app.message,
+      companyNotes: app.companyNotes,
+      rejectionReason: app.rejectionReason,
       offer: app.offer ? {
         id: app.offer.id,
         name: app.offer.name,
         location: app.offer.location,
         sector: app.offer.sector,
-        type: app.offer.type
+        type: app.offer.type,
+        description: app.offer.description,
+        jobs: app.offer.jobs,
+        requisites: app.offer.requisites,
+        company: app.offer.company ? {
+          id: app.offer.company.id,
+          name: app.offer.company.name,
+          sector: app.offer.company.sector,
+          city: app.offer.company.city
+        } : null
       } : null
     }));
 
@@ -746,7 +781,59 @@ async function updateApplicationStatus(req, res) {
             }]
         });
 
-        logger.info({ userId, applicationId, newStatus: status }, "Application status updated successfully");
+        // 🚀 ENVIAR NOTIFICACIÓN AL ESTUDIANTE
+        const notificationType = status === 'accepted' ? 'application_accepted' : 'application_rejected';
+        const notificationTitle = status === 'accepted' 
+            ? '¡Felicidades! Tu aplicación fue aceptada' 
+            : 'Estado de tu aplicación actualizado';
+        const notificationMessage = status === 'accepted'
+            ? `Has sido aceptado para la oferta "${updatedApplication.Offer.name}" en ${updatedApplication.Offer.Company.name}`
+            : `Tu aplicación para "${updatedApplication.Offer.name}" ha sido ${status === 'rejected' ? 'rechazada' : 'actualizada'}`;
+
+        await notificationService.notify(notificationType, {
+            recipientId: updatedApplication.Student.id,
+            recipientType: 'student',
+            title: notificationTitle,
+            message: notificationMessage,
+            priority: status === 'accepted' ? 'high' : 'medium',
+            metadata: {
+                applicationId: updatedApplication.id,
+                offerId: updatedApplication.Offer.id,
+                companyId: updatedApplication.Offer.Company.id,
+                status: status,
+                offerName: updatedApplication.Offer.name,
+                companyName: updatedApplication.Offer.Company.name,
+                rejectionReason: rejectionReason || null
+            },
+            action: {
+                type: 'view_application',
+                url: `/estudiante/aplicaciones/${updatedApplication.id}`,
+                message: status === 'accepted' ? 'Ver detalles' : 'Ver aplicación'
+            }
+        });
+
+        // 🚀 NOTIFICAR OTRAS EMPRESAS SI EL ESTUDIANTE FUE ACEPTADO
+        if (status === 'accepted' && otherApplications.length > 0) {
+            // Enviar notificaciones a las empresas cuyas aplicaciones fueron rechazadas automáticamente
+            for (const otherApp of otherApplications) {
+                await notificationService.notify('application_rejected', {
+                    recipientId: otherApp.Offer.Company.id,
+                    recipientType: 'company',
+                    title: 'Candidato ya no disponible',
+                    message: `${updatedApplication.Student.User.name} ha sido aceptado en otra empresa y ya no está disponible`,
+                    priority: 'low',
+                    metadata: {
+                        applicationId: otherApp.id,
+                        studentId: updatedApplication.Student.id,
+                        studentName: updatedApplication.Student.User.name,
+                        offerName: otherApp.Offer.name,
+                        reason: 'candidate_accepted_elsewhere'
+                    }
+                });
+            }
+        }
+
+        logger.info({ userId, applicationId, newStatus: status }, "Application status updated successfully with notifications sent");
         
         res.json({
             mensaje: status === 'accepted' 

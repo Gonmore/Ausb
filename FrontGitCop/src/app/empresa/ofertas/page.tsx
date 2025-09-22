@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,12 +21,179 @@ import {
   Search,
   ChevronRight,
   TrendingUp,
-  CheckCircle,    // 🔥 AGREGAR
-  Calendar,       // 🔥 AGREGAR
-  XCircle         // 🔥 AGREGAR
+  CheckCircle,
+  Calendar,
+  XCircle,
+  Loader2,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { AuthGuard } from '@/components/auth-guard';
+import { useOffers } from '@/hooks/useOffers';
+import { useRevealedCVs } from '@/hooks/useRevealedCVs';
+import ConfirmationDialog from '@/components/ui/ConfirmationDialog';
+import LoadingStats from '@/components/ui/LoadingStats';
+import { useToast } from '@/components/ui/toast';
+
+// 🚀 OPTIMIZACIÓN: Componente memoizado para cada oferta
+const OfferCard = memo(({ 
+  offer, 
+  onViewCandidates, 
+  onSearchBetter, 
+  onDelete, 
+  onEdit,
+  getAffinityColor,
+  isDeleting = false
+}: {
+  offer: any;
+  onViewCandidates: (offer: any) => void;
+  onSearchBetter: (offer: any) => void;
+  onDelete: (offerId: number) => Promise<void>;
+  onEdit: (offerId: number) => void;
+  getAffinityColor: (level: string) => string;
+  isDeleting?: boolean;
+}) => {
+  return (
+    <Card className="hover:shadow-lg transition-shadow">
+      <CardContent className="p-6">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            {/* Header de la oferta */}
+            <div className="mb-4">
+              <h3 className="text-xl font-semibold mb-2">{offer.name}</h3>
+              <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                <div className="flex items-center gap-1">
+                  <MapPin className="w-4 h-4" />
+                  {offer.location}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" />
+                  {offer.mode}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Users className="w-4 h-4" />
+                  {offer.candidateStats?.total || 0} candidatos
+                </div>
+              </div>
+              <p className="text-gray-700 text-sm">{offer.description}</p>
+            </div>
+
+            {/* Estadísticas de candidatos */}
+            {(offer.candidateStats?.total || 0) > 0 && (
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <h4 className="font-medium text-gray-900 mb-3">Candidatos por Afinidad:</h4>
+                <div className="grid grid-cols-5 gap-2">
+                  {Object.entries(offer.candidateStats?.byAffinity || {}).map(([level, count]) => (
+                    <div key={level} className="text-center">
+                      <div className={`p-2 rounded-lg ${getAffinityColor(level)}`}>
+                        <div className="font-bold">{count as number}</div>
+                        <div className="text-xs capitalize">{level.replace('_', ' ')}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Skills de la oferta */}
+            <div className="mb-4">
+              <h4 className="font-medium text-gray-700 mb-2">Habilidades requeridas:</h4>
+              <div className="flex flex-wrap gap-2">
+                {(offer.skills && offer.skills.length > 0)
+                  ? offer.skills.map((skill: any, index: number) => (
+                      <Badge key={index} variant="outline">{skill.name}</Badge>
+                    ))
+                  : <span className="text-gray-400">Sin skills asignados</span>
+                }
+              </div>
+            </div>
+          </div>
+
+          {/* Botones de acción */}
+          <div className="flex flex-col gap-3 ml-4">
+            {/* Botones principales */}
+            <div className="flex flex-col gap-2">
+              {(offer.candidateStats?.total || 0) > 0 ? (
+                <>
+                  <Button
+                    onClick={() => onViewCandidates(offer)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    Ver Candidatos ({offer.candidateStats?.total || 0})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => onSearchBetter(offer)}
+                    className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                  >
+                    <Search className="w-4 h-4 mr-2" />
+                    Buscar Mejores
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  onClick={() => onSearchBetter(offer)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  <Search className="w-4 h-4 mr-2" />
+                  Buscar Candidatos
+                </Button>
+              )}
+            </div>
+            
+            {/* Separador visual */}
+            <div className="border-t border-gray-200"></div>
+            
+            {/* Botones de gestión */}
+            <div className="flex gap-2 justify-center">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-2 h-8 w-8"
+                onClick={() => onEdit(offer.id)}
+                title="Editar oferta"
+              >
+                <Edit className="w-4 h-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 h-8 w-8"
+                onClick={() => onDelete(offer.id)}
+                disabled={isDeleting}
+                title="Eliminar oferta"
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+OfferCard.displayName = 'OfferCard';
+
+// 🚀 OPTIMIZACIÓN: Componente de loading memoizado
+const LoadingSpinner = memo(() => (
+  <div className="container mx-auto px-4 py-8">
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex flex-col items-center space-y-4">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+        <p className="text-gray-600 text-lg">Cargando ofertas...</p>
+      </div>
+    </div>
+  </div>
+));
+
+LoadingSpinner.displayName = 'LoadingSpinner';
 
 interface Candidate {
   id: number;
@@ -87,8 +254,16 @@ interface Offer {
 
 function CompanyOffersContent() {
   const router = useRouter();
-  const [offers, setOffers] = useState<Offer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { token } = useAuthStore();
+  
+  // 🚀 OPTIMIZACIÓN: Usar hooks customizados
+  const { offers, loading, error, deleteOffer } = useOffers();
+  const { revealedCVs, addRevealedCV, isRevealed } = useRevealedCVs();
+  
+  // 🎯 UX: Sistema de toasts mejorado
+  const { addToast, success, error: showError, warning, info } = useToast();
+  
+  // Estados para modales y formularios
   const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
   const [showCandidatesModal, setShowCandidatesModal] = useState(false);
   const [showBetterCandidatesModal, setBetterCandidatesModal] = useState(false);
@@ -103,7 +278,6 @@ function CompanyOffersContent() {
     message: ''
   });
   const [actionType, setActionType] = useState<'free' | 'paid'>('free');
-  const [revealedCVs, setRevealedCVs] = useState<number[]>([]);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -119,70 +293,27 @@ function CompanyOffersContent() {
     reason: '',
     message: ''
   });
-  const { token } = useAuthStore(); // 🔥 VERIFICAR QUE ESTÉ PRESENTE
 
-  // Debug del token
-  useEffect(() => {
-    console.log('🔍 Token disponible:', !!token);
-    console.log('🔍 Token value:', token ? 'EXISTS' : 'NULL');
-  }, [token]);
+  // 🎯 UX: Estados de loading para acciones específicas
+  const [loadingStates, setLoadingStates] = useState({
+    viewingCV: false,
+    contacting: false,
+    accepting: false,
+    interviewing: false,
+    rejecting: false,
+    deletingOffer: null as number | null
+  });
 
-  // Cargar ofertas con candidatos
-  useEffect(() => {
-    const fetchOffers = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('http://localhost:5000/api/offers/company-with-candidates', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          }
-        });
+  // 🎯 UX: Estados de confirmación
+  const [confirmations, setConfirmations] = useState({
+    deleteOffer: { isOpen: false, offerId: null as number | null },
+    acceptCandidate: { isOpen: false },
+    rejectCandidate: { isOpen: false },
+    scheduleInterview: { isOpen: false }
+  });
 
-        if (response.ok) {
-          const data = await response.json();
-          setOffers(data);
-          console.log('✅ Ofertas con candidatos cargadas:', data);
-        }
-      } catch (error) {
-        console.error('❌ Error cargando ofertas:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (token) {
-      fetchOffers();
-    }
-  }, [token]);
-
-  // Cargar CVs revelados
-  useEffect(() => {
-    const fetchRevealedCVs = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/students/revealed-cvs', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setRevealedCVs(data.revealedStudentIds);
-          console.log('✅ CVs revelados cargados:', data.revealedStudentIds);
-        }
-      } catch (error) {
-        console.error('❌ Error cargando CVs revelados:', error);
-      }
-    };
-
-    if (token) {
-      fetchRevealedCVs();
-    }
-  }, [token]);
-
-  const getAffinityColor = (level: string) => {
+  // � OPTIMIZACIÓN: Memoizar funciones que no cambian
+  const getAffinityColor = useCallback((level: string) => {
     switch (level) {
       case 'muy alto': return 'bg-green-100 text-green-800 border-green-300';
       case 'alto': return 'bg-blue-100 text-blue-800 border-blue-300';
@@ -190,23 +321,34 @@ function CompanyOffersContent() {
       case 'bajo': return 'bg-orange-100 text-orange-800 border-orange-300';
       default: return 'bg-gray-100 text-gray-800 border-gray-300';
     }
-  };
+  }, []);
 
-  const getAffinityIcon = (level: string) => {
+  const getAffinityIcon = useCallback((level: string) => {
     switch (level) {
       case 'muy alto': return <Star className="w-4 h-4 text-green-600" />;
       case 'alto': return <Target className="w-4 h-4 text-blue-600" />;
       case 'medio': return <Brain className="w-4 h-4 text-yellow-600" />;
       default: return <Brain className="w-4 h-4 text-gray-600" />;
     }
-  };
+  }, []);
 
-  const handleViewCandidates = (offer: Offer) => {
+  // 🚀 OPTIMIZACIÓN: Memoizar contadores calculados
+  const offerStats = useMemo(() => {
+    return offers.map(offer => ({
+      ...offer,
+      totalCandidates: offer.candidateStats?.total || 0,
+      hasHighAffinityCandidates: (offer.candidateStats?.byAffinity?.['muy alto'] || 0) + 
+                                   (offer.candidateStats?.byAffinity?.['alto'] || 0) > 0
+    }));
+  }, [offers]);
+
+  // 🚀 OPTIMIZACIÓN: Funciones de UI memoizadas
+  const handleViewCandidates = useCallback((offer: Offer) => {
     setSelectedOffer(offer);
     setShowCandidatesModal(true);
-  };
+  }, []);
 
-  const handleSearchBetterCandidates = async (offer: Offer) => {
+  const handleSearchBetterCandidates = useCallback(async (offer: Offer) => {
     setSelectedOffer(offer);
     setLoadingBetterCandidates(true);
     setBetterCandidatesModal(true);
@@ -231,16 +373,18 @@ function CompanyOffersContent() {
         const data = await response.json();
         setBetterCandidates(data.students);
         console.log('🔍 Mejores candidatos encontrados:', data.students.length);
+      } else {
+        console.error('❌ Error buscando candidatos:', response.status);
       }
     } catch (error) {
       console.error('❌ Error buscando mejores candidatos:', error);
     } finally {
       setLoadingBetterCandidates(false);
     }
-  };
+  }, [token]);
 
   // 🔥 VER CV GRATUITO para candidatos que aplicaron
-  const handleViewCVFree = async (student: any) => {
+  const handleViewCVFree = useCallback(async (student: any) => {
     try {
       console.log('📄 Ver CV gratuito para candidato:', student.id);
       
@@ -272,10 +416,10 @@ function CompanyOffersContent() {
       console.error('❌ Error obteniendo CV:', error);
       alert('Error al obtener el CV del estudiante');
     }
-  };
+  }, [token]);
 
   // 🔥 CONTACTAR GRATUITO para candidatos que aplicaron
-  const handleContactFree = (student: any, offerName: string) => {
+  const handleContactFree = useCallback((student: any, offerName: string) => {
     // Mostrar modal elegante en lugar de alert
     setSelectedStudentForAction(student);
     setActionType('free');
@@ -284,18 +428,59 @@ function CompanyOffersContent() {
       message: `Estimado/a ${student.User.name},\n\nHemos revisado tu aplicación para la oferta "${offerName}" y nos gustaría conocerte mejor.\n\n¿Estarías disponible para una entrevista?\n\nSaludos cordiales.`
     });
     setShowContactModal(true);
-  };
+  }, []);
 
-  // REEMPLAZAR la función handleViewCVWithTokens:
+  // 🎯 UX MEJORADA: Eliminar oferta con confirmación
+  const handleDeleteOffer = useCallback(async (offerId: number) => {
+    setConfirmations(prev => ({
+      ...prev,
+      deleteOffer: { isOpen: true, offerId }
+    }));
+  }, []);
 
+  const confirmDeleteOffer = useCallback(async () => {
+    const offerId = confirmations.deleteOffer.offerId;
+    if (!offerId) return;
+
+    // Activar loading state específico
+    setLoadingStates(prev => ({ ...prev, deletingOffer: offerId }));
+
+    try {
+      const result = await deleteOffer(offerId);
+      if (result) {
+        success('Oferta eliminada exitosamente');
+      } else {
+        showError('Error al eliminar la oferta');
+      }
+    } catch (error) {
+      showError('Error al eliminar la oferta');
+    } finally {
+      // Cerrar confirmación y limpiar loading
+      setConfirmations(prev => ({
+        ...prev,
+        deleteOffer: { isOpen: false, offerId: null }
+      }));
+      setLoadingStates(prev => ({ ...prev, deletingOffer: null }));
+    }
+  }, [confirmations.deleteOffer.offerId, deleteOffer, success, showError]);
+
+  const handleEditOffer = useCallback((offerId: number) => {
+    router.push(`/empresa/ofertas/edit/${offerId}`);
+  }, [router]);
+
+  // 🎯 UX MEJORADA: Ver CV con tokens con feedback visual
   const handleViewCVWithTokens = async (studentId: number) => {
+    // Activar loading state específico
+    setLoadingStates(prev => ({ ...prev, viewingCV: true }));
+    
     try {
       console.log('📄 Ver CV con tokens para estudiante:', studentId);
       
-      const isAlreadyRevealed = revealedCVs.includes(studentId);
+      const isAlreadyRevealed = isRevealed(studentId);
       
       if (isAlreadyRevealed) {
         console.log('✅ CV ya revelado previamente - Acceso gratuito');
+        info('CV ya revelado previamente - Acceso gratuito');
       }
       
       const response = await fetch(`http://localhost:5000/api/students/${studentId}/view-cv`, {
@@ -312,7 +497,7 @@ function CompanyOffersContent() {
       if (!response.ok) {
         const errorData = await response.json();
         if (errorData.code === 'INSUFFICIENT_TOKENS') {
-          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para ver este CV.\n\n¿Quieres recargar tokens?`);
+          warning(`Tokens insuficientes. Necesitas ${errorData.required} tokens para ver este CV.`);
           // 🔥 OPCIONAL: Redirigir a página de tokens
           // window.open('/empresa/tokens', '_blank');
           return;
@@ -325,8 +510,9 @@ function CompanyOffersContent() {
       
       // 🔥 ACTUALIZAR INMEDIATAMENTE EL STATE DE CVs REVELADOS
       if (!isAlreadyRevealed && !cvData.wasAlreadyRevealed) {
-        setRevealedCVs(prev => [...prev, studentId]);
+        addRevealedCV(studentId);
         console.log(`💾 CV del estudiante ${studentId} marcado como revelado`);
+        success('CV desbloqueado correctamente');
       }
       
       const student = betterCandidates.find(s => s.id === studentId);
@@ -337,7 +523,10 @@ function CompanyOffersContent() {
       
     } catch (error) {
       console.error('❌ Error obteniendo CV:', error);
-      alert('Error al obtener el CV del estudiante');
+      showError('Error al obtener el CV del estudiante');
+    } finally {
+      // Desactivar loading state
+      setLoadingStates(prev => ({ ...prev, viewingCV: false }));
     }
   };
 
@@ -352,8 +541,12 @@ function CompanyOffersContent() {
     setShowContactModal(true);
   };
 
+  // 🎯 UX MEJORADA: Contactar estudiante con feedback visual
   const handleSendContact = async () => {
     if (!selectedStudentForAction) return;
+
+    // Activar loading state específico
+    setLoadingStates(prev => ({ ...prev, contacting: true }));
 
     try {
       const response = await fetch(`http://localhost:5000/api/students/${selectedStudentForAction.id}/contact`, {
@@ -372,7 +565,7 @@ function CompanyOffersContent() {
       if (!response.ok) {
         const errorData = await response.json();
         if (errorData.code === 'INSUFFICIENT_TOKENS') {
-          alert(`❌ Tokens insuficientes.\nNecesitas ${errorData.required} tokens para contactar.`);
+          warning(`Tokens insuficientes. Necesitas ${errorData.required} tokens para contactar.`);
           return;
         }
         throw new Error('Error al contactar el estudiante');
@@ -388,13 +581,17 @@ function CompanyOffersContent() {
       
       window.open(emailUrl);
       
-      // Cerrar modal
+      // Cerrar modal y mostrar éxito
       setShowContactModal(false);
       setContactForm({ subject: '', message: '' });
+      success(`Contacto enviado a ${selectedStudentForAction.User?.name}`);
       
     } catch (error) {
       console.error('❌ Error contactando estudiante:', error);
-      alert('Error al contactar el estudiante');
+      showError('Error al contactar el estudiante');
+    } finally {
+      // Desactivar loading state
+      setLoadingStates(prev => ({ ...prev, contacting: false }));
     }
   };
 
@@ -559,149 +756,54 @@ function CompanyOffersContent() {
   };
 
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Mis Ofertas</h1>
-        <p className="text-gray-600">Gestiona tus ofertas y revisa candidatos con valoración inteligente</p>
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Mis Ofertas</h1>
+            <p className="text-gray-600">Gestiona tus ofertas y revisa candidatos con valoración inteligente</p>
+          </div>
+          <Button 
+            className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2" 
+            onClick={() => router.push('/empresa/ofertas/new')}
+          >
+            <Plus className="w-4 h-4" />
+            Nueva Oferta
+          </Button>
+        </div>
       </div>
 
-      {/* Lista de ofertas */}
+      {/* 🎯 UX MEJORADA: Estadísticas con loading visual */}
+      <LoadingStats 
+        isLoading={loading}
+        stats={{
+          totalApplications: offerStats.reduce((acc, offer) => acc + offer.totalCandidates, 0),
+          viewedCVs: revealedCVs.length,
+          interviews: 0, // TODO: Implementar contador de entrevistas
+          accepted: 0,   // TODO: Implementar contador de aceptados
+          pending: offerStats.reduce((acc, offer) => acc + offer.totalCandidates, 0),
+          contacted: 0   // TODO: Implementar contador de contactados
+        }}
+      />
+
+      {/* Lista de ofertas optimizada */}
       <div className="grid gap-6">
-        {offers.map((offer) => (
-          <Card key={offer.id} className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  {/* Header de la oferta */}
-                  <div className="mb-4">
-                    <h3 className="text-xl font-semibold mb-2">{offer.name}</h3>
-                    <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                      <div className="flex items-center gap-1">
-                        <MapPin className="w-4 h-4" />
-                        {offer.location}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {offer.mode}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Users className="w-4 h-4" />
-                        {offer.candidateStats.total} candidatos
-                      </div>
-                    </div>
-                    <p className="text-gray-700 text-sm">{offer.description}</p>
-                  </div>
-
-                  {/* Estadísticas de candidatos */}
-                  {offer.candidateStats.total > 0 && (
-                    <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                      <h4 className="font-medium text-gray-900 mb-3">Candidatos por Afinidad:</h4>
-                      <div className="grid grid-cols-5 gap-2">
-                        {Object.entries(offer.candidateStats.byAffinity).map(([level, count]) => (
-                          <div key={level} className="text-center">
-                            <div className={`p-2 rounded-lg ${getAffinityColor(level)}`}>
-                              <div className="font-bold">{count}</div>
-                              <div className="text-xs capitalize">{level.replace('_', ' ')}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Skills de la oferta */}
-                  <div className="mb-4">
-                    <h4 className="font-medium text-gray-700 mb-2">Habilidades requeridas:</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {(offer.skills && offer.skills.length > 0)
-                        ? offer.skills.map((skill: any, index: number) => (
-                            <Badge key={index} variant="outline">{skill.name}</Badge>
-                          ))
-                        : <span className="text-gray-400">Sin skills asignados</span>
-                      }
-                    </div>
-                  </div>
-                </div>
-
-                {/* Botones de acción */}
-                <div className="flex flex-col gap-2 ml-4">
-                  <div className="flex flex-col gap-2">
-                    {offer.candidateStats.total > 0 ? (
-                      <>
-                        <Button
-                          onClick={() => handleViewCandidates(offer)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white"
-                        >
-                          <Users className="w-4 h-4 mr-2" />
-                          Ver Candidatos ({offer.candidateStats.total})
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleSearchBetterCandidates(offer)}
-                          className="border-purple-300 text-purple-700 hover:bg-purple-50"
-                        >
-                          <Search className="w-4 h-4 mr-2" />
-                          Buscar Mejores
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        onClick={() => handleSearchBetterCandidates(offer)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white"
-                      >
-                        <Search className="w-4 h-4 mr-2" />
-                        Buscar Candidatos
-                      </Button>
-                    )}
-                    <Button
-                      variant="destructive"
-                      className="bg-red-600 hover:bg-red-700 text-white"
-                      onClick={async () => {
-                        if (window.confirm('¿Seguro que quieres eliminar esta oferta?')) {
-                          try {
-                            const response = await fetch(`http://localhost:5000/api/offers/${offer.id}`, {
-                              method: 'DELETE',
-                              headers: {
-                                'Authorization': `Bearer ${token}`,
-                                'Content-Type': 'application/json',
-                              },
-                            });
-                            if (response.ok) {
-                              setOffers((prev) => prev.filter((o) => o.id !== offer.id));
-                            } else {
-                              alert('Error al eliminar la oferta');
-                            }
-                          } catch (error) {
-                            alert('Error al eliminar la oferta');
-                          }
-                        }
-                      }}
-                    >
-                      Eliminar
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                      onClick={() => router.push(`/empresa/ofertas/edit/${offer.id}`)}
-                    >
-                      Editar
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {offerStats.map((offer) => (
+          <OfferCard
+            key={offer.id}
+            offer={offer}
+            onViewCandidates={handleViewCandidates}
+            onSearchBetter={handleSearchBetterCandidates}
+            onDelete={handleDeleteOffer}
+            onEdit={handleEditOffer}
+            getAffinityColor={getAffinityColor}
+            isDeleting={loadingStates.deletingOffer === offer.id}
+          />
         ))}
       </div>
 
@@ -779,17 +881,37 @@ function CompanyOffersContent() {
                           size="sm" 
                           variant="outline"
                           onClick={() => handleViewCVFree(candidate.student)}
+                          disabled={loadingStates.viewingCV}
                         >
-                          <Eye className="w-4 h-4 mr-1" />
-                          Ver CV (Gratis)
+                          {loadingStates.viewingCV ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              Cargando...
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-4 h-4 mr-1" />
+                              Ver CV (Gratis)
+                            </>
+                          )}
                         </Button>
                         <Button 
                           size="sm" 
                           className="bg-blue-600 hover:bg-blue-700"
                           onClick={() => handleContactFree(candidate.student, selectedOffer?.name || 'esta oferta')}
+                          disabled={loadingStates.contacting}
                         >
-                          <Mail className="w-4 h-4 mr-1" />
-                          Contactar (Gratis)
+                          {loadingStates.contacting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              Contactando...
+                            </>
+                          ) : (
+                            <>
+                              <Mail className="w-4 h-4 mr-1" />
+                              Contactar (Gratis)
+                            </>
+                          )}
                         </Button>
                         
                         {/* 🔥 NUEVOS BOTONES DE GESTIÓN */}
@@ -904,10 +1026,20 @@ function CompanyOffersContent() {
                           size="sm" 
                           variant="outline"
                           onClick={() => handleViewCVWithTokens(student.id)}
-                          className={revealedCVs.includes(student.id) ? 'bg-green-50 border-green-300 text-green-700' : 'bg-purple-50 border-purple-300 text-purple-700'}
+                          className={isRevealed(student.id) ? 'bg-green-50 border-green-300 text-green-700' : 'bg-purple-50 border-purple-300 text-purple-700'}
+                          disabled={loadingStates.viewingCV}
                         >
-                          <Eye className="w-4 h-4 mr-1" />
-                          {revealedCVs.includes(student.id) ? 'CV Revelado' : 'Revelar Perfil (2 tokens)'}
+                          {loadingStates.viewingCV ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              Revelando...
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-4 h-4 mr-1" />
+                              {isRevealed(student.id) ? 'CV Revelado' : 'Revelar Perfil (2 tokens)'}
+                            </>
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -1332,6 +1464,22 @@ function CompanyOffersContent() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 🎯 UX MEJORADA: Diálogos de confirmación */}
+      <ConfirmationDialog
+        isOpen={confirmations.deleteOffer.isOpen}
+        onClose={() => setConfirmations(prev => ({
+          ...prev,
+          deleteOffer: { isOpen: false, offerId: null }
+        }))}
+        onConfirm={confirmDeleteOffer}
+        title="Eliminar Oferta"
+        message={`¿Estás seguro de que quieres eliminar esta oferta?\n\nEsta acción no se puede deshacer y se perderán todos los datos asociados.`}
+        type="danger"
+        confirmText="Eliminar"
+        isLoading={loadingStates.deletingOffer === confirmations.deleteOffer.offerId}
+        loadingText="Eliminando..."
+      />
     </div>
   );
 }

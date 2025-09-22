@@ -35,7 +35,8 @@ interface ApplicationWithOffer {
     description: string;
     location: string;
     type: string;
-    company: {
+    sector?: string; // 🔥 AGREGAR SECTOR OPCIONAL
+    company?: { // 🔥 HACER COMPANY OPCIONAL
       name: string;
       city: string;
       sector: string;
@@ -93,7 +94,9 @@ export default function AplicacionesPage() {
       const data = await response.json();
       console.log('📋 Applications loaded:', data);
       
-      setAplicaciones(data);
+      // 🔥 VERIFICAR QUE DATA SEA UN ARRAY ANTES DE ASIGNAR
+      const applicationsArray = Array.isArray(data) ? data : (data.applications || []);
+      setAplicaciones(applicationsArray);
     } catch (err: any) {
       console.error('Error fetching applications:', err);
       setError('Error al cargar las aplicaciones');
@@ -270,15 +273,15 @@ export default function AplicacionesPage() {
                     <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
                       <div className="flex items-center gap-1">
                         <Building2 className="w-4 h-4" />
-                        {aplicacion.offer.company.name}
+                        {aplicacion.offer?.company?.name || aplicacion.offer?.sector || 'Empresa no disponible'}
                       </div>
                       <div className="flex items-center gap-1">
                         <MapPin className="w-4 h-4" />
-                        {aplicacion.offer.location}
+                        {aplicacion.offer?.location || 'Ubicación no disponible'}
                       </div>
                       <div className="flex items-center gap-1">
                         <Clock className="w-4 h-4" />
-                        {getJobTypeLabel(aplicacion.offer.type)}
+                        {getJobTypeLabel(aplicacion.offer?.type || 'No especificado')}
                       </div>
                     </div>
 
@@ -311,7 +314,7 @@ export default function AplicacionesPage() {
                       
                       <div className="flex items-center gap-1">
                         <Building2 className="w-4 h-4" />
-                        {aplicacion.offer.company.sector}
+                        {aplicacion.offer?.company?.sector || aplicacion.offer?.sector || 'Sector no disponible'}
                       </div>
                     </div>
 

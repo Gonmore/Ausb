@@ -1,6 +1,7 @@
-import { Offer, Profamily, Company, Application, Student, User } from '../models/relations.js';
+import { Offer, Profamily, Company, Application, Student, User, Skill, UserCompany } from '../models/relations.js';
 import companyService from '../services/companyService.js'; // 🔥 AÑADIR ESTE IMPORT
 import affinityCalculator from '../services/affinityCalculator.js';
+import { AffinityCalculator } from '../services/affinityCalculator.js'; // 🔥 AGREGAR ESTA LÍNEA
 import logger from '../logs/logger.js';
 import sequelize from '../database/database.js';
 
@@ -16,9 +17,7 @@ import sequelize from '../database/database.js';
  *         - mode
  *         - type
  *         - period
- *         - schedule
  *         - sector
- *         - tag
  *         - description
  *         - jobs
  *         - requisites
@@ -55,9 +54,6 @@ import sequelize from '../database/database.js';
  *         sector:
  *           type: string
  *           description: Sector empresarial
- *         tag:
- *           type: string
- *           description: Etiquetas descriptivas
  *         description:
  *           type: string
  *           description: Descripción detallada
@@ -77,6 +73,9 @@ import sequelize from '../database/database.js';
  *           type: string
  *           format: date-time
  */
+
+// ELIMINADO: función extractSkillsFromOffer con datos hardcodeados
+// Las skills ahora vienen de la relación profesional Offer -> OfferSkill -> Skill
 
 /**
  * @swagger
@@ -101,7 +100,6 @@ import sequelize from '../database/database.js';
  */
 async function listOffers(req, res) {
     try {
-        const { Skill } = await import('../models/skill.js');
         const offers = await Offer.findAll({
             include: [
                 {
@@ -114,7 +112,8 @@ async function listOffers(req, res) {
                 },
                 {
                     model: Skill,
-                    attributes: ['id', 'name']
+                    attributes: ['id', 'name'],
+                    through: { attributes: [] } // Esto oculta los atributos de la tabla intermedia
                 }
             ]
         });
@@ -181,15 +180,24 @@ async function createOffer(req, res) {
     
     try {
         await sequelize.transaction(async (t) => {
-            // Buscar la empresa del usuario logueado
-            const company = await Company.findOne({
-                where: { userId: userId },
+            // Buscar la empresa del usuario logueado usando UserCompany
+            const userCompany = await UserCompany.findOne({
+                where: { 
+                    userId: userId,
+                    isActive: true 
+                },
+                include: [{
+                    model: Company,
+                    as: 'company'
+                }],
                 transaction: t
             });
             
-            if (!company) {
+            if (!userCompany || !userCompany.company) {
                 return res.status(404).json({ mensaje: 'No tienes una empresa asociada' });
             }
+            
+            const company = userCompany.company;
             
             // Crear la oferta con companyId directamente
             const offer = await Offer.create({
@@ -539,7 +547,7 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
                 mode: offer.mode,
                 type: offer.type,
                 description: offer.description,
-                tag: offer.tag,
+                // ELIMINADO: tag hardcodeado reemplazado por skills profesionales
                 createdAt: offer.createdAt,
                 candidates: candidates,
                 candidateStats: candidateStats,
@@ -565,26 +573,11 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
 
 // Agregar esta función al final del archivo, antes del export
 
-function extractOfferSkills(offer) {
-    // Función auxiliar para extraer habilidades de la oferta
-    const skills = [];
-    
-    if (offer.tag) {
-        skills.push(...offer.tag.split(',').map(skill => skill.trim()));
-    }
-    
-    if (offer.requisites) {
-        // Buscar tecnologías comunes en los requisitos
-        const techKeywords = ['javascript', 'python', 'java', 'react', 'node', 'sql', 'html', 'css', 'php', 'angular', 'vue'];
-        techKeywords.forEach(tech => {
-            if (offer.requisites.toLowerCase().includes(tech)) {
-                skills.push(tech);
-            }
-        });
-    }
-    
-    return [...new Set(skills)]; // Eliminar duplicados
-}
+// ELIMINADO: función con datos hardcodeados reemplazada por sistema profesional de skills
+// Las habilidades ahora vienen de la relación Offer -> OfferSkill -> Skill
+// function extractOfferSkills(offer) {
+//     // Función auxiliar para extraer habilidades de la oferta - YA NO SE USA
+// }
 
 // Agregar este endpoint que probablemente falta
 
@@ -676,6 +669,177 @@ export const getApplicationsByOffer = async (req, res) => {
     }
 };
 
+/**
+ * @swagger
+ * /api/offers/with-aptitude:
+ *   get:
+ *     summary: Obtener todas las ofertas con cálculo de aptitud para el estudiante actual
+ *     tags: [Offers]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de ofertas con aptitud calculada
+ */
+async function getOffersWithAptitude(req, res) {
+    try {
+        const { userId } = req.user;
+        
+        console.log(`🎯 Obteniendo ofertas con aptitud para usuario: ${userId}`);
+
+        // 1. Buscar el estudiante y sus skills
+        const student = await Student.findOne({
+            where: { userId },
+            include: [{
+                model: Skill,
+                as: 'skills',
+                through: {
+                    attributes: ['proficiencyLevel', 'yearsOfExperience']
+                }
+            }]
+        });
+
+        if (!student) {
+            return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+        }
+
+        // 2. Convertir skills del estudiante al formato esperado por el calculador
+        const studentSkills = {};
+        if (student.skills && student.skills.length > 0) {
+            student.skills.forEach(skill => {
+                // Convertir proficiencyLevel a número para el calculador
+                const levelMap = {
+                    'beginner': 1,
+                    'intermediate': 2,
+                    'advanced': 3,
+                    'expert': 4
+                };
+                studentSkills[skill.name.toLowerCase()] = levelMap[skill.student_skills.proficiencyLevel] || 1;
+            });
+        }
+
+        console.log(`👤 Estudiante ${student.id} - Skills:`, studentSkills);
+
+        // 3. Obtener todas las ofertas con sus skills
+        const offers = await Offer.findAll({
+            include: [
+                {
+                    model: Company,
+                    attributes: ['id', 'name', 'sector', 'city']
+                },
+                {
+                    model: Profamily,
+                    attributes: ['id', 'name']
+                },
+                {
+                    model: Skill,
+                    as: 'skills',
+                    through: {
+                        attributes: [] // OfferSkill table doesn't have level/required columns
+                    }
+                }
+            ],
+            order: [['createdAt', 'DESC']]
+        });
+
+        console.log(`📋 Encontradas ${offers.length} ofertas`);
+
+        // 4. Calcular aptitud para cada oferta
+        const affinityCalculator = new AffinityCalculator();
+        const offersWithAptitude = [];
+
+        for (const offer of offers) {
+            // Convertir skills de la oferta al formato esperado
+            const offerSkills = {};
+            if (offer.skills && offer.skills.length > 0) {
+                offer.skills.forEach(skill => {
+                    // Since OfferSkill doesn't have level, use default level 2 (intermediate)
+                    offerSkills[skill.name.toLowerCase()] = 2;
+                });
+            }
+
+            // Calcular aptitud/afinidad
+            let aptitude;
+            if (Object.keys(offerSkills).length > 0 && Object.keys(studentSkills).length > 0) {
+                aptitude = affinityCalculator.calculateAffinity(offerSkills, studentSkills);
+            } else {
+                aptitude = {
+                    level: 'sin datos',
+                    score: 0,
+                    matches: 0,
+                    coverage: 0,
+                    explanation: Object.keys(offerSkills).length === 0 
+                        ? 'Esta oferta no tiene skills específicos definidos'
+                        : 'Necesitas agregar skills a tu perfil para ver tu compatibilidad'
+                };
+            }
+
+            // Formatear para el frontend
+            const formattedOffer = {
+                id: offer.id,
+                name: offer.name,
+                location: offer.location,
+                mode: offer.mode,
+                type: offer.type,
+                period: offer.period,
+                schedule: offer.schedule,
+                min_hr: offer.min_hr,
+                car: offer.car,
+                sector: offer.sector,
+                tag: offer.tag,
+                description: offer.description,
+                jobs: offer.jobs,
+                requisites: offer.requisites,
+                createdAt: offer.createdAt,
+                updatedAt: offer.updatedAt,
+                profamilyId: offer.profamilyId,
+                company: offer.company,
+                profamily: offer.profamily,
+                skills: offer.skills.map(skill => ({
+                    id: skill.id,
+                    name: skill.name,
+                    level: 2, // Default level since OfferSkill doesn't have level column
+                    required: false // Default since OfferSkill doesn't have required column
+                })),
+                // 🔥 USAR SOLO EL SCORE COMO APTITUDE SIMPLE
+                aptitude: Math.round(aptitude.score || 0),
+                // 🔥 AGREGAR DETALLES DE APTITUD COMO PROPIEDADES SEPARADAS
+                aptitudeDetails: {
+                    level: aptitude.level,
+                    score: Math.round(aptitude.score * 10) / 10,
+                    matches: aptitude.matches,
+                    coverage: Math.round(aptitude.coverage || 0),
+                    explanation: aptitude.explanation,
+                    matchingSkills: aptitude.matchingSkills || []
+                }
+            };
+
+            offersWithAptitude.push(formattedOffer);
+            console.log(`🎯 Oferta "${offer.name}" - Aptitud: ${aptitude.level} (${Math.round(aptitude.score || 0)}%)`);
+        }
+
+        // 5. Ordenar por aptitud (mejores primero)
+        offersWithAptitude.sort((a, b) => {
+            // Ordenar por score de aptitud (mayor a menor)
+            if (a.aptitude !== b.aptitude) {
+                return b.aptitude - a.aptitude;
+            }
+            // Si tienen el mismo score, ordenar por fecha de creación (más reciente primero)
+            return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+
+        console.log(`✅ Retornando ${offersWithAptitude.length} ofertas con aptitud calculada`);
+        res.json(offersWithAptitude);
+
+    } catch (error) {
+        console.error('❌ Error getOffersWithAptitude:', error);
+        res.status(500).json({ 
+            mensaje: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+}
+
 export default {
     listOffers,
     getOffer,
@@ -687,5 +851,6 @@ export default {
     getOffersByProfamily,
     getCompanyOffersWithApplications,
     getCompanyOffersWithCandidates,
-    getApplicationsByOffer
+    getApplicationsByOffer,
+    getOffersWithAptitude
 }

@@ -377,8 +377,8 @@ class CompanyService {
             const processedOffers = offers.map(offer => {
                 const offerStartTime = Date.now();
                 
-                // Preparar skills de la oferta
-                const offerSkills = this._parseOfferSkills(offer.tag);
+                // ELIMINADO: Skills ahora vienen de la relación profesional OfferSkill
+                const offerSkills = {}; // Ya no se usan tags hardcodeados
                 
                 // Filtrar aplicaciones para esta oferta
                 const offerApplications = applications.filter(app => app.offerId === offer.id);
@@ -422,7 +422,7 @@ class CompanyService {
                     min_hr: offer.min_hr,
                     car: offer.car,
                     sector: offer.sector,
-                    tag: offer.tag,
+                    // ELIMINADO: tag hardcodeado reemplazado por skills profesionales
                     description: offer.description,
                     jobs: offer.jobs,
                     requisites: offer.requisites,
@@ -579,26 +579,8 @@ class CompanyService {
      * @param {string} tagString - String con tags separados por comas
      * @returns {Object} Objeto con skills y sus pesos
      */
-    _parseOfferSkills(tagString) {
-        if (!tagString || typeof tagString !== 'string') {
-            return {};
-        }
-        
-        const skills = {};
-        const tags = tagString
-            .split(',')
-            .map(tag => tag.trim())
-            .filter(tag => tag.length > 0)
-            .slice(0, 20); // Limitar a 20 skills máximo
-        
-        tags.forEach(tag => {
-            if (tag.length >= 2) { // Mínimo 2 caracteres
-                skills[tag.toLowerCase()] = 3; // Peso estándar
-            }
-        });
-        
-        return skills;
-    }
+    // ELIMINADO: función con lógica hardcodeada de tags
+    // _parseOfferSkills() - reemplazado por sistema profesional de Skills/OfferSkill
 
     /**
      * Parsear skills de estudiante desde string de tags

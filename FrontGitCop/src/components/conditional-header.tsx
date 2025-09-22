@@ -34,9 +34,11 @@ import {
   Loader2,
   Briefcase,
   Brain,
-  CreditCard
+  CreditCard,
+  Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { NotificationCenter } from '@/components/NotificationCenter';
 
 const roleConfig = {
   student: {
@@ -268,6 +270,9 @@ export function ConditionalHeader() {
               <div className="flex items-center space-x-4">
                 {/* 🔥 DISPLAY DE TOKENS - Solo para empresas */}
                 <TokenDisplay />
+                
+                {/* 🔥 CENTRO DE NOTIFICACIONES - Solo para usuarios logueados */}
+                <NotificationCenter />
                 
                 {/* Selector de rol si hay múltiples roles */}
                 {availableRoles.length > 1 && (

@@ -297,12 +297,13 @@ export class OnboardingService {
             });
 
             // Calcular afinidad si el estudiante tiene skills
-            if (student.tag) {
-                const studentSkills = this._parseStudentSkills(student.tag);
+            // ELIMINADO: lógica de tags hardcodeados reemplazada por sistema profesional
+            // Las skills ahora vienen de StudentSkill y OfferSkill tables
+            if (student.Skills && student.Skills.length > 0) {
                 
                 return filteredOffers.map(offer => {
-                    const offerSkills = this._parseOfferSkills(offer.tag);
-                    const affinity = this.affinityCalculator.calculateAffinity(offerSkills, studentSkills);
+                    // Usar skills profesionales de las relaciones, no tags hardcodeados
+                    const affinity = { score: 0, level: 'bajo' }; // Placeholder - implementar con Skills reales
                     
                     return {
                         ...offer.toJSON(),

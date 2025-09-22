@@ -13,6 +13,10 @@ router.route('/')
 router.route('/company')
     .get(authenticateJWT, offerController.getMyCompanyOffers);  // Obtener ofertas de mi empresa
 
+// 🎯 NUEVA RUTA: Ofertas con cálculo de aptitud para estudiantes
+router.route('/with-aptitude')
+    .get(authenticateJWT, offerController.getOffersWithAptitude);
+
 router.route('/company/:companyId')
     .get(offerController.getOffersByCompany);  // Obtener ofertas por empresa
 
