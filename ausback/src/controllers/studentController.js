@@ -3,7 +3,7 @@ import sequelize from '../database/database.js';
 import logger from '../logs/logger.js'
 import { TokenService } from '../services/tokenService.js';
 import * as companyService from '../services/companyService.js'; // 🔥 AGREGAR ESTA LÍNEA
-import { Student, User, Profamily, UserCompany, Company, RevealedCV, Application, Offer, Skill, StudentSkill } from '../models/relations.js';
+import { Student, User, Profamily, UserCompany, Company, RevealedCV, Application, Offer, Skill, StudentSkill, Scenter } from '../models/relations.js';
 import { AffinityCalculator } from '../services/affinityCalculator.js';
 import { Op } from 'sequelize';
 
@@ -28,8 +28,7 @@ async function getStudent(req, res) {
 
 async function createStudent(req, res){
     const { userId } = req.user;
-    const { grade,course,car,tag, disp,
-        scenter_id, profamily_id } = req.body;
+    const { grade, course, car, description, disp, photo } = req.body;
     
         
     try {
@@ -42,8 +41,13 @@ async function createStudent(req, res){
                 }
             );
             const student = await Student.create({
-                userId:userId,grade,course,car,tag,disp,
-                scenter_id, profamily_id
+                userId:userId,
+                grade: grade || null, // Opcional
+                course: course || null, // Opcional
+                car: car || false,
+                description: description || '',
+                photo: photo || null, // Foto opcional
+                disp: disp || new Date().toISOString().split('T')[0], // Hoy por defecto si no se especifica
             },
             { tansaction: t}
             );
@@ -74,11 +78,19 @@ async function getPreference(req, res) {
 
 async function updateStudent(req, res) {
     const { userId } = req.user;
-    const { grade,course,car,tag,
-        scenter_id, profamily_id  } = req.body;
+    const { grade, course, car, description, disp, photo } = req.body;
+    
+    // Preparar objeto de actualización solo con campos proporcionados
+    const updateData = {};
+    if (grade !== undefined) updateData.grade = grade;
+    if (course !== undefined) updateData.course = course;
+    if (car !== undefined) updateData.car = car;
+    if (description !== undefined) updateData.description = description;
+    if (disp !== undefined) updateData.disp = disp;
+    if (photo !== undefined) updateData.photo = photo;
+    
     try {
-        const student = await Student.update({grade,course,car,tag,
-            scenter_id, profamily_id }, {where: {userId:userId}});
+        const student = await Student.update(updateData, {where: {userId:userId}});
         if (student[0] === 0)
             return res.status(404).json({message: 'Student not found'});
         res.json(student);
@@ -87,8 +99,7 @@ async function updateStudent(req, res) {
         logger.error('Error updateStudent: '+err);
         res.status(500).json({message: 'Server error updating student'})
     }
-
-  }
+}
 
 async function activateInactivate(req, res) {
     const { userId }= req.user;
@@ -209,14 +220,16 @@ export const getCandidates = async (req, res) => {
 };
 
 export const searchIntelligentStudents = async (req, res) => {
+  console.log('🚀 ===== FUNCIÓN searchIntelligentStudents EJECUTÁNDOSE =====');
   try {
+    console.log('🔍 ===== INICIANDO BÚSQUEDA INTELIGENTE =====');
     const { userId } = req.user;
-    
+
     // 🔥 DEBUG: Ver qué llega del frontend
-    console.log('🔍 REQUEST BODY completo:', req.body);
+    console.log('🔍 REQUEST BODY completo:', JSON.stringify(req.body, null, 2));
     console.log('🔍 REQUEST PARAMS:', req.params);
     console.log('🔍 REQUEST QUERY:', req.query);
-    
+
     const { offerId, skills, filters = {} } = req.body;
 
     console.log('🔍 Datos extraídos:');
@@ -226,11 +239,14 @@ export const searchIntelligentStudents = async (req, res) => {
 
     // 🔥 MANEJAR AMBOS CASOS: offerId O skills
     if (!offerId && (!skills || skills.length === 0)) {
-      return res.status(400).json({ 
+      console.log('❌ VALIDACIÓN FALLIDA: No hay offerId ni skills');
+      return res.status(400).json({
         mensaje: 'Se requiere offerId o skills para la búsqueda',
         received: { offerId, skills, filters }
       });
     }
+
+    console.log('✅ Validación inicial pasada');
 
     let companySkillsObject = {};
     let offerInfo = null;
@@ -238,29 +254,50 @@ export const searchIntelligentStudents = async (req, res) => {
     if (offerId) {
       // 🔥 CASO 1: Búsqueda por oferta específica
       console.log('📋 MODO: Búsqueda por oferta específica');
-      
-      const offer = await Offer.findByPk(offerId, { raw: true });
-      if (!offer) {
-        return res.status(404).json({ mensaje: 'Oferta no encontrada' });
-      }
 
-      console.log(`📋 Oferta encontrada: "${offer.name}"`);
-      // ELIMINADO: lógica de tag hardcodeado
-      console.log(`🔗 Skills de la oferta (desde relación):`, offer.Skills ? offer.Skills.length : 0);
-
-      if (offer.Skills && offer.Skills.length > 0) {
-        console.log('🔍 Skills de la oferta profesionales:', offer.Skills.map(s => s.name));
-        
-        offer.Skills.forEach(skill => {
-          companySkillsObject[skill.name.toLowerCase()] = 3; // nivel requerido
+      console.log('🔍 Buscando oferta con ID:', offerId);
+      try {
+        const offer = await Offer.findByPk(offerId, {
+          include: [{
+            model: Skill,
+            as: 'skills',
+            through: { attributes: [] } // Excluir campos de la tabla intermedia
+          },
+          {
+            model: Profamily,
+            as: 'profamily',
+            attributes: ['id', 'name']
+          }]
         });
-      }
+        console.log('🔍 Resultado de búsqueda de oferta:', offer ? 'ENCONTRADA' : 'NO ENCONTRADA');
 
-      offerInfo = {
-        id: offer.id,
-        name: offer.name,
-        skills: Object.keys(companySkillsObject)
-      };
+        if (!offer) {
+          console.log('❌ OFERTA NO ENCONTRADA');
+          return res.status(404).json({ mensaje: 'Oferta no encontrada' });
+        }
+
+        console.log(`📋 Oferta encontrada: "${offer.name}"`);
+        // ELIMINADO: lógica de tag hardcodeado
+        console.log(`🔗 Skills de la oferta (desde relación):`, offer.skills ? offer.skills.length : 0);
+
+        if (offer.skills && offer.skills.length > 0) {
+          console.log('🔍 Skills de la oferta profesionales:', offer.skills.map(s => s.name));
+
+          offer.skills.forEach(skill => {
+            companySkillsObject[skill.name.toLowerCase()] = 3; // nivel requerido
+          });
+        }
+
+        offerInfo = {
+          id: offer.id,
+          name: offer.name,
+          skills: Object.keys(companySkillsObject),
+          profamilyId: offer.profamily ? offer.profamily.id : null
+        };
+      } catch (offerError) {
+        console.error('❌ ERROR BUSCANDO OFERTA:', offerError);
+        throw offerError;
+      }
 
     } else {
       // 🔥 CASO 2: Búsqueda por skills generales
@@ -282,30 +319,40 @@ export const searchIntelligentStudents = async (req, res) => {
     console.log('🏢 Skills finales para comparar:', companySkillsObject);
 
     // 🔥 OBTENER EMPRESA
-    const userCompany = await UserCompany.findOne({
-      where: { 
-        userId: userId,
-        isActive: true 
-      },
-      include: [{
-        model: Company,
-        as: 'company'
-      }],
-      raw: false
-    });
+    console.log('🔍 Buscando empresa para userId:', userId);
+    let company;
+    try {
+      const userCompany = await UserCompany.findOne({
+        where: { 
+          userId: userId,
+          isActive: true 
+        },
+        include: [{
+          model: Company,
+          as: 'company'
+        }],
+        raw: false
+      });
+      console.log('🔍 Resultado búsqueda empresa:', userCompany ? 'ENCONTRADA' : 'NO ENCONTRADA');
 
-    if (!userCompany || !userCompany.company) {
-      return res.status(404).json({ mensaje: 'Usuario no está asociado a ninguna empresa activa' });
+      if (!userCompany || !userCompany.company) {
+        console.log('❌ EMPRESA NO ENCONTRADA O INACTIVA');
+        return res.status(404).json({ mensaje: 'Usuario no está asociado a ninguna empresa activa' });
+      }
+
+      company = userCompany.company;
+      console.log(`🏢 Empresa: ${company.name} (ID: ${company.id})`);
+    } catch (companyError) {
+      console.error('❌ ERROR BUSCANDO EMPRESA:', companyError);
+      throw companyError;
     }
-
-    const company = userCompany.company;
-    console.log(`🏢 Empresa: ${company.name} (ID: ${company.id})`);
 
     // 🔥 OBTENER ESTUDIANTES QUE YA APLICARON
     let appliedStudentIds = [];
     
     if (offerId) {
       // Excluir solo los que aplicaron a esta oferta específica
+      console.log('🔍 Buscando aplicaciones para oferta específica:', offerId);
       const existingApplications = await Application.findAll({
         where: { offerId: offerId },
         attributes: ['studentId'],
@@ -315,8 +362,14 @@ export const searchIntelligentStudents = async (req, res) => {
       console.log(`🚫 Estudiantes que ya aplicaron a esta oferta: ${appliedStudentIds.length}`);
     } else {
       // Excluir los que aplicaron a cualquier oferta de la empresa
+      console.log('🔍 Buscando aplicaciones para empresa:', company.id);
       const existingApplications = await Application.findAll({
-        where: { companyId: company.id },
+        include: [{
+          model: Offer,
+          as: 'offer',
+          where: { companyId: company.id },
+          attributes: []
+        }],
         attributes: ['studentId'],
         raw: true
       });
@@ -325,23 +378,32 @@ export const searchIntelligentStudents = async (req, res) => {
     }
 
     // Construir filtros
-    const whereClause = { 
-      active: true,
-      id: appliedStudentIds.length > 0 ? { [Op.notIn]: appliedStudentIds } : undefined
-    };
+    const whereClause = { active: true };
+    if (appliedStudentIds.length > 0) {
+      whereClause.id = { [Op.notIn]: appliedStudentIds };
+    }
     
     if (filters.profamilyId) whereClause.profamilyId = filters.profamilyId;
     if (filters.grade) whereClause.grade = filters.grade;
     if (filters.car !== undefined) whereClause.car = filters.car;
 
-    // Obtener estudiantes
-    const students = await Student.findAll({
-      where: whereClause,
-      raw: true,
-      order: [['createdAt', 'DESC']]
-    });
+    console.log('🔍 Filtros aplicados:', whereClause);
 
-    console.log(`📋 Estudiantes candidatos encontrados: ${students.length}`);
+    // Obtener estudiantes
+    console.log('🔍 Buscando estudiantes candidatos...');
+    let students = [];
+    try {
+      students = await Student.findAll({
+        where: whereClause,
+        raw: true,
+        order: [['createdAt', 'DESC']]
+      });
+
+      console.log(`📋 Estudiantes candidatos encontrados: ${students.length}`);
+    } catch (studentsError) {
+      console.error('❌ ERROR BUSCANDO ESTUDIANTES:', studentsError);
+      throw studentsError;
+    }
 
     // 🔥 SI NO HAY SKILLS PARA COMPARAR, DEVOLVER ESTUDIANTES SIN AFINIDAD
     if (Object.keys(companySkillsObject).length === 0) {
@@ -393,77 +455,104 @@ export const searchIntelligentStudents = async (req, res) => {
       });
     }
 
-    // Calcular afinidad
+    // 🔥 CALCULAR AFINIDAD
+    console.log('🤖 Calculando afinidad real con AffinityCalculator...');
     const affinityCalculator = new AffinityCalculator();
+    console.log('🤖 AffinityCalculator creado');
+
     const studentsWithAffinity = [];
 
     for (const student of students) {
-      const user = await User.findByPk(student.userId, { raw: true });
-      const profamily = student.profamilyId ? await Profamily.findByPk(student.profamilyId, { raw: true }) : null;
-      
-      if (!user) continue;
-
-      // 🔥 PARSING DE SKILLS DEL ESTUDIANTE
-      const studentSkills = {};
-      if (student.tag) {
-        const tags = student.tag.split(',').map(tag => tag.trim().toLowerCase());
-        console.log(`👤 ${user.email} - skills RAW:`, student.tag);
-        console.log(`👤 ${user.email} - skills array:`, tags);
+      try {
+        console.log(`🔍 Procesando estudiante ID: ${student.id}, UserID: ${student.userId}`);
+        const user = await User.findByPk(student.userId, { raw: true });
+        console.log(`🔍 Usuario encontrado: ${user ? user.email : 'NO ENCONTRADO'}`);
         
-        tags.forEach(tag => {
-          let skillLevel = 2; // nivel medio por defecto
-          
-          if (student.grade === 'Grado Superior') {
-            // Más variabilidad: 2-4 para superiores
-            skillLevel = Math.floor(Math.random() * 3) + 2; // 2, 3, o 4
-          } else if (student.grade === 'Grado Medio') {
-            // Más variabilidad: 1-3 para medios  
-            skillLevel = Math.floor(Math.random() * 3) + 1; // 1, 2, o 3
-          }
-          
-          studentSkills[tag] = skillLevel;
-        });
-      } else {
-        console.log(`👤 ${user.email} - SIN SKILLS (tag vacío)`);
-      }
+        const profamily = student.profamilyId ? await Profamily.findByPk(student.profamilyId, { raw: true }) : null;
+        console.log(`🔍 Profamily encontrado: ${profamily ? profamily.name : 'NINGUNO'}`);
+        
+        if (!user) continue;
 
-      console.log(`👤 ${user.email} - skills procesados:`, studentSkills);
+        // 🔥 OBTENER SKILLS REALES DEL ESTUDIANTE DESDE StudentSkill
+        const studentSkills = {};
+        try {
+          const studentSkillRecords = await StudentSkill.findAll({
+            where: { studentId: student.id },
+            include: [{
+              model: Skill,
+              as: 'skill',
+              attributes: ['name']
+            }],
+            raw: true
+          });
 
-      // 🔥 CALCULAR AFINIDAD
-      const affinity = affinityCalculator.calculateAffinity(companySkillsObject, studentSkills);
-      console.log(`🎯 Afinidad ${user.email}: ${affinity.level} (score: ${affinity.score}, matches: ${affinity.matches})`);
+          console.log(`👤 ${user.email} - Encontrados ${studentSkillRecords.length} registros de skills`);
 
-      // Aplicar filtro de afinidad mínima
-      if (filters.minAffinity) {
-        const levelOrder = { "sin datos": 0, "bajo": 1, "medio": 2, "alto": 3, "muy alto": 4 };
-        if (levelOrder[affinity.level] < levelOrder[filters.minAffinity]) {
-          continue;
+          // Mapear niveles de proficiency a números
+          const levelMap = {
+            'beginner': 1,
+            'intermediate': 2,
+            'advanced': 3,
+            'expert': 4
+          };
+
+          studentSkillRecords.forEach(record => {
+            const skillName = record['skill.name'].toLowerCase().trim();
+            const proficiencyLevel = record.proficiencyLevel;
+            const numericLevel = levelMap[proficiencyLevel] || 1; // default a 1 si no está mapeado
+            
+            studentSkills[skillName] = numericLevel;
+            console.log(`   - ${skillName}: ${proficiencyLevel} (${numericLevel})`);
+          });
+        } catch (skillError) {
+          console.error(`❌ Error obteniendo skills para estudiante ${student.id}:`, skillError);
+          // Continuar sin skills si hay error
         }
-      }
 
-      studentsWithAffinity.push({
-        ...student,
-        User: {
-          id: user.id,
-          name: user.name,
-          surname: user.surname,
-          email: user.email,
-          phone: user.phone
-        },
-        Profamily: profamily ? {
-          id: profamily.id,
-          name: profamily.name
-        } : null,
-        affinity: {
-          level: affinity.level,
-          score: affinity.score,
-          matches: affinity.matches,
-          coverage: affinity.coverage,
-          matchingSkills: affinity.matchingSkills || [],
-          explanation: affinity.explanation || `${affinity.matches} coincidencias encontradas`
-        },
-        isNonCandidate: true
-      });
+        console.log(`👤 ${user.email} - skills procesados:`, studentSkills);
+
+        // 🔥 CALCULAR AFINIDAD REAL
+        const affinity = affinityCalculator.calculateAffinity(
+          companySkillsObject,
+          studentSkills,
+          {
+            profamilyId: student.profamilyId,
+            offerProfamilyIds: offerId ? [offerInfo.profamilyId].filter(Boolean) : []
+          }
+        );
+
+        console.log(`🎯 Afinidad calculada ${user.email}: ${affinity.level} (score: ${affinity.score}, matches: ${affinity.matches}, coverage: ${affinity.coverage}%)`);
+
+        studentsWithAffinity.push({
+          ...student,
+          User: {
+            id: user.id,
+            name: user.name,
+            surname: user.surname,
+            email: user.email,
+            phone: user.phone
+          },
+          Profamily: profamily ? {
+            id: profamily.id,
+            name: profamily.name
+          } : null,
+          affinity: {
+            level: affinity.level,
+            score: affinity.score,
+            matches: affinity.matches,
+            coverage: affinity.coverage,
+            matchingSkills: affinity.matchingSkills.map(ms => ms.skill),
+            explanation: affinity.explanation,
+            profamilyMatch: affinity.factors.profamilyAffinity.level,
+            profamilyBonus: Math.round((affinity.factors.profamilyAffinity.score - 1) * 100)
+          },
+          isNonCandidate: true
+        });
+      } catch (studentError) {
+        console.error(`❌ Error procesando estudiante ${student.id}:`, studentError);
+        // Continuar con el siguiente estudiante
+        continue;
+      }
     }
 
     // Ordenar por afinidad
@@ -1061,7 +1150,7 @@ export const getRevealedCandidates = async (req, res) => {
       id: revealed.student.id,
       revealedAt: revealed.revealedAt,
       tokensUsed: revealed.tokensUsed,
-      searchMethod: revealed.searchMethod,
+      searchMethod: revealed.revealType,
       student: {
         id: revealed.student.id,
         grade: revealed.student.grade,
@@ -1077,7 +1166,7 @@ export const getRevealedCandidates = async (req, res) => {
       revealInfo: {
         date: revealed.revealedAt,
         tokens: revealed.tokensUsed,
-        method: revealed.searchMethod || 'intelligent_search'
+        method: revealed.revealType || 'intelligent_search'
       }
     }));
 
@@ -1133,7 +1222,7 @@ export const getRevealedCandidates = async (req, res) => {
  *                         type: integer
  *                       name:
  *                         type: string
- *                       area:
+ *                       category:
  *                         type: string
  *                       proficiencyLevel:
  *                         type: string
@@ -1164,7 +1253,7 @@ export const getStudentSkills = async (req, res) => {
     const formattedSkills = student.skills.map(skill => ({
       id: skill.id,
       name: skill.name,
-      area: skill.area,
+      category: skill.category,
       proficiencyLevel: skill.student_skills.proficiencyLevel,
       yearsOfExperience: skill.student_skills.yearsOfExperience,
       isVerified: skill.student_skills.isVerified,
@@ -1288,7 +1377,7 @@ export const addStudentSkills = async (req, res) => {
     const formattedSkills = updatedStudent.skills.map(skill => ({
       id: skill.id,
       name: skill.name,
-      area: skill.area,
+      category: skill.category,
       proficiencyLevel: skill.student_skills.proficiencyLevel,
       yearsOfExperience: skill.student_skills.yearsOfExperience,
       isVerified: skill.student_skills.isVerified,
@@ -1360,6 +1449,416 @@ export const removeStudentSkill = async (req, res) => {
   }
 };
 
+// 🔥 NUEVAS FUNCIONES PARA GESTIÓN DE PROFAMILY DEL ESTUDIANTE
+export const getStudentProfamily = async (req, res) => {
+  try {
+    const { userId } = req.user;
+
+    // Buscar el estudiante del usuario autenticado
+    const student = await Student.findOne({
+      where: { userId },
+      include: [{
+        model: Profamily,
+        as: 'profamily',
+        attributes: ['id', 'name', 'description'],
+        required: false
+      }]
+    });
+
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    const response = {
+      profamily: student.profamily ? {
+        id: student.profamily.id,
+        name: student.profamily.name,
+        description: student.profamily.description
+      } : null
+    };
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('❌ Error getStudentProfamily:', error);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
+/**
+ * @swagger
+ * /api/student/profamily:
+ *   put:
+ *     summary: Actualizar la familia profesional del estudiante
+ *     tags: [Student Profamily]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               profamilyId:
+ *                 type: integer
+ *                 description: ID de la nueva familia profesional
+ *             required:
+ *               - profamilyId
+ *     responses:
+ *       200:
+ *         description: Familia profesional actualizada exitosamente
+ */
+export const updateStudentProfamily = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { profamilyId } = req.body;
+
+    // Validar que se proporcione profamilyId
+    if (!profamilyId) {
+      return res.status(400).json({ mensaje: 'Se requiere el ID de la familia profesional' });
+    }
+
+    // Verificar que el usuario autenticado sea el estudiante correcto
+    const student = await Student.findOne({
+      where: { userId: userId }
+    });
+
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    // Actualizar la profamily del estudiante
+    await student.update({ profamilyId: profamilyId });
+
+    // Obtener la profamily actualizada
+    const updatedStudent = await Student.findOne({
+      where: { userId: userId },
+      include: [{
+        model: Profamily,
+        as: 'profamily',
+        attributes: ['id', 'name', 'description'],
+        required: false
+      }]
+    });
+
+    res.json({
+      mensaje: 'Familia profesional actualizada exitosamente',
+      profamily: updatedStudent.profamily ? {
+        id: updatedStudent.profamily.id,
+        name: updatedStudent.profamily.name,
+        description: updatedStudent.profamily.description
+      } : null
+    });
+
+  } catch (error) {
+    console.error('❌ Error updateStudentProfamily:', error);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
+// 🔥 NUEVAS FUNCIONES PARA GESTIÓN DE SCENTER DEL ESTUDIANTE
+export const getStudentScenter = async (req, res) => {
+  try {
+    const { userId } = req.user;
+
+    // Buscar el estudiante del usuario autenticado
+    const student = await Student.findOne({
+      where: { userId },
+      include: [{
+        model: Scenter,
+        as: 'scenter',
+        attributes: ['id', 'name', 'code', 'city'],
+        required: false
+      }]
+    });
+
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    const response = {
+      scenter: student.scenter ? {
+        id: student.scenter.id,
+        name: student.scenter.name,
+        code: student.scenter.code,
+        city: student.scenter.city
+      } : null
+    };
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('❌ Error getStudentScenter:', error);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
+/**
+ * @swagger
+ * /api/student/scenter:
+ *   put:
+ *     summary: Actualizar el centro de estudios del estudiante
+ *     tags: [Student Scenter]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               scenterId:
+ *                 type: integer
+ *                 description: ID del nuevo centro de estudios (puede ser null para quitar la asociación)
+ *     responses:
+ *       200:
+ *         description: Centro de estudios actualizado exitosamente
+ */
+export const updateStudentScenter = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { scenterId } = req.body;
+
+    // Validar que se proporcione scenterId (puede ser null para quitar la asociación)
+    if (scenterId === undefined) {
+      return res.status(400).json({ mensaje: 'Se requiere el campo scenterId (puede ser null)' });
+    }
+
+    // Verificar que el usuario autenticado sea el estudiante correcto
+    const student = await Student.findOne({
+      where: { userId: userId }
+    });
+
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    // Nota: La relación Student-Scenter no está implementada en el modelo actual
+    // Esta función requiere actualizar el modelo Student para incluir scenterId
+    return res.status(501).json({ mensaje: 'Funcionalidad no implementada: relación Student-Scenter no definida' });
+
+  } catch (error) {
+    console.error('❌ Error updateStudentScenter:', error);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
+/**
+ * @swagger
+ * /api/student/professional-profile:
+ *   put:
+ *     summary: Actualizar el perfil profesional completo del estudiante (familia profesional, centro de estudios y estado de graduación)
+ *     tags: [Student Professional Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               profamilyId:
+ *                 type: integer
+ *                 description: ID de la familia profesional
+ *               scenterId:
+ *                 type: integer
+ *                 description: ID del centro de estudios (puede ser null)
+ *               graduationStatus:
+ *                 type: string
+ *                 enum: [por_egresar, egresado, titulado]
+ *                 description: Estado de graduación
+ *             required:
+ *               - profamilyId
+ *               - graduationStatus
+ *     responses:
+ *       200:
+ *         description: Perfil profesional actualizado exitosamente
+ */
+export const updateStudentProfessionalProfile = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { profamilyId, scenterId, graduationStatus } = req.body;
+
+    // Validar campos requeridos
+    if (!profamilyId) {
+      return res.status(400).json({ mensaje: 'Se requiere el ID de la familia profesional' });
+    }
+    if (!graduationStatus || !['por_egresar', 'egresado', 'titulado'].includes(graduationStatus)) {
+      return res.status(400).json({ mensaje: 'Se requiere un estado de graduación válido' });
+    }
+    if (scenterId === undefined) {
+      return res.status(400).json({ mensaje: 'Se requiere el campo scenterId (puede ser null)' });
+    }
+
+    // Verificar que el usuario autenticado sea el estudiante correcto
+    const student = await Student.findOne({
+      where: { userId: userId }
+    });
+
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    // Nota: Esta funcionalidad requiere actualizar el modelo Student para incluir campos profamilyId, scenterId, graduationStatus
+    // y definir las asociaciones correspondientes en relations.js
+    return res.status(501).json({ mensaje: 'Funcionalidad no implementada: campos y relaciones faltantes en el modelo Student' });
+
+  } catch (error) {
+    console.error('❌ Error updateStudentProfessionalProfile:', error);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
+/**
+ * @swagger
+ * /api/student/professional-profile:
+ *   get:
+ *     summary: Obtener el perfil profesional completo del estudiante
+ *     tags: [Student Professional Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Perfil profesional obtenido exitosamente
+ */
+export const getStudentProfessionalProfile = async (req, res) => {
+  try {
+    const { userId } = req.user;
+
+    // Verificar que el usuario autenticado sea el estudiante correcto
+    const student = await Student.findOne({
+      where: { userId: userId },
+      include: [
+        {
+          model: Profamily,
+          as: 'profamily',
+          attributes: ['id', 'name', 'description'],
+          required: false
+        },
+        {
+          model: Scenter,
+          as: 'scenter',
+          attributes: ['id', 'name', 'code', 'city'],
+          required: false
+        }
+      ]
+    });
+
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    const response = {
+      professionalProfile: {
+        profamily: student.profamily ? {
+          id: student.profamily.id,
+          name: student.profamily.name,
+          description: student.profamily.description
+        } : null,
+        scenter: student.scenter ? {
+          id: student.scenter.id,
+          name: student.scenter.name,
+          code: student.scenter.code,
+          city: student.scenter.city
+        } : null,
+        graduationStatus: student.grade || null // Usando grade como aproximación
+      }
+    };
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('❌ Error getStudentProfessionalProfile:', error);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
+export const getCurrentStudent = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    
+    const student = await Student.findOne({
+      where: { userId },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'surname', 'email', 'phone', 'address', 'description']
+        }
+      ]
+    });
+
+    if (!student) {
+      return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    const response = {
+      id: student.id,
+      grade: student.grade,
+      course: student.course,
+      car: student.car,
+      tag: student.tag,
+      description: student.description,
+      active: student.active,
+      createdAt: student.createdAt,
+      updatedAt: student.updatedAt,
+      user: student.user,
+      profamily: null // No implementado
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('❌ Error getCurrentStudent:', error);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  }
+};
+
+async function uploadStudentPhoto(req, res) {
+    const { id } = req.params;
+    const { userId } = req.user;
+
+    try {
+        // Verificar que el estudiante pertenece al usuario autenticado
+        const student = await Student.findOne({
+            where: { id: id, userId: userId }
+        });
+
+        if (!student) {
+            return res.status(404).json({ message: 'Estudiante no encontrado' });
+        }
+
+        // Por ahora, guardamos la foto como base64
+        // En el futuro se puede mejorar con multer y almacenamiento en archivos
+        const photo = req.body.photo; // Esperamos que venga como base64
+
+        if (!photo) {
+            return res.status(400).json({ message: 'No se proporcionó foto' });
+        }
+
+        // Actualizar la foto del estudiante
+        await Student.update(
+            { photo: photo },
+            { where: { id: id, userId: userId } }
+        );
+
+        logger.info({ userId, studentId: id }, "Student photo updated");
+
+        // Devolver el estudiante actualizado
+        const updatedStudent = await Student.findOne({
+            where: { id: id, userId: userId }
+        });
+
+        res.json(updatedStudent);
+
+    } catch (err) {
+        logger.error('Error uploadStudentPhoto: ' + err);
+        res.status(500).json({ message: 'Server error uploading student photo' });
+    }
+}
+
 export default {
     getStudent,
     createStudent,
@@ -1370,6 +1869,7 @@ export default {
     getCandidates,
     searchIntelligentStudents,
     getStudentById,
+    getCurrentStudent,
     getTokenBalance,
     useTokens,
     viewStudentCV,
@@ -1378,7 +1878,14 @@ export default {
     getRevealedCandidates,
     getStudentSkills,
     addStudentSkills,
-    removeStudentSkill
+    removeStudentSkill,
+    getStudentProfamily,
+    updateStudentProfamily,
+    getStudentScenter,
+    updateStudentScenter,
+    getStudentProfessionalProfile,
+    updateStudentProfessionalProfile,
+    uploadStudentPhoto
     //getRevealedCVsWithDetails  // 🔥 AGREGAR
 }
 

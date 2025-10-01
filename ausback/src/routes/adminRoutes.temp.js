@@ -129,7 +129,7 @@ router.post('/fix-user-company-associations', async (req, res) => {
         
         for (const company of companies) {
             // Si la empresa no tiene usuarios asociados a través de UserCompany
-            if (!company.Users || company.Users.length === 0) {
+            if (!company.users || company.users.length === 0) {
                 // Buscar el usuario por el campo userId de la empresa (si existe)
                 // Nota: Necesitamos verificar si Company tiene campo userId
                 const users = await User.findAll({

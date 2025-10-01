@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User, LoginCredentials, RegisterData, AuthResponse, UserRole } from '@/types';
-import apiClient from '@/lib/api';
+import apiClient, { authApi } from '@/lib/api';
 import { tokenUtils } from '@/lib/token-utils';
 
 interface AuthState {
@@ -46,7 +46,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         
         try {
           console.log('📤 Sending login request...');
-          const response = await apiClient.post<AuthResponse>('/login', credentials);
+          const response = await authApi.login(credentials);
           console.log('📥 Login response received:', response.data);
           
           const { token, user } = response.data;
@@ -88,7 +88,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         set({ isLoading: true, error: null });
         
         try {
-          const response = await apiClient.post<AuthResponse>('/register', data);
+          const response = await authApi.register(data);
           const { token, user } = response.data;
           
           // Store token in localStorage

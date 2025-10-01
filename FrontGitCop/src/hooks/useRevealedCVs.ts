@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/stores/auth';
+import { apiClient } from '@/lib/api';
 
 export const useRevealedCVs = () => {
   const { token } = useAuthStore();
@@ -11,18 +12,9 @@ export const useRevealedCVs = () => {
 
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/students/revealed-cvs', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setRevealedCVs(data.revealedStudentIds);
-        console.log('✅ CVs revelados cargados:', data.revealedStudentIds.length);
-      }
+      const response = await apiClient.get('/api/students/revealed-cvs');
+      setRevealedCVs(response.data.revealedStudentIds);
+      console.log('✅ CVs revelados cargados:', response.data.revealedStudentIds.length);
     } catch (error) {
       console.error('❌ Error cargando CVs revelados:', error);
     } finally {

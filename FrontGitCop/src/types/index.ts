@@ -105,7 +105,7 @@ export interface Offer {
   schedule: string;
   min_hr: number;
   car: boolean;
-  sector: string;
+  sector?: string;
   tag: string;
   description: string;
   jobs: string;
@@ -191,7 +191,6 @@ export interface CreateOfferData {
     min_hr?: number;
     skills?: number[]; // IDs de skills seleccionados
   car?: boolean;
-  sector: string;
   tag: string;
   description: string;
   jobs: string;

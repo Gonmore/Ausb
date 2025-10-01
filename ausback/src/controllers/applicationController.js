@@ -4,7 +4,6 @@ import { Student } from '../models/student.js';
 import { Company } from '../models/company.js';
 import { Profamily } from '../models/profamily.js';
 import { Cv } from '../models/cv.js';
-import { CompanyToken, TokenUsage } from '../models/companyToken.js';
 import { User } from '../models/users.js';
 import sequelize from '../database/database.js';
 import logger from '../logs/logger.js';
@@ -12,6 +11,7 @@ import { StudentToken } from '../models/studentToken.js';
 import affinityCalculator from '../services/affinityCalculator.js';
 import companyService from '../services/companyService.js';
 import notificationService from '../services/notificationService.js';
+import meetingService from '../services/meetingService.js';
 import { UserCompany } from '../models/relations.js';
 
 /**
@@ -279,6 +279,16 @@ export const getUserApplications = async (req, res) => {
       message: app.message,
       companyNotes: app.companyNotes,
       rejectionReason: app.rejectionReason,
+      interviewDetails: app.interviewDetails ? (() => {
+        try {
+          return JSON.parse(app.interviewDetails);
+        } catch (error) {
+          console.error('Error parsing interviewDetails for app', app.id, ':', error);
+          console.error('Raw interviewDetails:', app.interviewDetails);
+          return null;
+        }
+      })() : null,
+      interviewRequestedAt: app.interviewRequestedAt,
       offer: app.offer ? {
         id: app.offer.id,
         name: app.offer.name,
@@ -296,6 +306,13 @@ export const getUserApplications = async (req, res) => {
         } : null
       } : null
     }));
+
+    // Debug the first application
+    if (formattedApplications.length > 0) {
+      console.log('🔍 Raw interviewDetails from DB:', applications[0].interviewDetails);
+      console.log('🔍 Parsed interviewDetails:', formattedApplications[0].interviewDetails);
+      console.log('🔍 Application status:', formattedApplications[0].status);
+    }
 
     // 🔥 PASO 4: Calcular estadísticas
     const stats = {
@@ -375,7 +392,7 @@ async function getOfferApplications(req, res) {
         
         const applications = await Application.findAll({
             where: { offerId },
-            attributes: ['id', 'status', 'appliedAt', 'message', 'companyNotes', 'rejectionReason'],
+            attributes: ['id', 'status', 'appliedAt', 'message', 'companyNotes', 'rejectionReason', 'interviewDetails', 'interviewRequestedAt', 'interviewConfirmedAt', 'interviewRejectedAt', 'interviewRejectionReason', 'studentNotes'],
             include: [
                 {
                     model: Student,
@@ -416,6 +433,24 @@ async function getOfferApplications(req, res) {
                 studentUser: appData.student?.user ? 'exists' : 'missing'
             });
             
+            // Debug interview details specifically
+            console.log(`🔍 Application ${app.id} - Status: ${appData.status}`);
+            console.log(`🔍 Application ${app.id} - Raw interviewDetails:`, appData.interviewDetails);
+            
+            let parsedInterviewDetails = null;
+            if (appData.interviewDetails) {
+                try {
+                    parsedInterviewDetails = JSON.parse(appData.interviewDetails);
+                    console.log(`🔍 Application ${app.id} - Parsed interviewDetails:`, parsedInterviewDetails);
+                } catch (parseError) {
+                    console.error(`❌ Error parsing interviewDetails for application ${appData.id}:`, parseError.message);
+                    console.error(`❌ Raw interviewDetails:`, appData.interviewDetails);
+                    parsedInterviewDetails = null;
+                }
+            } else {
+                console.log(`🔍 Application ${app.id} - No interviewDetails found`);
+            }
+            
             return {
                 id: appData.id,
                 status: appData.status,
@@ -423,6 +458,12 @@ async function getOfferApplications(req, res) {
                 message: appData.message,
                 companyNotes: appData.companyNotes,
                 rejectionReason: appData.rejectionReason,
+                interviewDetails: parsedInterviewDetails,
+                interviewRequestedAt: appData.interviewRequestedAt,
+                interviewConfirmedAt: appData.interviewConfirmedAt,
+                interviewRejectedAt: appData.interviewRejectedAt,
+                interviewRejectionReason: appData.interviewRejectionReason,
+                studentNotes: appData.studentNotes,
                 Student: {
                     id: appData.student.id,
                     grade: appData.student.grade,
@@ -494,6 +535,12 @@ async function getCompanyApplications(req, res) {
 
         // 🔥 OBTENER APLICACIONES AGRUPADAS POR ESTUDIANTE
         const applications = await Application.findAll({
+            attributes: [
+                'id', 'status', 'appliedAt', 'reviewedAt', 'cvViewed', 'cvViewedAt', 
+                'message', 'companyNotes', 'rejectionReason', 'interviewDetails', 
+                'interviewRequestedAt', 'interviewConfirmedAt', 'interviewRejectedAt', 
+                'interviewRejectionReason', 'studentNotes'
+            ],
             include: [
                 {
                     model: Offer,
@@ -571,6 +618,22 @@ async function getCompanyApplications(req, res) {
                 message: app.message,
                 companyNotes: app.companyNotes,
                 rejectionReason: app.rejectionReason,
+                interviewDetails: app.interviewDetails ? (() => {
+                    try {
+                        const parsed = JSON.parse(app.interviewDetails);
+                        console.log(`🔍 Company App ${app.id} - Parsed interviewDetails:`, parsed);
+                        return parsed;
+                    } catch (parseError) {
+                        console.error(`❌ Error parsing interviewDetails for company app ${app.id}:`, parseError.message);
+                        console.error(`❌ Raw interviewDetails:`, app.interviewDetails);
+                        return null;
+                    }
+                })() : null,
+                interviewRequestedAt: app.interviewRequestedAt,
+                interviewConfirmedAt: app.interviewConfirmedAt,
+                interviewRejectedAt: app.interviewRejectedAt,
+                interviewRejectionReason: app.interviewRejectionReason,
+                studentNotes: app.studentNotes,
                 offer: {
                     id: app.offer.id,
                     name: app.offer.name,
@@ -728,8 +791,8 @@ async function updateApplicationStatus(req, res) {
         if (status === 'accepted') {
             const { Op } = require('sequelize');
             
-            // Buscar todas las otras aplicaciones del mismo estudiante que están pendientes o en revisión
-            const otherApplications = await Application.findAll({
+            // Buscar todas las otras aplicaciones del mismo estudiante a ofertas de esta empresa que están pendientes o en revisión
+            const otherStudentApplications = await Application.findAll({
                 where: {
                     studentId: application.studentId,
                     id: { [Op.ne]: applicationId }, // Excluir la aplicación actual
@@ -737,13 +800,14 @@ async function updateApplicationStatus(req, res) {
                 },
                 include: [{
                     model: Offer,
+                    where: { companyId: company.id }, // 🔥 SOLO OFERTAS DE ESTA EMPRESA
                     include: [{ model: Company }]
                 }],
                 transaction
             });
 
-            // Rechazar automáticamente las otras aplicaciones
-            if (otherApplications.length > 0) {
+            // Rechazar automáticamente las otras aplicaciones del estudiante
+            if (otherStudentApplications.length > 0) {
                 await Application.update(
                     { 
                         status: 'rejected',
@@ -752,7 +816,7 @@ async function updateApplicationStatus(req, res) {
                     },
                     {
                         where: {
-                            id: { [Op.in]: otherApplications.map(app => app.id) }
+                            id: { [Op.in]: otherStudentApplications.map(app => app.id) }
                         },
                         transaction
                     }
@@ -762,11 +826,48 @@ async function updateApplicationStatus(req, res) {
                     userId, 
                     applicationId, 
                     studentId: application.studentId,
-                    rejectedApplications: otherApplications.length
-                }, "Student accepted - other applications auto-rejected");
-
-                console.log(`✅ Estudiante ${application.Student.User.name} aceptado. Se rechazaron automáticamente ${otherApplications.length} aplicaciones.`);
+                    rejectedApplications: otherStudentApplications.length
+                }, "Student accepted - other student applications auto-rejected");
             }
+
+            // 🔥 NUEVO: Rechazar todas las otras aplicaciones a la misma oferta
+            const otherOfferApplications = await Application.findAll({
+                where: {
+                    offerId: application.offerId,
+                    id: { [Op.ne]: applicationId }, // Excluir la aplicación actual
+                    status: { [Op.in]: ['pending', 'reviewed'] } // Solo las pendientes o en revisión
+                },
+                include: [{
+                    model: Student,
+                    include: [{ model: User }]
+                }],
+                transaction
+            });
+
+            // Rechazar automáticamente las otras aplicaciones a la oferta
+            if (otherOfferApplications.length > 0) {
+                await Application.update(
+                    { 
+                        status: 'rejected',
+                        rejectionReason: 'Oferta ya cubierta - estudiante aceptado',
+                        companyNotes: 'Aplicación rechazada automáticamente - oferta ya asignada'
+                    },
+                    {
+                        where: {
+                            id: { [Op.in]: otherOfferApplications.map(app => app.id) }
+                        },
+                        transaction
+                    }
+                );
+
+                logger.info({ 
+                    userId, 
+                    applicationId, 
+                    offerId: application.offerId,
+                    rejectedOfferApplications: otherOfferApplications.length
+                }, "Offer filled - other offer applications auto-rejected");
+            }
+
         }
 
         await transaction.commit();
@@ -813,9 +914,9 @@ async function updateApplicationStatus(req, res) {
         });
 
         // 🚀 NOTIFICAR OTRAS EMPRESAS SI EL ESTUDIANTE FUE ACEPTADO
-        if (status === 'accepted' && otherApplications.length > 0) {
+        if (status === 'accepted' && otherStudentApplications.length > 0) {
             // Enviar notificaciones a las empresas cuyas aplicaciones fueron rechazadas automáticamente
-            for (const otherApp of otherApplications) {
+            for (const otherApp of otherStudentApplications) {
                 await notificationService.notify('application_rejected', {
                     recipientId: otherApp.Offer.Company.id,
                     recipientType: 'company',
@@ -956,279 +1057,82 @@ export const withdrawApplication = async (req, res) => {
 };
 /**
  * @swagger
- * /api/applications/{applicationId}/hire:
+ * /api/applications/{applicationId}/mark-cv-viewed:
  *   put:
- *     summary: Marcar estudiante como contratado (genera cobro)
- */
-async function hireStudent(req, res) {
-    const { userId } = req.user;
-    const { applicationId } = req.params;
-    const { contractDetails = {} } = req.body; // salary, startDate, etc.
-
-    try {
-        await sequelize.transaction(async (t) => {
-            // 🔥 REEMPLAZAR EL MAPEO MANUAL CON EL SERVICE
-            const company = await companyService.getCompanyByUserId(userId);
-
-            const application = await Application.findOne({
-                where: { 
-                    id: applicationId,
-                    companyId: company.id  // 🔥 USAR company.id del service
-                },
-                include: [
-                    {
-                        model: Student,
-                        include: [
-                            {
-                                model: User,
-                                attributes: ['name', 'surname', 'email']
-                            }
-                        ]
-                    },
-                    {
-                        model: Offer,
-                        attributes: ['name', 'salary']
-                    }
-                ],
-                transaction: t
-            });
-
-            if (!application) {
-                return res.status(404).json({ mensaje: 'Aplicación no encontrada' });
-            }
-
-            if (application.status === 'hired') {
-                return res.status(400).json({ mensaje: 'El estudiante ya está marcado como contratado' });
-            }
-
-            // Actualizar estado de aplicación
-            await application.update({
-                status: 'hired',
-                hiredAt: new Date(),
-                contractDetails: JSON.stringify(contractDetails)
-            }, { transaction: t });
-
-            // 💰 GENERAR COBRO AL ESTUDIANTE
-            const chargeAmount = 29.99; // Precio por contratación
-
-            // Buscar o crear registro de tokens del estudiante
-            let studentToken = await StudentToken.findOne({
-                where: { studentId: application.studentId },
-                transaction: t
-            });
-
-            if (!studentToken) {
-                studentToken = await StudentToken.create({
-                    studentId: application.studentId,
-                    pendingPayment: 0,
-                    totalEarned: 0,
-                    contractCount: 0
-                }, { transaction: t });
-            }
-
-            // Actualizar deuda del estudiante
-            await studentToken.update({
-                pendingPayment: studentToken.pendingPayment + chargeAmount,
-                contractCount: studentToken.contractCount + 1
-            }, { transaction: t });
-
-            console.log(`💰 Estudiante ${application.Student.User.name} contratado. Cargo: €${chargeAmount}`);
-
-            res.json({
-                mensaje: 'Estudiante marcado como contratado exitosamente',
-                application: {
-                    id: application.id,
-                    status: 'hired',
-                    hiredAt: new Date(),
-                    student: {
-                        name: application.Student.User.name,
-                        surname: application.Student.User.surname,
-                        email: application.Student.User.email
-                    },
-                    offer: {
-                        name: application.Offer.name
-                    },
-                    charge: {
-                        amount: chargeAmount,
-                        currency: 'EUR',
-                        description: 'Comisión por contratación exitosa'
-                    }
-                }
-            });
-        });
-    } catch (error) {
-        console.error('Error hiring student:', error);
-        
-        // 🔥 AÑADIR MANEJO DE ERROR DEL SERVICE
-        if (error.message.includes('No se encontró empresa')) {
-            return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
-        }
-        
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
-    }
-}
-
-/**
- * @swagger
- * /api/applications/company/candidates/{offerId}:
- *   get:
- *     summary: Buscar candidatos inteligentes para una oferta (usa tokens)
+ *     summary: Marcar CV como visto por la empresa
  *     tags: [Applications]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: offerId
+ *         name: applicationId
  *         required: true
  *         schema:
  *           type: integer
- *         description: ID de la oferta
- *       - in: query
- *         name: minScore
- *         schema:
- *           type: number
- *           minimum: 0
- *           maximum: 10
- *           default: 6.0
- *         description: Puntuación mínima de afinidad
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 10
- *         description: Número máximo de candidatos a devolver
+ *         description: ID de la aplicación
  *     responses:
  *       200:
- *         description: Lista de candidatos recomendados
- *       402:
- *         description: Tokens insuficientes
+ *         description: CV marcado como visto exitosamente
  *       403:
- *         description: No tienes permisos
+ *         description: No tienes permisos para esta aplicación
  *       404:
- *         description: Oferta no encontrada
+ *         description: Aplicación no encontrada
  *       500:
  *         description: Error interno del servidor
  */
-async function getSmartCandidates(req, res) {
+async function markCVAsViewed(req, res) {
     const { userId } = req.user;
-    const { offerId } = req.params;
-    const { minScore = 6.0, limit = 10 } = req.query;
+    const { applicationId } = req.params;
 
     try {
         await sequelize.transaction(async (t) => {
-            // 🔥 USAR EL SERVICE PARA OBTENER LA EMPRESA
+            // Usar el service para obtener la empresa
             const company = await companyService.getCompanyByUserId(userId);
 
-            // Verificar que la oferta pertenece a la empresa
-            const offer = await Offer.findOne({
+            // Buscar la aplicación
+            const application = await Application.findOne({
                 where: { 
-                    id: offerId,
+                    id: applicationId,
                     companyId: company.id 
                 },
                 include: [{
-                    model: Profamily,
-                    attributes: ['id', 'name']
+                    model: Student,
+                    include: [{ model: User }]
+                }, {
+                    model: Offer
                 }],
                 transaction: t
             });
 
-            if (!offer) {
-                return res.status(404).json({ mensaje: 'Oferta no encontrada o no tienes permisos' });
+            if (!application) {
+                return res.status(404).json({ mensaje: 'Aplicación no encontrada o no tienes permisos' });
             }
 
-            // Verificar tokens de la empresa
-            const companyToken = await CompanyToken.findOne({
-                where: { companyId: company.id },
-                transaction: t
-            });
+            // Marcar CV como visto si no lo estaba
+            if (!application.cvViewed) {
+                await application.update({
+                    cvViewed: true,
+                    cvViewedAt: new Date()
+                }, { transaction: t });
 
-            const tokensRequired = parseInt(limit) || 10;
-            if (!companyToken || companyToken.balance < tokensRequired) {
-                return res.status(402).json({ 
-                    mensaje: 'Tokens insuficientes para esta búsqueda',
-                    required: tokensRequired,
-                    available: companyToken?.balance || 0
-                });
+                logger.info({ userId, applicationId, companyId: company.id }, "CV marked as viewed");
             }
-
-            // Obtener todos los estudiantes (excluyendo los que ya aplicaron a esta oferta)
-            const existingApplications = await Application.findAll({
-                where: { offerId },
-                attributes: ['studentId'],
-                transaction: t
-            });
-
-            const excludeStudentIds = existingApplications.map(app => app.studentId);
-
-            const students = await Student.findAll({
-                where: excludeStudentIds.length > 0 ? {
-                    id: { [Op.notIn]: excludeStudentIds }
-                } : {},
-                include: [
-                    {
-                        model: User,
-                        attributes: ['id', 'name', 'surname', 'email', 'phone']
-                    },
-                    {
-                        model: Profamily,
-                        attributes: ['id', 'name'],
-                        as: 'profamily',
-                        required: false
-                    }
-                ],
-                transaction: t
-            });
-
-            // 🤖 USAR EL AFFINITY CALCULATOR
-            const companySkills = offer.requiredSkills || {};
-            const studentsWithSkills = students.map(student => ({
-                ...student.toJSON(),
-                skills: student.skills || {}
-            }));
-
-            const smartResults = affinityCalculator.findBestCandidates(
-                companySkills, 
-                studentsWithSkills, 
-                parseFloat(minScore), 
-                parseInt(limit)
-            );
-
-            // Descontar tokens
-            await companyToken.update({
-                balance: companyToken.balance - tokensRequired
-            }, { transaction: t });
-
-            // Registrar uso de tokens
-            await TokenUsage.create({
-                companyId: company.id,
-                tokensUsed: tokensRequired,
-                action: 'smart_search',
-                metadata: {
-                    offerId,
-                    candidatesFound: smartResults.candidates.length,
-                    minScore,
-                    searchTimestamp: new Date()
-                }
-            }, { transaction: t });
-
-            console.log(`🤖 Búsqueda inteligente completada: ${smartResults.candidates.length} candidatos encontrados (${smartResults.recommended} recomendados)`);
 
             res.json({
-                mensaje: 'Búsqueda inteligente completada',
-                results: smartResults,
-                tokensUsed: tokensRequired,
-                remainingTokens: companyToken.balance - tokensRequired,
-                offer: {
-                    id: offer.id,
-                    name: offer.name,
-                    requiredSkills: companySkills
+                mensaje: 'CV marcado como visto exitosamente',
+                application: {
+                    id: application.id,
+                    cvViewed: true,
+                    cvViewedAt: application.cvViewedAt || new Date(),
+                    student: {
+                        name: application.Student.User.name,
+                        surname: application.Student.User.surname
+                    }
                 }
             });
         });
     } catch (error) {
-        console.error('❌ Error getSmartCandidates:', error);
+        console.error('Error markCVAsViewed:', error);
         
         if (error.message.includes('No se encontró empresa')) {
             return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
@@ -1237,8 +1141,6 @@ async function getSmartCandidates(req, res) {
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 }
-
-// AGREGAR esta nueva función:
 
 export const requestInterview = async (req, res) => {
   try {
@@ -1247,23 +1149,18 @@ export const requestInterview = async (req, res) => {
     const { interviewDetails, companyNotes } = req.body;
 
     console.log(`📅 Solicitud de entrevista - Application: ${applicationId}, User: ${userId}`);
+    console.log(`📅 Interview details received:`, interviewDetails);
+    console.log(`📅 Company notes:`, companyNotes);
+    console.log(`📅 Interview details type:`, typeof interviewDetails);
+    console.log(`📅 Interview details keys:`, interviewDetails ? Object.keys(interviewDetails) : 'null');
 
-    // Obtener empresa
-    const userCompany = await UserCompany.findOne({
-      where: { userId: userId, isActive: true },
-      include: [{ model: Company, as: 'company' }],
-      raw: false
-    });
-
-    if (!userCompany || !userCompany.company) {
-      return res.status(404).json({ mensaje: 'Usuario no está asociado a ninguna empresa activa' });
-    }
+    // 🔥 USAR EL SERVICE PARA OBTENER LA EMPRESA (como en otras funciones)
+    const company = await companyService.getCompanyByUserId(userId);
 
     // Buscar la aplicación
     const application = await Application.findOne({
-      where: { 
-        id: applicationId,
-        companyId: userCompany.company.id 
+      where: {
+        id: applicationId
       },
       include: [
         {
@@ -1280,26 +1177,55 @@ export const requestInterview = async (req, res) => {
         {
           model: Offer,
           as: 'offer',
-          attributes: ['id', 'name']
+          attributes: ['id', 'name', 'companyId']
         }
       ]
     });
 
     if (!application) {
-      return res.status(404).json({ 
-        mensaje: 'Aplicación no encontrada o no tienes permisos para modificarla' 
+      return res.status(404).json({
+        mensaje: 'Aplicación no encontrada'
       });
     }
+
+    // Verificar que la oferta pertenece a la compañía del usuario
+    if (application.offer.companyId !== company.id) {
+      return res.status(403).json({
+        mensaje: 'No tienes permisos para modificar esta aplicación'
+      });
+    }
+
+    // 🔥 GENERAR ENLACE DE REUNIÓN AUTOMÁTICAMENTE PARA ENTREVISTAS REMOTAS
+    let finalInterviewDetails = { ...interviewDetails };
+
+    if (interviewDetails.type === 'remoto') {
+      // Generar enlace de Google Meet automáticamente
+      const generatedLink = meetingService.generateGoogleMeetLink();
+      finalInterviewDetails.link = generatedLink;
+      console.log(`🔗 Enlace de Google Meet generado automáticamente: ${generatedLink}`);
+    }
+
+    // Preparar los datos para guardar
+    const interviewDetailsString = JSON.stringify(finalInterviewDetails);
+    console.log(`📅 Interview details stringified:`, interviewDetailsString);
 
     // Actualizar aplicación con detalles de entrevista
     await application.update({
       status: 'interview_requested',
       companyNotes: companyNotes,
-      interviewDetails: JSON.stringify(interviewDetails),
+      interviewDetails: interviewDetailsString,
       interviewRequestedAt: new Date()
     });
 
     console.log(`✅ Entrevista solicitada para aplicación ${applicationId}`);
+    console.log(`✅ Interview details saved:`, interviewDetailsString);
+    console.log(`✅ Company notes saved:`, companyNotes);
+
+    // Verificar que se guardó correctamente
+    const updatedApplication = await Application.findByPk(applicationId);
+    console.log(`✅ Verificación - Status: ${updatedApplication.status}`);
+    console.log(`✅ Verificación - Interview details raw:`, updatedApplication.interviewDetails);
+    console.log(`✅ Verificación - Interview details parsed:`, JSON.parse(updatedApplication.interviewDetails));
 
     // TODO: Enviar notificación al estudiante
     // await notificationService.sendInterviewRequest(application, interviewDetails);
@@ -1310,7 +1236,7 @@ export const requestInterview = async (req, res) => {
       application: {
         id: application.id,
         status: 'interview_requested',
-        interviewDetails: interviewDetails,
+        interviewDetails: finalInterviewDetails,
         student: {
           name: application.student.user.name,
           surname: application.student.user.surname,
@@ -1324,6 +1250,180 @@ export const requestInterview = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error requesting interview:', error);
+    
+    // 🔥 AÑADIR MANEJO DE ERROR DEL SERVICE
+    if (error.message.includes('No se encontró empresa')) {
+      return res.status(403).json({ mensaje: 'Usuario no está asociado a ninguna empresa' });
+    }
+    
+    res.status(500).json({
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+export const confirmInterview = async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+    const { userId } = req.user;
+    const { studentNotes } = req.body;
+
+    console.log(`✅ Confirmando entrevista - Application: ${applicationId}, User: ${userId}`);
+
+    // Encontrar el estudiante
+    const student = await Student.findOne({
+      where: { userId: userId }
+    });
+
+    if (!student) {
+      return res.status(404).json({ 
+        mensaje: 'Perfil de estudiante no encontrado' 
+      });
+    }
+
+    // Buscar la aplicación
+    const application = await Application.findOne({
+      where: { 
+        id: applicationId,
+        studentId: student.id,
+        status: 'interview_requested'
+      },
+      include: [
+        {
+          model: Offer,
+          as: 'offer',
+          include: [
+            {
+              model: Company,
+              as: 'company'
+            }
+          ]
+        }
+      ]
+    });
+
+    if (!application) {
+      return res.status(404).json({ 
+        mensaje: 'Aplicación no encontrada o no tiene entrevista pendiente' 
+      });
+    }
+
+    // Actualizar aplicación
+    await application.update({
+      status: 'interview_confirmed',
+      studentNotes: studentNotes,
+      interviewConfirmedAt: new Date()
+    });
+
+    console.log(`✅ Entrevista confirmada para aplicación ${applicationId}`);
+
+    res.json({
+      success: true,
+      mensaje: 'Entrevista confirmada exitosamente',
+      application: {
+        id: application.id,
+        status: 'interview_confirmed',
+        interviewDetails: application.interviewDetails ? (() => {
+            try {
+                return JSON.parse(application.interviewDetails);
+            } catch (parseError) {
+                console.error(`❌ Error parsing interviewDetails for application ${application.id}:`, parseError.message);
+                console.error(`❌ Raw interviewDetails:`, application.interviewDetails);
+                return null;
+            }
+        })() : null,
+        offer: {
+          name: application.offer.name
+        },
+        company: {
+          name: application.offer.company.name
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error confirmando entrevista:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+export const rejectInterview = async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+    const { userId } = req.user;
+    const { rejectionReason, studentNotes } = req.body;
+
+    console.log(`❌ Rechazando entrevista - Application: ${applicationId}, User: ${userId}`);
+
+    // Encontrar el estudiante
+    const student = await Student.findOne({
+      where: { userId: userId }
+    });
+
+    if (!student) {
+      return res.status(404).json({ 
+        mensaje: 'Perfil de estudiante no encontrado' 
+      });
+    }
+
+    // Buscar la aplicación
+    const application = await Application.findOne({
+      where: { 
+        id: applicationId,
+        studentId: student.id,
+        status: 'interview_requested'
+      },
+      include: [
+        {
+          model: Offer,
+          as: 'offer',
+          include: [
+            {
+              model: Company,
+              as: 'company'
+            }
+          ]
+        }
+      ]
+    });
+
+    if (!application) {
+      return res.status(404).json({ 
+        mensaje: 'Aplicación no encontrada o no tiene entrevista pendiente' 
+      });
+    }
+
+    // Actualizar aplicación
+    await application.update({
+      status: 'interview_rejected',
+      interviewRejectionReason: rejectionReason,
+      studentNotes: studentNotes,
+      interviewRejectedAt: new Date()
+    });
+
+    console.log(`❌ Entrevista rechazada para aplicación ${applicationId}`);
+
+    res.json({
+      success: true,
+      mensaje: 'Entrevista rechazada',
+      application: {
+        id: application.id,
+        status: 'interview_rejected',
+        offer: {
+          name: application.offer.name
+        },
+        company: {
+          name: application.offer.company.name
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error rechazando entrevista:', error);
     res.status(500).json({ 
       mensaje: 'Error interno del servidor',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -1338,7 +1438,8 @@ export default {
     getOfferApplications,
     updateApplicationStatus,
     withdrawApplication,
-    hireStudent,
-    getSmartCandidates, // 🔥 NUEVA FUNCIÓN CON AFFINITY CALCULATOR
-    requestInterview
+    requestInterview,
+    confirmInterview,
+    rejectInterview,
+    markCVAsViewed
 };

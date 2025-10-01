@@ -1,32 +1,35 @@
-export class AffinityCalculator {
+﻿export class AffinityCalculator {
   constructor() {
     this.maxScoreUniqueMatch = 3.0;
-    
-    // 🚀 OPTIMIZACIÓN: Configuración mejorada con pesos dinámicos
     this.weights = {
-      exactMatch: 1.0,        // Peso base para coincidencia exacta
+      exactMatch: 1.0,        // Para coincidencia exacta
       superiorMatch: 1.3,     // Bonus por superar el nivel requerido
       criticalSkill: 1.5,     // Bonus para habilidades críticas (nivel 4-5)
       coverageBonus: 1.2,     // Bonus por alta cobertura
       experienceBonus: 1.15,  // Bonus por experiencia superior
-      consistencyBonus: 1.1   // Bonus por consistencia en múltiples habilidades
+      consistencyBonus: 1.1,  // Bonus por consistencia en múltiples habilidades
+      educationBonus: 1.2,    // Bonus por educación relevante
+      experienceYearsBonus: 1.1, // Bonus por años de experiencia
+      profamilyMatchBonus: 1.3    // Bonus por coincidencia de familia profesional
     };
-    
-    // 🚀 OPTIMIZACIÓN: Cache para mejorar performance en cálculos repetidos
+
+    //  OPTIMIZACIÓN: Cache para mejorar performance en cálculos repetidos
     this.cache = new Map();
     this.cacheSize = 1000;
     this.cacheHits = 0;
     this.cacheMisses = 0;
   }
 
-  calculateAffinity(companySkills, studentSkills) {
-    // 🚀 OPTIMIZACIÓN: Cache de resultados para estudiantes similares
-    const cacheKey = this._generateCacheKey(companySkills, studentSkills);
+  calculateAffinity(companySkills, studentSkills, options = {}) {
+    //  OPTIMIZACIÓN: Cache de resultados para estudiantes similares
+    const cacheKey = this._generateCacheKey(companySkills, studentSkills, options);
     if (this.cache.has(cacheKey)) {
       this.cacheHits++;
       return this.cache.get(cacheKey);
     }
     this.cacheMisses++;
+
+    const { profamilyId = null, offerProfamilyIds = [] } = options;
 
     let score = 0;
     let matches = 0;
@@ -48,15 +51,15 @@ export class AffinityCalculator {
       return this._createAffinityResult(0, 0, totalCompanySkills, [], {});
     }
 
-    // 🚀 OPTIMIZACIÓN: Pre-clasificar habilidades por importancia
+    //  OPTIMIZACIÓN: Pre-clasificar habilidades por importancia
     const skillsByImportance = this._classifySkillsByImportance(companySkills);
-    
-    // 🚀 OPTIMIZACIÓN: Calcular coincidencias con algoritmo mejorado
+
+    //  OPTIMIZACIÓN: Calcular coincidencias con algoritmo mejorado
     for (const [skill, companyLevel] of Object.entries(companySkills)) {
       if (studentSkills[skill]) {
         const studentLevel = studentSkills[skill];
         matches++;
-        
+
         const skillMatch = {
           skill,
           companyLevel,
@@ -65,49 +68,49 @@ export class AffinityCalculator {
           excess: Math.max(0, studentLevel - companyLevel),
           importance: this._getSkillImportance(companyLevel)
         };
-        
+
         matchingSkills.push(skillMatch);
 
-        // 🚀 OPTIMIZACIÓN: Sistema de puntuación más sofisticado
+        //  OPTIMIZACIÓN: Sistema de puntuación más sofisticado
         let skillScore = this._calculateSkillScore(skillMatch);
-        
+
         // Aplicar bonificaciones especiales
         if (companyLevel >= 4) {
           hasPremiumMatch = true;
           criticalSkillsMatched++;
           skillScore *= this.weights.criticalSkill;
         }
-        
+
         if (companyLevel === 2) hasValue2Match++;
-        
+
         if (studentLevel > companyLevel) {
           hasSuperiorRating++;
           skillScore *= this.weights.superiorMatch;
         }
-        
-        // 🚀 OPTIMIZACIÓN: Bonus por consistencia en habilidades importantes
+
+        //  OPTIMIZACIÓN: Bonus por consistencia en habilidades importantes
         if (companyLevel >= 3 && studentLevel >= companyLevel) {
           consistencyScore += 1;
         }
-        
+
         score += skillScore;
       } else {
-        // 🚀 OPTIMIZACIÓN: Penalización más inteligente para habilidades faltantes
+        //  OPTIMIZACIÓN: Penalización más inteligente para habilidades faltantes
         const missingPenalty = this._calculateMissingSkillPenalty(companyLevel, totalCompanySkills);
         score -= missingPenalty;
       }
     }
 
-    // 🚀 OPTIMIZACIÓN: Factores mejorados de cobertura y proporcionalidad
+    //  OPTIMIZACIÓN: Factores mejorados de cobertura y proporcionalidad
     coverageFactor = matches / totalCompanySkills;
-    
+
     // Factor proporcional mejorado
     if (totalStudentSkills > totalCompanySkills) {
       const skillRatio = totalStudentSkills / totalCompanySkills;
       proportionalFactor = Math.min(1.3, 1 + (coverageFactor * 0.3));
     }
 
-    // 🚀 OPTIMIZACIÓN: Detección mejorada de coincidencia única especial
+    //  OPTIMIZACIÓN: Detección mejorada de coincidencia única especial
     if (matches === 1 && totalCompanySkills === 1) {
       const singleSkill = matchingSkills[0];
       if (singleSkill.companyLevel >= 4 && singleSkill.studentLevel >= singleSkill.companyLevel) {
@@ -116,9 +119,9 @@ export class AffinityCalculator {
       }
     }
 
-    // 🚀 OPTIMIZACIÓN: Sistema de bonificaciones más inteligente
+    //  OPTIMIZACIÓN: Sistema de bonificaciones más inteligente
     let finalScore = score;
-    
+
     // Aplicar factores base
     finalScore *= coverageFactor * proportionalFactor;
 
@@ -128,24 +131,30 @@ export class AffinityCalculator {
     } else if (hasPremiumMatch) {
       finalScore *= this.weights.experienceBonus;
     }
-    
+
     if (hasValue2Match >= 2) finalScore *= 1.05;
     if (hasSuperiorRating >= 2) finalScore *= this.weights.consistencyBonus;
-    
-    // 🚀 OPTIMIZACIÓN: Bonus por consistencia en múltiples habilidades
+
+    //  OPTIMIZACIÓN: Bonus por consistencia en múltiples habilidades
     if (consistencyScore >= 3) {
       finalScore *= this.weights.consistencyBonus;
     }
-    
-    // 🚀 OPTIMIZACIÓN: Bonus por alta cobertura
+
+    //  OPTIMIZACIÓN: Bonus por alta cobertura
     if (coverageFactor >= 0.8) {
       finalScore *= this.weights.coverageBonus;
     }
 
-    // 🚀 OPTIMIZACIÓN: Normalización mejorada con curva logarítmica
+    //  INTEGRACIÓN: Calcular afinidad basada en familia profesional
+    const profamilyAffinity = this._calculateProfamilyAffinity(profamilyId, offerProfamilyIds);
+
+    // Aplicar bonificaciones de familia profesional
+    finalScore *= profamilyAffinity.score;
+
+    //  OPTIMIZACIÓN: Normalización mejorada con curva logarítmica
     const normalizedScore = this._normalizeScore(finalScore, totalCompanySkills, coverageFactor);
 
-    // 🚀 OPTIMIZACIÓN: Factores expandidos con más métricas
+    //  INTEGRACIÓN: Factores expandidos con profamily
     const factors = {
       hasPremiumMatch,
       hasValue2Match,
@@ -156,30 +165,32 @@ export class AffinityCalculator {
       specialUniqueMatch,
       coverageFactor: Math.round(coverageFactor * 100) / 100,
       skillDiversityBonus: totalStudentSkills > totalCompanySkills,
-      perfectMatch: matches === totalCompanySkills && hasSuperiorRating === 0
+      perfectMatch: matches === totalCompanySkills && hasSuperiorRating === 0,
+      profamilyAffinity
     };
 
     const result = this._createAffinityResult(
-      normalizedScore, 
-      matches, 
-      totalCompanySkills, 
-      matchingSkills, 
+      normalizedScore,
+      matches,
+      totalCompanySkills,
+      matchingSkills,
       factors
     );
-    
-    // 🚀 OPTIMIZACIÓN: Guardar en cache
+
+    //  OPTIMIZACIÓN: Guardar en cache
     this._cacheResult(cacheKey, result);
-    
+
     return result;
   }
-  
-  // 🚀 OPTIMIZACIÓN: Nuevos métodos de apoyo
-  _generateCacheKey(companySkills, studentSkills) {
+
+  //  OPTIMIZACIÓN: Nuevos métodos de apoyo
+  _generateCacheKey(companySkills, studentSkills, options = {}) {
     const companyStr = JSON.stringify(companySkills);
     const studentStr = JSON.stringify(studentSkills);
-    return `${companyStr}|${studentStr}`;
+    const optionsStr = JSON.stringify(options);
+    return `${companyStr}|${studentStr}|${optionsStr}`;
   }
-  
+
   _cacheResult(key, result) {
     if (this.cache.size >= this.cacheSize) {
       // Limpiar cache más antiguo (FIFO)
@@ -188,70 +199,70 @@ export class AffinityCalculator {
     }
     this.cache.set(key, result);
   }
-  
+
   _classifySkillsByImportance(companySkills) {
     const critical = [];
     const important = [];
     const basic = [];
-    
+
     for (const [skill, level] of Object.entries(companySkills)) {
       if (level >= 4) critical.push(skill);
       else if (level >= 3) important.push(skill);
       else basic.push(skill);
     }
-    
+
     return { critical, important, basic };
   }
-  
+
   _getSkillImportance(level) {
-    if (level >= 4) return 'critical';
-    if (level >= 3) return 'important';
-    return 'basic';
+    if (level >= 4) return "critical";
+    if (level >= 3) return "important";
+    return "basic";
   }
-  
+
   _calculateSkillScore(skillMatch) {
     const { companyLevel, studentLevel, match } = skillMatch;
-    
+
     if (!match) {
       // Penalización por no cumplir el mínimo
       return companyLevel * 0.3;
     }
-    
+
     let baseScore = companyLevel;
-    
+
     // Bonus por exceder el nivel requerido
     if (studentLevel > companyLevel) {
       const excess = studentLevel - companyLevel;
       baseScore += excess * 0.5;
     }
-    
+
     return baseScore;
   }
-  
+
   _calculateMissingSkillPenalty(companyLevel, totalSkills) {
     // Penalización más suave para habilidades básicas
     const basePenalty = companyLevel * 0.2;
     const scalingFactor = 1 / Math.sqrt(totalSkills);
     return basePenalty * scalingFactor;
   }
-  
+
   _normalizeScore(score, totalRequired, coverageFactor) {
     // Normalización mejorada que considera la cobertura
     const baseNormalization = (score / totalRequired) * 2;
     const coverageAdjustment = Math.log(1 + coverageFactor) / Math.log(2);
-    
+
     return Math.min(10, baseNormalization * coverageAdjustment);
   }
 
-  // 🔥 MÉTODO NUEVO: Crear resultado con nivel y explicación
+  //  MÉTODO NUEVO: Crear resultado con nivel y explicación
   _createAffinityResult(score, matches, totalRequired, matchingSkills, factors) {
     const roundedScore = Math.round(score * 100) / 100;
     const coverage = Math.round((matches / totalRequired) * 100);
-    
-    // 🔥 CONVERTIR SCORE A NIVEL
+
+    //  CONVERTIR SCORE A NIVEL
     const level = this._scoreToLevel(roundedScore, coverage);
-    
-    // 🔥 GENERAR EXPLICACIÓN LEGIBLE
+
+    //  GENERAR EXPLICACIÓN LEGIBLE
     const explanation = this._generateExplanation(roundedScore, matches, totalRequired, coverage, level);
 
     return {
@@ -267,60 +278,71 @@ export class AffinityCalculator {
     };
   }
 
-  // � OPTIMIZACIÓN: Algoritmo de nivel mejorado con más granularidad
+  //  OPTIMIZACIÓN: Algoritmo de nivel mejorado con más granularidad
   _scoreToLevel(score, coverage) {
     // Sistema más granular y balanceado
-    if (score >= 7.5 && coverage >= 80) return 'muy alto';
-    if (score >= 6.0 && coverage >= 70) return 'muy alto';
-    if (score >= 4.5 && coverage >= 60) return 'alto';
-    if (score >= 3.5 && coverage >= 50) return 'alto';
-    if (score >= 2.5 && coverage >= 40) return 'medio';  
-    if (score >= 1.5 && coverage >= 30) return 'medio';
-    if (score >= 0.5 && coverage >= 15) return 'bajo';
-    if (score > 0 || coverage > 0) return 'bajo';
-    return 'sin datos';
+    if (score >= 7.5 && coverage >= 80) return "muy alto";
+    if (score >= 6.0 && coverage >= 70) return "muy alto";
+    if (score >= 4.5 && coverage >= 60) return "alto";
+    if (score >= 3.5 && coverage >= 50) return "alto";
+    if (score >= 2.5 && coverage >= 40) return "medio";
+    if (score >= 1.5 && coverage >= 30) return "medio";
+    if (score >= 0.5 && coverage >= 15) return "bajo";
+    if (score > 0 || coverage > 0) return "bajo";
+    return "sin datos";
   }
 
-  // � OPTIMIZACIÓN: Explicaciones más detalladas y útiles
+  //  OPTIMIZACIÓN: Explicaciones más detalladas y útiles
   _generateExplanation(score, matches, totalRequired, coverage, level) {
     if (matches === 0) {
-      return 'No se encontraron coincidencias en las habilidades requeridas. Considere ampliar los criterios de búsqueda.';
+      return "No se encontraron coincidencias en las habilidades requeridas. Considere ampliar los criterios de búsqueda.";
     }
-    
+
     const baseInfo = `${matches}/${totalRequired} habilidades coincidentes (${coverage}% cobertura)`;
-    
+
     const explanations = {
-      'muy alto': `🌟 ${baseInfo}. Candidato excepcional con excelente afinidad para el puesto. Altamente recomendado para entrevista inmediata.`,
-      'alto': `⭐ ${baseInfo}. Candidato sólido con buena afinidad. Recomendado para proceso de selección.`,
-      'medio': `📊 ${baseInfo}. Candidato con potencial moderado. Revisar experiencia específica y considerar entrevista.`,
-      'bajo': `📋 ${baseInfo}. Afinidad limitada. Evaluar si el candidato puede desarrollar habilidades faltantes.`,
-      'sin datos': 'No se encontraron datos suficientes para evaluar la afinidad. Revisar perfil del candidato.'
+      "muy alto": ` ${baseInfo}. Candidato excepcional con excelente afinidad para el puesto. Altamente recomendado para entrevista inmediata.`,
+      "alto": ` ${baseInfo}. Candidato sólido con buena afinidad. Recomendado para proceso de selección.`,
+      "medio": ` ${baseInfo}. Candidato con potencial moderado. Revisar experiencia específica y considerar entrevista.`,
+      "bajo": ` ${baseInfo}. Afinidad limitada. Evaluar si el candidato puede desarrollar habilidades faltantes.`,
+      "sin datos": "No se encontraron datos suficientes para evaluar la afinidad. Revisar perfil del candidato."
     };
 
     return explanations[level] || `${baseInfo}. Puntuación: ${score.toFixed(1)}/10`;
   }
 
   /**
-   * 🚀 OPTIMIZACIÓN: Obtener candidatos recomendados con algoritmo mejorado
+   *  OPTIMIZACIÓN: Obtener candidatos recomendados con algoritmo mejorado
    */
   findBestCandidates(companySkills, students, options = {}) {
     const {
       minScore = 4.0,           // Score mínimo reducido para más variedad
       limit = 15,               // Límite aumentado
       includeAnalytics = true,  // Incluir métricas adicionales
-      diversityBonus = true     // Bonificar diversidad de perfiles
+      diversityBonus = true,    // Bonificar diversidad de perfiles
+      offerProfamilyIds = []    //  NUEVO: IDs de familias profesionales de la oferta
     } = options;
 
     const candidates = students.map(student => {
-      const affinity = this.calculateAffinity(companySkills, student.skills || {});
-      
-      // 🚀 OPTIMIZACIÓN: Métricas adicionales
+      // Convertir skills del estudiante al formato esperado por calculateAffinity
+      const studentSkills = this._convertStudentSkillsToObject(student);
+
+      const affinity = this.calculateAffinity(
+        companySkills,
+        studentSkills,
+        {
+          profamilyId: student.profamilyId,
+          offerProfamilyIds: offerProfamilyIds
+        }
+      );
+
+      //  OPTIMIZACIÓN: Métricas adicionales
       const analytics = includeAnalytics ? {
-        skillGap: this._calculateSkillGap(companySkills, student.skills || {}),
-        potentialGrowth: this._calculateGrowthPotential(companySkills, student.skills || {}),
-        uniqueValue: this._calculateUniqueValue(student.skills || {}, students)
+        skillGap: this._calculateSkillGap(companySkills, studentSkills),
+        potentialGrowth: this._calculateGrowthPotential(companySkills, studentSkills),
+        uniqueValue: this._calculateUniqueValue(studentSkills, students.map(s => ({ skills: this._convertStudentSkillsToObject(s) })))
       } : {};
-      
+
       return {
         student,
         affinity,
@@ -330,23 +352,23 @@ export class AffinityCalculator {
       };
     });
 
-    // 🚀 OPTIMIZACIÓN: Ordenamiento inteligente con múltiples criterios
+    //  OPTIMIZACIÓN: Ordenamiento inteligente con múltiples criterios
     candidates.sort((a, b) => {
       // Prioridad principal: score de afinidad
       if (Math.abs(a.affinity.score - b.affinity.score) > 0.5) {
         return b.affinity.score - a.affinity.score;
       }
-      
+
       // Criterio secundario: prioridad calculada
       if (includeAnalytics && Math.abs(a.priority - b.priority) > 0.1) {
         return b.priority - a.priority;
       }
-      
+
       // Criterio terciario: cobertura de habilidades
       return b.affinity.coverage - a.affinity.coverage;
     });
 
-    // 🚀 OPTIMIZACIÓN: Aplicar bonus de diversidad si está habilitado
+    //  OPTIMIZACIÓN: Aplicar bonus de diversidad si está habilitado
     if (diversityBonus && candidates.length > limit) {
       this._applyDiversityBonus(candidates.slice(0, limit * 2));
       candidates.sort((a, b) => b.affinity.score - a.affinity.score);
@@ -361,37 +383,37 @@ export class AffinityCalculator {
       analytics: includeAnalytics ? {
         averageScore: this._calculateAverage(candidates.map(c => c.affinity.score)),
         scoreDistribution: this._calculateScoreDistribution(candidates),
-        topTierCount: candidates.filter(c => c.affinity.level === 'muy alto').length,
+        topTierCount: candidates.filter(c => c.affinity.level === "muy alto").length,
         skillCoverageStats: this._calculateSkillCoverageStats(candidates, companySkills)
       } : null
     };
   }
-  
-  // 🚀 OPTIMIZACIÓN: Nuevos métodos de análisis
+
+  //  OPTIMIZACIÓN: Nuevos métodos de análisis
   _calculateSkillGap(companySkills, studentSkills) {
     const missing = [];
     const insufficient = [];
-    
+
     for (const [skill, required] of Object.entries(companySkills)) {
       if (!studentSkills[skill]) {
         missing.push({ skill, required });
       } else if (studentSkills[skill] < required) {
-        insufficient.push({ 
-          skill, 
-          required, 
+        insufficient.push({
+          skill,
+          required,
           current: studentSkills[skill],
           gap: required - studentSkills[skill]
         });
       }
     }
-    
+
     return { missing, insufficient, totalGaps: missing.length + insufficient.length };
   }
-  
+
   _calculateGrowthPotential(companySkills, studentSkills) {
     let potential = 0;
     let trainableSkills = 0;
-    
+
     for (const [skill, required] of Object.entries(companySkills)) {
       const current = studentSkills[skill] || 0;
       if (current < required) {
@@ -402,43 +424,44 @@ export class AffinityCalculator {
         }
       }
     }
-    
+
     return { potential, trainableSkills };
   }
-  
+
   _calculateUniqueValue(studentSkills, allStudents) {
     const skillCounts = {};
-    
+
     // Contar frecuencia de cada habilidad
     allStudents.forEach(student => {
-      Object.keys(student.skills || {}).forEach(skill => {
+      const skills = this._convertStudentSkillsToObject(student);
+      Object.keys(skills).forEach(skill => {
         skillCounts[skill] = (skillCounts[skill] || 0) + 1;
       });
     });
-    
+
     let uniqueness = 0;
     Object.keys(studentSkills).forEach(skill => {
       const frequency = skillCounts[skill] / allStudents.length;
       uniqueness += (1 - frequency) * studentSkills[skill]; // Valor por rareza
     });
-    
+
     return uniqueness;
   }
-  
+
   _calculatePriority(affinity, analytics) {
     let priority = affinity.score;
-    
+
     if (analytics.potentialGrowth) {
       priority += analytics.potentialGrowth.potential * 0.2;
     }
-    
+
     if (analytics.uniqueValue) {
       priority += Math.min(analytics.uniqueValue * 0.1, 1);
     }
-    
+
     return priority;
   }
-  
+
   _applyDiversityBonus(candidates) {
     // Aplicar pequeño bonus a candidatos con perfiles únicos
     candidates.forEach(candidate => {
@@ -447,47 +470,47 @@ export class AffinityCalculator {
       }
     });
   }
-  
+
   _calculateAverage(numbers) {
     return numbers.reduce((sum, num) => sum + num, 0) / numbers.length;
   }
-  
+
   _calculateScoreDistribution(candidates) {
-    const distribution = { 'muy alto': 0, 'alto': 0, 'medio': 0, 'bajo': 0, 'sin datos': 0 };
+    const distribution = { "muy alto": 0, "alto": 0, "medio": 0, "bajo": 0, "sin datos": 0 };
     candidates.forEach(c => distribution[c.affinity.level]++);
     return distribution;
   }
-  
+
   _calculateSkillCoverageStats(candidates, companySkills) {
     const skillStats = {};
     const totalSkills = Object.keys(companySkills).length;
-    
+
     Object.keys(companySkills).forEach(skill => {
-      const candidatesWithSkill = candidates.filter(c => 
+      const candidatesWithSkill = candidates.filter(c =>
         c.student.skills && c.student.skills[skill]
       ).length;
-      
+
       skillStats[skill] = {
         coverage: (candidatesWithSkill / candidates.length) * 100,
         required: companySkills[skill],
         availability: candidatesWithSkill
       };
     });
-    
+
     return skillStats;
   }
-  
+
   /**
-   * 🚀 NUEVO: Método para limpiar cache
+   *  NUEVO: Método para limpiar cache
    */
   clearCache() {
     this.cache.clear();
     this.cacheHits = 0;
     this.cacheMisses = 0;
   }
-  
+
   /**
-   * 🚀 NUEVO: Método para obtener estadísticas del cache
+   *  NUEVO: Método para obtener estadísticas del cache
    */
   getCacheStats() {
     const totalRequests = this.cacheHits + this.cacheMisses;
@@ -497,6 +520,140 @@ export class AffinityCalculator {
       hits: this.cacheHits,
       misses: this.cacheMisses,
       hitRate: totalRequests > 0 ? this.cacheHits / totalRequests : 0
+    };
+  }
+
+  /**
+   *  NUEVO: Método auxiliar para convertir skills del estudiante al formato de objeto
+   */
+  _convertStudentSkillsToObject(student) {
+    const studentSkills = {};
+
+    if (student.cvSkills && student.cvSkills.length > 0) {
+      // Nuevo formato: array de CvSkill objects
+      student.cvSkills.forEach(cvSkill => {
+        const levelMap = {
+          "bajo": 1,
+          "medio": 2,
+          "alto": 3
+        };
+        studentSkills[cvSkill.skill.name.toLowerCase()] = levelMap[cvSkill.proficiencyLevel] || 1;
+      });
+    } else if (student.skills && student.skills.length > 0) {
+      // Formato antiguo: array de skill objects (para compatibilidad)
+      student.skills.forEach(skill => {
+        const levelMap = {
+          "beginner": 1,
+          "intermediate": 2,
+          "advanced": 3,
+          "expert": 4
+        };
+        studentSkills[skill.name.toLowerCase()] = levelMap[skill.proficiencyLevel] || 1;
+      });
+    } else if (student.skills && typeof student.skills === 'object') {
+      // Formato legacy: object con skill names como keys
+      Object.assign(studentSkills, student.skills);
+    }
+
+    return studentSkills;
+  }
+
+  /**
+   *  NUEVO: Calcular afinidad basada en familia profesional
+   */
+  _calculateProfamilyAffinity(profamilyId, offerProfamilyIds) {
+    if (!profamilyId) {
+      return { score: 1.0, level: "none", details: "Sin familia profesional definida" };
+    }
+
+    if (!offerProfamilyIds || offerProfamilyIds.length === 0) {
+      return { score: 1.0, level: "neutral", details: "Oferta sin familias profesionales especificadas" };
+    }
+
+    // Verificar si la profamily del estudiante coincide con alguna de la oferta
+    const isMatch = offerProfamilyIds.includes(profamilyId);
+
+    if (isMatch) {
+      return {
+        score: this.weights.profamilyMatchBonus,
+        level: "match",
+        details: "Familia profesional coincide con la oferta"
+      };
+    } else {
+      return {
+        score: 0.95, // Penalización leve por no coincidir
+        level: "no-match",
+        details: "Familia profesional no coincide con la oferta"
+      };
+    }
+  }
+
+  /**
+   *  NUEVO: Calcular afinidad bidireccional (estudiante -> oferta)
+   * Este método calcula qué tan adecuado es un estudiante para una oferta específica
+   */
+  calculateStudentToOfferAffinity(student, offer) {
+    // Extraer skills del estudiante - NUEVA ARQUITECTURA CV SKILLS
+    const studentSkills = {};
+    if (student.cvSkills && student.cvSkills.length > 0) {
+      // Nuevo formato: array de CvSkill objects
+      student.cvSkills.forEach(cvSkill => {
+        const levelMap = {
+          "bajo": 1,
+          "medio": 2,
+          "alto": 3
+        };
+        studentSkills[cvSkill.skill.name.toLowerCase()] = levelMap[cvSkill.proficiencyLevel] || 1;
+      });
+    } else if (student.skills && student.skills.length > 0) {
+      // Formato antiguo: array de skill objects (para compatibilidad)
+      student.skills.forEach(skill => {
+        const levelMap = {
+          "beginner": 1,
+          "intermediate": 2,
+          "advanced": 3,
+          "expert": 4
+        };
+        studentSkills[skill.name.toLowerCase()] = levelMap[skill.proficiencyLevel] || 1;
+      });
+    } else if (student.skills && typeof student.skills === 'object') {
+      // Formato legacy: object con skill names como keys
+      Object.assign(studentSkills, student.skills);
+    }
+
+    // Extraer skills de la oferta
+    const offerSkills = {};
+    if (offer.skills && offer.skills.length > 0) {
+      offer.skills.forEach(skill => {
+        // Usar nivel 2 como default para skills de oferta
+        offerSkills[skill.name.toLowerCase()] = 2;
+      });
+    }
+
+    // Extraer profamilyIds de la oferta
+    const offerProfamilyIds = offer.profamilys ? offer.profamilys.map(p => p.id) : [];
+
+    // Calcular afinidad usando el método existente
+    const affinity = this.calculateAffinity(
+      offerSkills,
+      studentSkills,
+      {
+        profamilyId: student.profamilyId,
+        offerProfamilyIds: offerProfamilyIds
+      }
+    );
+
+    return {
+      ...affinity,
+      // Agregar información específica de la oferta para el estudiante
+      offerInfo: {
+        id: offer.id,
+        name: offer.name,
+        company: offer.company?.name,
+        location: offer.location,
+        mode: offer.mode,
+        type: offer.type
+      }
     };
   }
 }

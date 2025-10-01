@@ -6,21 +6,20 @@ export const Student = sequelize.define('students', {
         type: DataTypes.INTEGER,primaryKey: true,autoIncrement: true,
     },
     grade:{
-        type: DataTypes.STRING,allowNull: false,
-        validate:{notNull:{ msg:'Grade must not be null'}},
+        type: DataTypes.STRING,allowNull: true,
     },
     course:{
-        type: DataTypes.STRING,allowNull: false,
-        validate:{notNull:{ msg:'Course must not be null' }}
+        type: DataTypes.STRING,allowNull: true,
     },
-    double:{type: DataTypes.BOOLEAN, defaultValue:false},
     car:{type: DataTypes.BOOLEAN, defaultValue:false},
+    tag:{
+        type: DataTypes.STRING,allowNull: true,
+    },
     active:{type: DataTypes.BOOLEAN, defaultValue:true},
-    tag:{type: DataTypes.STRING, allowNull: true},
     description:{type: DataTypes.STRING, allowNull:true},
+    photo:{type: DataTypes.STRING, allowNull: true}, // Foto del estudiante
     disp:{
-        type: DataTypes.DATEONLY,allowNull: false,
-        validate:{notNull:{ msg:'Disp must not be null'}},
+        type: DataTypes.DATEONLY,allowNull: true,
     },
     userId: {
         type: DataTypes.INTEGER,
@@ -29,6 +28,14 @@ export const Student = sequelize.define('students', {
             model: 'users',
             key: 'id'
         }
-    },       
+    },
+    profamilyId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'profamilys',
+            key: 'id'
+        }
+    },
 })
 

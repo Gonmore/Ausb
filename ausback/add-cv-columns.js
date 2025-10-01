@@ -1,44 +1,41 @@
 import sequelize from './src/database/database.js';
 
-async function addCVColumns() {
+async function addCvColumns() {
     try {
-        console.log('🔄 Agregando columnas cvViewed y cvViewedAt a la tabla applications...');
-        
-        const queryInterface = sequelize.getQueryInterface();
-        
-        // Verificar si las columnas ya existen
-        const tableDescription = await queryInterface.describeTable('applications');
-        
-        if (!tableDescription.cvViewed) {
-            await queryInterface.addColumn('applications', 'cvViewed', {
-                type: sequelize.Sequelize.BOOLEAN,
-                defaultValue: false,
-                allowNull: false,
-                comment: 'Si la empresa ya vio el CV del candidato'
-            });
-            console.log('✅ Columna cvViewed agregada');
-        } else {
-            console.log('ℹ️ Columna cvViewed ya existe');
+        await sequelize.authenticate();
+        console.log('Connected to database');
+
+        // Agregar columnas una por una
+        const queries = [
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "title" VARCHAR(255)`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "summary" TEXT`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "contactEmail" VARCHAR(255)`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "contactPhone" VARCHAR(255)`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "professionalOrientation" JSON DEFAULT '{}'`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "academicBackground" JSON DEFAULT '[]'`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "skills" JSON DEFAULT '[]'`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "workExperience" JSON DEFAULT '[]'`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "isComplete" BOOLEAN DEFAULT false`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "lastUpdated" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "availability" VARCHAR(50) DEFAULT 'flexible'`,
+            `ALTER TABLE cvs ADD COLUMN IF NOT EXISTS "workPreferences" JSON DEFAULT '{}'`
+        ];
+
+        for (const query of queries) {
+            try {
+                await sequelize.query(query);
+                console.log(`✅ Ejecutado: ${query.split('ADD COLUMN')[1]?.trim() || query}`);
+            } catch (error) {
+                console.log(`⚠️  Error en query: ${error.message}`);
+            }
         }
-        
-        if (!tableDescription.cvViewedAt) {
-            await queryInterface.addColumn('applications', 'cvViewedAt', {
-                type: sequelize.Sequelize.DATE,
-                allowNull: true,
-                comment: 'Cuándo la empresa vio el CV'
-            });
-            console.log('✅ Columna cvViewedAt agregada');
-        } else {
-            console.log('ℹ️ Columna cvViewedAt ya existe');
-        }
-        
-        console.log('🎉 Migración completada exitosamente');
+
+        console.log('Migration completed');
         process.exit(0);
-        
     } catch (error) {
-        console.error('❌ Error en migración:', error);
+        console.error('Error:', error);
         process.exit(1);
     }
 }
 
-addCVColumns();
+addCvColumns();

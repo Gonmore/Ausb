@@ -27,8 +27,7 @@ export const StudentSkill = sequelize.define('student_skills', {
     proficiencyLevel: {
         type: DataTypes.ENUM('beginner', 'intermediate', 'advanced', 'expert'),
         allowNull: false,
-        defaultValue: 'beginner',
-        comment: 'Nivel de competencia del estudiante en esta habilidad'
+        defaultValue: 'beginner'
     },
     yearsOfExperience: {
         type: DataTypes.DECIMAL(3, 1), // Permite valores como 1.5 años

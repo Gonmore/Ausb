@@ -8,12 +8,9 @@ const nextConfig = {
     } : false,
   },
 
-  // 🏗️ CONFIGURACIÓN DE BUILD
-  swcMinify: true, // Usar SWC para minificación más rápida
-  
   // 📦 CONFIGURACIÓN DE OUTPUT
   output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
-  
+
   // 🖼️ OPTIMIZACIÓN DE IMÁGENES
   images: {
     domains: ['localhost'],
@@ -23,7 +20,7 @@ const nextConfig = {
 
   // ⚡ CONFIGURACIÓN DE PERFORMANCE
   poweredByHeader: false, // Remover header X-Powered-By
-  
+
   // 🔒 HEADERS DE SEGURIDAD
   async headers() {
     return [
@@ -51,19 +48,10 @@ const nextConfig = {
     ];
   },
 
-  // 🌐 CONFIGURACIÓN DE DESARROLLO
-  experimental: {
-    typedRoutes: false,
-    // Optimizar bundle analyzer
-    bundlePagesRouterDependencies: true,
-    // Optimizar servidor
-    serverComponentsExternalPackages: [],
-  },
-
-  // 🌍 VARIABLES DE ENTORNO
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
-  },
+  //  VARIABLES DE ENTORNO - REMOVER PARA USAR .env.local
+  // env: {
+  //   NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
+  // },
 
   // 🎯 WEBPACK OPTIMIZATIONS
   webpack: (config, { dev, isServer }) => {
@@ -107,8 +95,6 @@ const nextConfig = {
     },
     // Comprimir respuestas
     compress: true,
-    // Optimizar fonts
-    optimizeFonts: true,
   })
 };
 

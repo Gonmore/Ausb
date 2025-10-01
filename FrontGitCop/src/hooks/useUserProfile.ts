@@ -14,6 +14,7 @@ interface UserProfile {
   id: string;
   username: string;
   name: string;
+  surname: string;
   email: string;
   phone: string;
   role: string;
@@ -58,6 +59,7 @@ export function useUserProfile() {
 
   const updateProfile = async (data: Partial<{
     name: string;
+    surname: string;
     phone: string;
     countryCode: string;
     cityId: string;

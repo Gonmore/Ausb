@@ -1,42 +1,7 @@
 import { Skill } from './skill.js';
 import { StudentSkill } from './studentSkill.js';
-// Relación muchos a muchos: Offer-Skill
-Offer.belongsToMany(Skill, { through: 'OfferSkill' });
-Skill.belongsToMany(Offer, { through: 'OfferSkill' });
-
-// Relación muchos a muchos: Student-Skill
-Student.belongsToMany(Skill, { 
-    through: StudentSkill,
-    foreignKey: 'studentId',
-    otherKey: 'skillId',
-    as: 'skills'
-});
-Skill.belongsToMany(Student, { 
-    through: StudentSkill,
-    foreignKey: 'skillId',
-    otherKey: 'studentId',
-    as: 'students'
-});
-
-// Relaciones directas con StudentSkill
-Student.hasMany(StudentSkill, { 
-    foreignKey: 'studentId',
-    as: 'studentSkills'
-});
-StudentSkill.belongsTo(Student, { 
-    foreignKey: 'studentId',
-    as: 'student'
-});
-
-Skill.hasMany(StudentSkill, { 
-    foreignKey: 'skillId',
-    as: 'studentSkills'
-});
-StudentSkill.belongsTo(Skill, { 
-    foreignKey: 'skillId',
-    as: 'skill'
-});
-
+import { OfferSkill } from './offerSkill.js';
+import { ScenterProfamily } from './scenterProfamily.js';
 import { User } from "./users.js";
 import { Scenter } from "./scenter.js";
 import { Tutor } from "./tutor.js";
@@ -46,19 +11,72 @@ import { Profamily } from "./profamily.js";
 import { Offer } from "./offer.js";
 import { Application } from "./application.js";
 import { Cv } from "./cv.js";
+import { CvSkill } from './cvSkill.js';
 import { Token } from "./token.js";
 import { TokenTransaction } from "./tokenTransaction.js";
 import { StudentToken } from "./studentToken.js";
 import UserCompany from './userCompany.js';
+import { OfferProfamily } from './offerProfamily.js';
 import { RevealedCV } from './revealedCV.js';
+import { AcademicVerification } from './academicVerification.js';
 
-//Relaciones entre tablas
+// Relaciones entre tablas
 
 // Relación uno a muchos 
 Scenter.hasMany(Tutor, { foreignKey: 'tutorId' });
 Tutor.belongsTo(Scenter, { foreignKey: 'tutorId' });
-Profamily.hasMany(Offer, { foreignKey: 'profamilyId' });
-Offer.belongsTo(Profamily, { foreignKey: 'profamilyId' });
+
+// Relación muchos a muchos: Offer-Profamily a través de OfferProfamily
+Offer.belongsToMany(Profamily, { 
+    through: OfferProfamily,
+    foreignKey: 'offerId',
+    otherKey: 'profamilyId',
+    as: 'profamilys'
+});
+Profamily.belongsToMany(Offer, { 
+    through: OfferProfamily,
+    foreignKey: 'profamilyId',
+    otherKey: 'offerId',
+    as: 'offers'
+});
+
+// Relación muchos a muchos: Scenter-Profamily a través de ScenterProfamily
+Scenter.belongsToMany(Profamily, {
+    through: ScenterProfamily,
+    foreignKey: 'scenterId',
+    otherKey: 'profamilyId',
+    as: 'profamilys'
+});
+Profamily.belongsToMany(Scenter, {
+    through: ScenterProfamily,
+    foreignKey: 'profamilyId',
+    otherKey: 'scenterId',
+    as: 'scenters'
+});
+
+// Relaciones directas con ScenterProfamily
+Scenter.hasMany(ScenterProfamily, {
+    foreignKey: 'scenterId',
+    as: 'scenterProfamilys'
+});
+ScenterProfamily.belongsTo(Scenter, {
+    foreignKey: 'scenterId',
+    as: 'scenter'
+});
+
+Profamily.hasMany(ScenterProfamily, {
+    foreignKey: 'profamilyId',
+    as: 'scenterProfamilys'
+});
+ScenterProfamily.belongsTo(Profamily, {
+    foreignKey: 'profamilyId',
+    as: 'profamily'
+});
+
+Profamily.hasMany(Student, {
+    foreignKey: 'profamilyId',
+    as: 'students'
+});
 
 // Relación uno a muchos: Company-Offer (simplificado)
 Company.hasMany(Offer, { foreignKey: 'companyId' });
@@ -135,25 +153,32 @@ StudentToken.belongsTo(Student, {
     as: 'student'
 });
 
-// Relación uno a uno 
-User.hasOne(Student, { 
+// Relación uno a uno
+User.hasOne(Student, {
     foreignKey: 'userId',
     as: 'student'
 });
 
-Student.belongsTo(User, { 
+Student.belongsTo(User, {
     foreignKey: 'userId',
     as: 'user'
 });
 
-Student.hasOne(Cv, { foreignKey: 'studentId' });
-Cv.belongsTo(Student, { foreignKey: 'studentId' });
+Student.belongsTo(Profamily, {
+    foreignKey: 'profamilyId',
+    as: 'profamily'
+});
 
-// Relación uno a muchos adicionales
-Profamily.hasMany(Student, { foreignKey: 'profamilyId' });
-Student.belongsTo(Profamily, { foreignKey: 'profamilyId', as: 'profamily' });
-Profamily.hasMany(Tutor, { foreignKey: 'profamilyId' });
-Tutor.belongsTo(Profamily, { foreignKey: 'profamilyId' });
+// Relación uno a uno: Student-CV
+Student.hasOne(Cv, {
+    foreignKey: 'studentId',
+    as: 'cv'
+});
+
+Cv.belongsTo(Student, {
+    foreignKey: 'studentId',
+    as: 'student'
+});
 
 // ✅ Relación Many-to-Many con UserCompany
 User.belongsToMany(Company, { 
@@ -204,15 +229,133 @@ RevealedCV.belongsTo(Student, {
     as: 'student'
 });
 
-export { 
+// ✅ Relaciones para Skills y StudentSkill
+Student.hasMany(StudentSkill, {
+    foreignKey: 'studentId',
+    as: 'studentSkills'
+});
+StudentSkill.belongsTo(Student, {
+    foreignKey: 'studentId',
+    as: 'student'
+});
+
+Skill.hasMany(StudentSkill, {
+    foreignKey: 'skillId',
+    as: 'studentSkills'
+});
+StudentSkill.belongsTo(Skill, {
+    foreignKey: 'skillId',
+    as: 'skill'
+});
+
+// ✅ Relación muchos a muchos entre Student y Skill
+Student.belongsToMany(Skill, {
+    through: StudentSkill,
+    foreignKey: 'studentId',
+    otherKey: 'skillId',
+    as: 'skills'
+});
+
+Skill.belongsToMany(Student, {
+    through: StudentSkill,
+    foreignKey: 'skillId',
+    otherKey: 'studentId',
+    as: 'students'
+});
+
+// ✅ Relaciones para OfferSkill (relación muchos a muchos entre Offer y Skill)
+Offer.belongsToMany(Skill, {
+    through: OfferSkill,
+    foreignKey: 'offerId',
+    otherKey: 'skillId',
+    as: 'skills'
+});
+
+Skill.belongsToMany(Offer, {
+    through: OfferSkill,
+    foreignKey: 'skillId',
+    otherKey: 'offerId',
+    as: 'offers'
+});
+
+// ✅ Relaciones para CvSkill (relación muchos a muchos entre Cv y Skill)
+Cv.belongsToMany(Skill, {
+    through: CvSkill,
+    foreignKey: 'cvId',
+    otherKey: 'skillId',
+    as: 'skills'
+});
+
+Skill.belongsToMany(Cv, {
+    through: CvSkill,
+    foreignKey: 'skillId',
+    otherKey: 'cvId',
+    as: 'cvs'
+});
+
+// Relaciones directas con CvSkill
+Cv.hasMany(CvSkill, {
+    foreignKey: 'cvId',
+    as: 'cvSkills'
+});
+
+CvSkill.belongsTo(Cv, {
+    foreignKey: 'cvId',
+    as: 'cv'
+});
+
+Skill.hasMany(CvSkill, {
+    foreignKey: 'skillId',
+    as: 'cvSkills'
+});
+
+CvSkill.belongsTo(Skill, {
+    foreignKey: 'skillId',
+    as: 'skill'
+});
+
+// ✅ Relaciones para AcademicVerification
+Student.hasMany(AcademicVerification, {
+    foreignKey: 'studentId',
+    as: 'academicVerifications'
+});
+
+AcademicVerification.belongsTo(Student, {
+    foreignKey: 'studentId',
+    as: 'student'
+});
+
+Scenter.hasMany(AcademicVerification, {
+    foreignKey: 'scenterId',
+    as: 'academicVerifications'
+});
+
+AcademicVerification.belongsTo(Scenter, {
+    foreignKey: 'scenterId',
+    as: 'scenter'
+});
+
+User.hasMany(AcademicVerification, {
+    foreignKey: 'verifiedBy',
+    as: 'academicVerifications'
+});
+
+AcademicVerification.belongsTo(User, {
+    foreignKey: 'verifiedBy',
+    as: 'verifiedByUser'
+});
+
+export {
     User,
     Scenter,
-    Tutor, 
-    Student, 
-    Company, 
-    Profamily, 
-    Cv, 
-    Offer, 
+    Tutor,
+    Student,
+    Company,
+    Profamily,
+    OfferProfamily,
+    ScenterProfamily,
+    Cv,
+    Offer,
     Application,
     Token,
     TokenTransaction,
@@ -220,5 +363,8 @@ export {
     StudentToken,
     RevealedCV,
     Skill,
-    StudentSkill
+    StudentSkill,
+    OfferSkill,
+    CvSkill,
+    AcademicVerification
 };

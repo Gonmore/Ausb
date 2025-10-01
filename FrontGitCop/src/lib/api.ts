@@ -3,14 +3,13 @@ import { tokenUtils } from './token-utils';
 import { useAuthStore } from '@/stores/auth';
 
 // ⚠️ CAMBIAR LA URL BASE
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'; // ← AGREGAR /api
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'; // ← Sin /api por defecto
 
 // Create axios instance
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
-    'User-Agent': 'AusbildungApp/1.0', // Custom user-agent to avoid browser detection
   },
 });
 
@@ -82,12 +81,14 @@ export const onboardingApi = {
 };
 
 export const authApi = {
-  login: (credentials: { email: string; password: string }) => 
-    apiClient.post('/auth/login', credentials), // ← Sin /api
-  register: (userData: any) => 
-    apiClient.post('/auth/register', userData),
+  login: (credentials: { email: string; password: string }) => {
+    return apiClient.post('/api/auth/login', credentials);
+  },
+  register: (userData: any) => {
+    return apiClient.post('/api/auth/register', userData);
+  },
   logout: () => 
-    apiClient.post('/auth/logout'),
+    apiClient.post('/api/auth/logout'),
 };
 
 export default apiClient;

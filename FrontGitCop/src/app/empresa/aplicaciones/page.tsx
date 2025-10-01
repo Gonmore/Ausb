@@ -25,11 +25,20 @@ import { toast } from 'react-toastify';
 
 interface ApplicationWithDetails {
   id: string;
-  status: 'pending' | 'reviewed' | 'accepted' | 'rejected' | 'withdrawn';
+  status: 'pending' | 'reviewed' | 'accepted' | 'rejected' | 'withdrawn' | 'interview_requested' | 'interview_confirmed' | 'interview_rejected';
   appliedAt: string;
   message?: string;
   companyNotes?: string;
   rejectionReason?: string;
+  interviewDetails?: {
+    date: string;
+    time: string;
+    location: string;
+    type: 'presencial' | 'remoto' | 'telefonica';
+    notes?: string;
+    link?: string;
+  };
+  interviewRequestedAt?: string;
   offer: {
     id: string;
     name: string;
@@ -70,11 +79,15 @@ function CompanyApplicationsContent() {
   // 🔥 NUEVOS ESTADOS PARA LOS MODALES
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showInterviewDetailsModal, setShowInterviewDetailsModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [generatedInterviewDetails, setGeneratedInterviewDetails] = useState<any>(null);
   const [interviewForm, setInterviewForm] = useState({
     date: '',
     time: '',
     location: '',
     type: 'presencial', // presencial, online, telefónica
+    link: '',
     notes: ''
   });
   const [rejectForm, setRejectForm] = useState({
@@ -101,6 +114,14 @@ function CompanyApplicationsContent() {
     fetchApplications();
   }, []);
 
+  // 🔥 LIMPIAR CAMPOS CUANDO CAMBIA EL TIPO DE ENTREVISTA
+  useEffect(() => {
+    if (interviewForm.type === 'remoto') {
+      // Para entrevistas remotas, limpiar el campo de link manual ya que se genera automáticamente
+      setInterviewForm(prev => ({ ...prev, link: '' }));
+    }
+  }, [interviewForm.type]);
+
   const fetchApplications = async () => {
     try {
       setLoading(true);
@@ -122,7 +143,22 @@ function CompanyApplicationsContent() {
       }
 
       const data = await response.json();
-      setApplications(data);
+      // Aplanar las aplicaciones agrupadas por estudiante
+      const flattenedApplications = data.students ? data.students.flatMap((student: any) => 
+        student.applications.map((app: any) => {
+          console.log(`🔍 Frontend App ${app.id}:`, {
+            status: app.status,
+            interviewDetails: app.interviewDetails,
+            interviewRequestedAt: app.interviewRequestedAt
+          });
+          return {
+            ...app,
+            Student: student.student,
+            offer: app.offer
+          };
+        })
+      ) : [];
+      setApplications(flattenedApplications);
     } catch (err: any) {
       console.error('Error fetching applications:', err);
       setError('Error al cargar las aplicaciones');
@@ -193,6 +229,7 @@ function CompanyApplicationsContent() {
             time: interviewForm.time,
             location: interviewForm.location,
             type: interviewForm.type,
+            link: interviewForm.link || undefined,
             notes: interviewForm.notes
           },
           companyNotes: `Entrevista solicitada para ${interviewForm.date} a las ${interviewForm.time}`
@@ -203,14 +240,21 @@ function CompanyApplicationsContent() {
         throw new Error('Error al solicitar entrevista');
       }
 
+      const result = await response.json();
+      
       toast.success('Solicitud de entrevista enviada exitosamente');
       
-      // Limpiar formulario y cerrar modal
+      // 🔥 MOSTRAR MODAL DE CONFIRMACIÓN CON DETALLES GENERADOS
+      setGeneratedInterviewDetails(result.application.interviewDetails);
+      setShowConfirmationModal(true);
+      
+      // Limpiar formulario y cerrar modal de solicitud
       setInterviewForm({
         date: '',
         time: '',
         location: '',
         type: 'presencial',
+        link: '',
         notes: ''
       });
       setShowInterviewModal(false);
@@ -597,6 +641,84 @@ function CompanyApplicationsContent() {
                       </div>
                     )}
 
+                    {/* 🔥 SECCIÓN DE DETALLES DE ENTREVISTA AGREGADA */}
+                    {selectedApplication.status === 'interview_requested' && (
+                      <div>
+                        <h3 className="font-semibold mb-3">Detalles de la Entrevista</h3>
+                        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Badge variant="outline" className="text-purple-600 border-purple-300 bg-purple-50">
+                              📅 Entrevista Solicitada
+                            </Badge>
+                            {selectedApplication.interviewRequestedAt && (
+                              <span className="text-sm text-gray-600">
+                                Solicitada el {new Date(selectedApplication.interviewRequestedAt).toLocaleDateString('es-ES', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                            )}
+                          </div>
+
+                          {selectedApplication.interviewDetails ? (
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="font-medium text-gray-700">Fecha:</span>
+                                <p className="text-purple-700">{new Date(selectedApplication.interviewDetails.date).toLocaleDateString('es-ES', {
+                                  weekday: 'long',
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}</p>
+                              </div>
+                              <div>
+                                <span className="font-medium text-gray-700">Hora:</span>
+                                <p className="text-purple-700">{selectedApplication.interviewDetails.time}</p>
+                              </div>
+                              <div>
+                                <span className="font-medium text-gray-700">Modalidad:</span>
+                                <p className="text-purple-700 capitalize">{selectedApplication.interviewDetails.type}</p>
+                              </div>
+                              <div>
+                                <span className="font-medium text-gray-700">Ubicación:</span>
+                                <p className="text-purple-700">{selectedApplication.interviewDetails.location}</p>
+                              </div>
+                              {selectedApplication.interviewDetails.link && (
+                                <div className="col-span-2">
+                                  <span className="font-medium text-gray-700">Enlace de reunión:</span>
+                                  <p className="text-purple-700">
+                                    <a
+                                      href={selectedApplication.interviewDetails.link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="underline hover:text-purple-800"
+                                    >
+                                      {selectedApplication.interviewDetails.link}
+                                    </a>
+                                  </p>
+                                </div>
+                              )}
+                              {selectedApplication.interviewDetails.notes && (
+                                <div className="col-span-2">
+                                  <span className="font-medium text-gray-700">Notas:</span>
+                                  <p className="text-purple-700 mt-1">{selectedApplication.interviewDetails.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                              <h4 className="font-semibold text-yellow-800 mb-2">Esperando Detalles de la Entrevista</h4>
+                              <p className="text-yellow-700 text-sm">
+                                Los detalles específicos de la entrevista aún no están disponibles.
+                                Te notificaremos cuando el candidato confirme la entrevista.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Acciones */}
                     {selectedApplication.status === 'pending' && (
                       <div className="flex gap-3 pt-4 border-t">
@@ -622,6 +744,124 @@ function CompanyApplicationsContent() {
             </div>
           )}
 
+          {/* Modal de detalles de entrevista */}
+          {showInterviewDetailsModal && selectedApplication && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <h2 className="text-xl font-bold">Detalles de la Entrevista</h2>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowInterviewDetailsModal(false);
+                        setSelectedApplication(null);
+                      }}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+
+                  <div className="space-y-6">
+                    {/* Información del candidato */}
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="font-semibold text-lg mb-2">{selectedApplication.Student.User.name} {selectedApplication.Student.User.surname}</h3>
+                      <p className="text-sm text-gray-600 mb-2">Aplicó a: {selectedApplication.offer.name}</p>
+                      <p className="text-sm text-gray-700">{selectedApplication.offer.description}</p>
+                    </div>
+
+                    {/* Estado de la entrevista */}
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <h4 className="font-semibold text-blue-800 mb-3">Estado de la Entrevista</h4>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-purple-600 border-purple-300 bg-purple-50">
+                          📅 Entrevista Solicitada
+                        </Badge>
+                        {selectedApplication.interviewRequestedAt && (
+                          <span className="text-sm text-gray-600">
+                            Solicitada el {new Date(selectedApplication.interviewRequestedAt).toLocaleDateString('es-ES', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Detalles de la entrevista */}
+                    {selectedApplication.interviewDetails ? (
+                      <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                        <h4 className="font-semibold text-purple-800 mb-3">Detalles de la Entrevista</h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="font-medium text-gray-700">Fecha:</span>
+                            <p className="text-purple-700">{new Date(selectedApplication.interviewDetails.date).toLocaleDateString('es-ES', {
+                              weekday: 'long',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-700">Hora:</span>
+                            <p className="text-purple-700">{selectedApplication.interviewDetails.time}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-700">Modalidad:</span>
+                            <p className="text-purple-700 capitalize">{selectedApplication.interviewDetails.type}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-700">Ubicación:</span>
+                            <p className="text-purple-700">{selectedApplication.interviewDetails.location}</p>
+                          </div>
+                          {selectedApplication.interviewDetails.link && (
+                            <div className="col-span-2">
+                              <span className="font-medium text-gray-700">Enlace de reunión:</span>
+                              <p className="text-purple-700">
+                                <a
+                                  href={selectedApplication.interviewDetails.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline hover:text-purple-800"
+                                >
+                                  {selectedApplication.interviewDetails.link}
+                                </a>
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        {selectedApplication.interviewDetails.notes && (
+                          <div className="mt-3">
+                            <span className="font-medium text-gray-700">Notas:</span>
+                            <p className="text-purple-700 mt-1">{selectedApplication.interviewDetails.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                        <h4 className="font-semibold text-yellow-800 mb-2">Esperando Detalles de la Entrevista</h4>
+                        <p className="text-yellow-700 text-sm">
+                          Los detalles específicos de la entrevista aún no están disponibles.
+                          Te notificaremos cuando el candidato confirme la entrevista.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Notas de la empresa */}
+                    {selectedApplication.companyNotes && (
+                      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <h4 className="font-semibold text-blue-800 mb-2">Mensaje de la Empresa</h4>
+                        <p className="text-blue-700 text-sm">{selectedApplication.companyNotes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Modal para solicitar entrevista */}
           {showInterviewModal && selectedApplication && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -639,6 +879,7 @@ function CompanyApplicationsContent() {
                           time: '',
                           location: '',
                           type: 'presencial',
+                          link: '',
                           notes: ''
                         });
                       }}
@@ -694,7 +935,7 @@ function CompanyApplicationsContent() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="presencial">Presencial</option>
-                        <option value="online">Online (videollamada)</option>
+                        <option value="remoto">Remoto (videollamada)</option>
                         <option value="telefonica">Telefónica</option>
                       </select>
                     </div>
@@ -709,12 +950,27 @@ function CompanyApplicationsContent() {
                         onChange={(e) => setInterviewForm(prev => ({ ...prev, location: e.target.value }))}
                         placeholder={
                           interviewForm.type === 'presencial' ? 'Dirección de la oficina' :
-                          interviewForm.type === 'online' ? 'Enlace de videollamada' :
+                          interviewForm.type === 'remoto' ? 'Plataforma de videollamada (ej: Google Meet)' :
                           'Número de teléfono'
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
+
+                    {interviewForm.type !== 'remoto' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Enlace de reunión (opcional)
+                        </label>
+                        <input
+                          type="url"
+                          value={interviewForm.link}
+                          onChange={(e) => setInterviewForm(prev => ({ ...prev, link: e.target.value }))}
+                          placeholder="https://meet.google.com/..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -748,6 +1004,7 @@ function CompanyApplicationsContent() {
                           time: '',
                           location: '',
                           type: 'presencial',
+                          link: '',
                           notes: ''
                         });
                       }}
@@ -860,6 +1117,122 @@ function CompanyApplicationsContent() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal de confirmación de entrevista solicitada */}
+      {showConfirmationModal && generatedInterviewDetails && selectedApplication && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-xl font-bold text-green-700">✅ Entrevista Solicitada Exitosamente</h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowConfirmationModal(false);
+                    setGeneratedInterviewDetails(null);
+                    setSelectedApplication(null);
+                  }}
+                >
+                  ✕
+                </Button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Información del candidato */}
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <h3 className="font-semibold text-green-800 mb-2">Entrevista programada con:</h3>
+                  <p className="text-green-700 font-medium">
+                    {selectedApplication.Student.User.name} {selectedApplication.Student.User.surname}
+                  </p>
+                  <p className="text-green-600 text-sm">
+                    Oferta: {selectedApplication.offer.name}
+                  </p>
+                </div>
+
+                {/* Detalles de la entrevista generados */}
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h4 className="font-semibold text-blue-800 mb-3">📅 Detalles de la Entrevista</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Fecha:</span>
+                      <p className="text-blue-700">{new Date(generatedInterviewDetails.date).toLocaleDateString('es-ES', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Hora:</span>
+                      <p className="text-blue-700">{generatedInterviewDetails.time}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Modalidad:</span>
+                      <p className="text-blue-700 capitalize">{generatedInterviewDetails.type}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Ubicación:</span>
+                      <p className="text-blue-700">{generatedInterviewDetails.location}</p>
+                    </div>
+                    {generatedInterviewDetails.link && (
+                      <div className="col-span-2">
+                        <span className="font-medium text-gray-700">🔗 Enlace de reunión:</span>
+                        <p className="text-blue-700 mt-1">
+                          <a
+                            href={generatedInterviewDetails.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline hover:text-blue-800 break-all"
+                          >
+                            {generatedInterviewDetails.link}
+                          </a>
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Este enlace ha sido generado automáticamente para la videollamada.
+                        </p>
+                      </div>
+                    )}
+                    {generatedInterviewDetails.notes && (
+                      <div className="col-span-2">
+                        <span className="font-medium text-gray-700">Notas:</span>
+                        <p className="text-blue-700 mt-1">{generatedInterviewDetails.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Próximos pasos */}
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <h4 className="font-semibold text-yellow-800 mb-2">📋 Próximos Pasos</h4>
+                  <ul className="text-sm text-yellow-700 space-y-1">
+                    <li>• El estudiante recibirá una notificación con los detalles de la entrevista</li>
+                    <li>• El estudiante podrá confirmar o rechazar la entrevista</li>
+                    <li>• Recibirás una notificación cuando el estudiante responda</li>
+                    {generatedInterviewDetails.type === 'remoto' && (
+                      <li>• El enlace de Google Meet está listo para usar en la fecha programada</li>
+                    )}
+                  </ul>
+                </div>
+
+                {/* Botón de cerrar */}
+                <div className="flex justify-end pt-4 border-t">
+                  <Button
+                    onClick={() => {
+                      setShowConfirmationModal(false);
+                      setGeneratedInterviewDetails(null);
+                      setSelectedApplication(null);
+                    }}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    Entendido
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -76,6 +76,11 @@ export const User = sequelize.define('users', {
         type: DataTypes.STRING,
         allowNull: true,
         comment: 'ID de la ciudad de GeoNames'
+    },
+    address: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Dirección completa del usuario'
     }
 }, {
     tableName: 'users',

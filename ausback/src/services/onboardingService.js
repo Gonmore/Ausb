@@ -337,7 +337,7 @@ export class OnboardingService {
     }
 
     _hasStudentBasicInfo(student) {
-        return !!(student.grade && student.course && student.disp && student.profamilyId);
+        return !!(student.disp && student.description);
     }
 
     _hasCompanyBasicInfo(company) {

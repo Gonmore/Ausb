@@ -33,8 +33,25 @@ import geographyRoutes from './src/routes/geographyRoutes.js';
 import skillRoutes from './src/routes/skillRoutes.js';
 import studentSkillRoutes from './src/routes/studentSkillRoutes.js';
 import notificationRoutes from './src/routes/notifications.js';
+import validationRoutes from './src/routes/validationRoutes.js';
+import cvRoutes from './src/routes/cvRoutes.js';
+import academicVerificationRoutes from './src/routes/academicVerificationRoutes.js';
 import http from 'http';
 import websocketController from './src/controllers/websocketController.js';
+import os from 'os';
+
+// Función para obtener la IP local
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
 // Skills API
 
 
@@ -42,23 +59,43 @@ const app = express();
 
 // Configurar CORS
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'],
+  origin: function (origin, callback) {
+    // Permitir requests sin origin (como mobile apps o curl requests)
+    if (!origin) return callback(null, true);
+
+    // Permitir localhost para desarrollo
+    if (origin.startsWith('http://localhost:')) return callback(null, true);
+
+    // Permitir conexiones desde la red local (192.168.x.x o 10.x.x.x)
+    const isLocalNetwork = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(origin);
+    if (isLocalNetwork) return callback(null, true);
+
+    // En producción, podrías querer ser más restrictivo
+    if (process.env.NODE_ENV === 'production') {
+      return callback(new Error('Not allowed by CORS'));
+    }
+
+    // En desarrollo, permitir todo
+    return callback(null, true);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-const port = process.env.PORT;
+const port = process.env.PORT || 5001;
+console.log(`🔧 Puerto configurado: ${port}`);
 
 const options = {
   key: fs.readFileSync('./server.key'),
   cert: fs.readFileSync('./server.cert')
 };
 
-// Iniciando relaciones de DB 
-sequelize.sync({force: false}).then(async () => {
-  console.log("Base de datos sincronizada")
-});
+// Iniciando relaciones de DB
+// 🔥 TEMPORALMENTE DESACTIVADO: Remover {force: true} para no dropear tablas en cada inicio
+// sequelize.sync().then(async () => {
+//   console.log("Base de datos sincronizada (sin forzar)")
+// });
 
 const SequelizeStoreSession = SequelizeStore(session.Store)
 
@@ -84,16 +121,17 @@ app.use(morgan_file_access)
 // Admin routes
 app.use(adminRouter);
 
-// Auth routes
-app.use(authRouter);
-app.use('/login', authRouter);
+// Auth routes - API para login/register local
 app.use('/api/auth', authRouter);
+
+// Auth social routes - Para Google/Facebook (sin /api)
+app.use('/auth', authRouter);
 
 // API routes
 app.use('/api/users', userRouter);
 app.use('/api/student', studentRouter);
-app.use('/api/students', studentRouter);
-app.use('/api/students', studentSkillRoutes);
+app.use('/api/student-skills', studentSkillRoutes);
+app.use('/api/students', studentSkillRoutes); // 🔥 studentSkillRoutes PRIMERO
 app.use('/api/scenter', scenterRouter);
 app.use('/api/company', companyRouter);
 app.use('/api/user-company', userCompanyRouter);
@@ -107,15 +145,28 @@ app.use('/api/dev', seedRouter);
 app.use('/api/debug', debugRouter);
 app.use('/api/geography', geographyRoutes);
 app.use('/api/skills', skillRoutes);
-app.use('/api/students', studentSkillRoutes);
+app.use('/api/students', studentRouter);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/cv', cvRoutes);
+app.use('/api/academic-verifications', academicVerificationRoutes);
+app.use('/api', validationRoutes);
 
 // Onboarding routes
 app.use('/onboarding', onboardingRoutes);
 
 // Static routes
-app.get('/', (req, res) => { 
-    res.send('¡Hola, Mundo!');
+app.get('/', (req, res) => {
+    // Importar la función de verificación de token
+    const { checkTokenValidity } = require('./src/middlewares/authenticate.midlleware.js');
+
+    // Verificar si el usuario tiene un token válido
+    if (checkTokenValidity(req)) {
+        // Usuario autenticado - redirigir al dashboard
+        return res.redirect('/dashboard');
+    } else {
+        // Usuario no autenticado - redirigir al login
+        return res.redirect('/login');
+    }
 });
 
 // 🏥 HEALTH CHECK ENDPOINT
@@ -150,10 +201,12 @@ app.get('/clear_user', (req, res) => {
 
 // Error handling middleware
 app.use((error, req, res, next) => {
+    console.error('🚨 ===== GLOBAL ERROR HANDLER ACTIVADO =====');
+    console.error('🚨 URL:', req.url);
+    console.error('🚨 Method:', req.method);
+    console.error('🚨 Headers:', req.headers);
     console.error('🚨 GLOBAL ERROR HANDLER:', error);
     console.error('🚨 Stack trace:', error.stack);
-    console.error('🚨 Request URL:', req.url);
-    console.error('🚨 Request Method:', req.method);
     
     res.status(500).json({
         success: false,
@@ -169,9 +222,16 @@ const server = http.createServer(app);
 // Inicializar WebSocket controller
 websocketController.initialize(server);
 
-server.listen(port, () => { 
-  console.log(`🚀 Aplicación escuchando en http://localhost:${port}`);
+// Iniciar heartbeat para mantener conexiones WebSocket vivas
+websocketController.startHeartbeat();
+
+server.listen(port, '0.0.0.0', () => {
+  const localIP = getLocalIP();
+  console.log(`🚀 Aplicación escuchando en:`);
+  console.log(`   📍 Local: http://localhost:${port}`);
+  console.log(`   🌐 Red:   http://0.0.0.0:${port}`);
+  console.log(`   🏠 IP:    http://${localIP}:${port}`);
   console.log(`🔌 WebSocket server inicializado`);
-  logger.info(`Server started on port: ${port} with WebSocket support`);
+  logger.info(`Server started on port: ${port} with WebSocket support - Accessible from network at ${localIP}:${port}`);
   swaggerDocs(app, port)
 });

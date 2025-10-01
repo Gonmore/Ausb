@@ -32,7 +32,8 @@ import {
   XCircle,
   Brain,          // 🔥 AGREGAR
   Star,           // 🔥 AGREGAR
-  CreditCard      // 🔥 AGREGAR
+  CreditCard,     // 🔥 AGREGAR
+  Video           // 🔥 AGREGAR PARA GOOGLE MEET
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { AuthGuard } from '@/components/auth-guard';
@@ -130,6 +131,10 @@ function CandidateSearchContent() {
     applicationIds: [] as number[],
     message: ''
   });
+
+  // 🔥 NUEVOS ESTADOS PARA CONFIRMACIÓN DE ENTREVISTA
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [generatedInterviewDetails, setGeneratedInterviewDetails] = useState<any>(null);
    // 🔥 NUEVOS ESTADOS PARA CVs REVELADOS
   const [revealedStudents, setRevealedStudents] = useState<any[]>([]);
   const [loadingRevealed, setLoadingRevealed] = useState(false);
@@ -205,6 +210,15 @@ function CandidateSearchContent() {
 
     setFilteredStudents(filtered);
   }, [searchTerm, students]);
+
+  // 🔥 LIMPIAR CAMPO LOCATION CUANDO CAMBIA EL TIPO DE ENTREVISTA
+  useEffect(() => {
+    if (interviewForm.type === 'online') {
+      setInterviewForm(prev => ({ ...prev, location: '' }));
+    } else if (interviewForm.type === 'telefonica') {
+      setInterviewForm(prev => ({ ...prev, location: '' }));
+    }
+  }, [interviewForm.type]);
 
   const toggleStudentExpansion = (studentId: number) => {
     setExpandedStudents(prev => {
@@ -392,6 +406,66 @@ function CandidateSearchContent() {
     try {
       console.log('📅 Confirmando entrevista para aplicaciones:', interviewForm.applicationIds);
       
+      let finalLocation = interviewForm.location;
+      
+      // 🔥 GENERAR AUTOMÁTICAMENTE ENLACE DE GOOGLE MEET PARA ENTREVISTAS ONLINE
+      if (interviewForm.type === 'online') {
+        try {
+          const meetResponse = await fetch('http://localhost:5000/api/meetings/generate-link', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              title: `Entrevista - ${selectedStudent.User.name} ${selectedStudent.User.surname}`,
+              date: interviewForm.date,
+              time: interviewForm.time
+            })
+          });
+
+          if (meetResponse.ok) {
+            const meetData = await meetResponse.json();
+            finalLocation = meetData.meetLink;
+            console.log('✅ Enlace de Google Meet generado:', finalLocation);
+          } else {
+            console.error('❌ Error generando enlace de Google Meet');
+            alert('Error al generar el enlace de Google Meet. La entrevista se programará sin enlace.');
+          }
+        } catch (error) {
+          console.error('❌ Error en la petición de Google Meet:', error);
+          alert('Error al generar el enlace de Google Meet. La entrevista se programará sin enlace.');
+        }
+      }
+      
+      // 🔥 MOSTRAR MODAL DE CONFIRMACIÓN CON DETALLES GENERADOS
+      const interviewDetails = {
+        date: interviewForm.date,
+        time: interviewForm.time,
+        location: finalLocation,
+        type: interviewForm.type,
+        notes: interviewForm.notes,
+        generatedLink: interviewForm.type === 'online' ? finalLocation : null,
+        candidateName: `${selectedStudent.User.name} ${selectedStudent.User.surname}`,
+        applicationsCount: interviewForm.applicationIds.length
+      };
+      
+      setGeneratedInterviewDetails(interviewDetails);
+      setShowConfirmationModal(true);
+      
+    } catch (error) {
+      console.error('❌ Error preparando entrevista:', error);
+      alert('Error al preparar la entrevista');
+    }
+  };
+
+  // 🔥 FUNCIÓN PARA CONFIRMAR LA ENTREVISTA DESPUÉS DE VER LOS DETALLES
+  const handleFinalConfirmInterview = async () => {
+    if (!selectedStudent || !generatedInterviewDetails) return;
+
+    try {
+      console.log('📅 Ejecutando entrevista programada...');
+      
       // Procesar cada aplicación
       for (const applicationId of interviewForm.applicationIds) {
         const response = await fetch(`http://localhost:5000/api/applications/${applicationId}/interview`, {
@@ -402,13 +476,13 @@ function CandidateSearchContent() {
           },
           body: JSON.stringify({
             interviewDetails: {
-              date: interviewForm.date,
-              time: interviewForm.time,
-              location: interviewForm.location,
-              type: interviewForm.type,
-              notes: interviewForm.notes
+              date: generatedInterviewDetails.date,
+              time: generatedInterviewDetails.time,
+              location: generatedInterviewDetails.location,
+              type: generatedInterviewDetails.type,
+              notes: generatedInterviewDetails.notes
             },
-            companyNotes: `Entrevista programada para ${interviewForm.date} a las ${interviewForm.time}`
+            companyNotes: `Entrevista programada para ${generatedInterviewDetails.date} a las ${generatedInterviewDetails.time}`
           })
         });
 
@@ -426,7 +500,9 @@ function CandidateSearchContent() {
       console.error('❌ Error programando entrevista:', error);
       alert('Error al programar la entrevista');
     } finally {
+      setShowConfirmationModal(false);
       setShowInterviewModal(false);
+      setGeneratedInterviewDetails(null);
       setInterviewForm({
         applicationIds: [],
         date: '',
@@ -1426,17 +1502,29 @@ function CandidateSearchContent() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Ubicación / Enlace
               </label>
-              <input
-                type="text"
-                value={interviewForm.location}
-                onChange={(e) => setInterviewForm(prev => ({ ...prev, location: e.target.value }))}
-                placeholder={
-                  interviewForm.type === 'presencial' ? 'Dirección de la oficina' :
-                  interviewForm.type === 'online' ? 'Enlace de videollamada' :
-                  'Número de teléfono'
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
+              {interviewForm.type === 'online' ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <Video className="w-4 h-4" />
+                    <span className="text-sm font-medium">Enlace automático de Google Meet</span>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Se generará automáticamente un enlace único de Google Meet para esta entrevista
+                  </p>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={interviewForm.location}
+                  onChange={(e) => setInterviewForm(prev => ({ ...prev, location: e.target.value }))}
+                  placeholder={
+                    interviewForm.type === 'presencial' ? 'Dirección de la oficina' :
+                    interviewForm.type === 'telefonica' ? 'Número de teléfono' :
+                    'Ubicación o enlace'
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              )}
             </div>
 
             <div>
@@ -1454,7 +1542,7 @@ function CandidateSearchContent() {
             <div className="flex gap-2 pt-4 border-t">
               <Button
                 onClick={handleConfirmInterview}
-                disabled={!interviewForm.date || !interviewForm.time || !interviewForm.location}
+                disabled={!interviewForm.date || !interviewForm.time || (interviewForm.type !== 'online' && !interviewForm.location)}
                 className="bg-purple-600 hover:bg-purple-700"
               >
                 <Calendar className="w-4 h-4 mr-2" />
@@ -1545,6 +1633,105 @@ function CandidateSearchContent() {
                 onClick={() => setShowRejectModal(false)}
               >
                 Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🔥 MODAL DE CONFIRMACIÓN DE ENTREVISTA */}
+      <Dialog open={showConfirmationModal} onOpenChange={setShowConfirmationModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              Confirmar Entrevista Programada
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <h3 className="font-semibold text-green-800 mb-3">Detalles de la Entrevista</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-green-700">Candidato:</span>
+                  <span className="font-medium text-green-800">{generatedInterviewDetails?.candidateName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Fecha:</span>
+                  <span className="font-medium text-green-800">{generatedInterviewDetails?.date}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Hora:</span>
+                  <span className="font-medium text-green-800">{generatedInterviewDetails?.time}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Tipo:</span>
+                  <span className="font-medium text-green-800">
+                    {generatedInterviewDetails?.type === 'presencial' ? 'Presencial' :
+                     generatedInterviewDetails?.type === 'online' ? 'Online (Google Meet)' :
+                     'Telefónica'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Ubicación/Enlace:</span>
+                  <span className="font-medium text-green-800 break-all">
+                    {generatedInterviewDetails?.generatedLink ? (
+                      <span className="text-blue-600 underline">{generatedInterviewDetails.generatedLink}</span>
+                    ) : (
+                      generatedInterviewDetails?.location
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Aplicaciones:</span>
+                  <span className="font-medium text-green-800">{generatedInterviewDetails?.applicationsCount}</span>
+                </div>
+              </div>
+            </div>
+
+            {generatedInterviewDetails?.generatedLink && (
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Video className="w-5 h-5 text-blue-600" />
+                  <h4 className="font-semibold text-blue-800">Enlace de Google Meet Generado</h4>
+                </div>
+                <p className="text-sm text-blue-700 mb-2">
+                  Se ha generado automáticamente un enlace único de Google Meet para esta entrevista.
+                </p>
+                <div className="bg-white p-2 rounded border text-xs font-mono text-blue-800 break-all">
+                  {generatedInterviewDetails.generatedLink}
+                </div>
+                <p className="text-xs text-blue-600 mt-2">
+                  Este enlace será enviado al candidato junto con los detalles de la entrevista.
+                </p>
+              </div>
+            )}
+
+            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="w-5 h-5 text-yellow-600" />
+                <h4 className="font-semibold text-yellow-800">Confirmación</h4>
+              </div>
+              <p className="text-sm text-yellow-700">
+                Al confirmar, se programará la entrevista y se notificará al candidato con todos estos detalles.
+                ¿Deseas continuar?
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t">
+              <Button
+                onClick={handleFinalConfirmInterview}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Confirmar y Programar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowConfirmationModal(false)}
+              >
+                Revisar Detalles
               </Button>
             </div>
           </div>

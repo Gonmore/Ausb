@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '@/stores/auth';
+import { apiClient } from '@/lib/api';
 
 interface Offer {
   id: number;
@@ -39,20 +40,9 @@ export const useOffers = () => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:5000/api/offers/company-with-candidates', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setOffers(data);
-        console.log('✅ Ofertas cargadas:', data.length);
-      } else {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
+      const response = await apiClient.get('/api/offers/company-with-candidates');
+      setOffers(response.data);
+      console.log('✅ Ofertas cargadas:', response.data.length);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       setError(errorMessage);
@@ -67,20 +57,9 @@ export const useOffers = () => {
     if (!token) return false;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/offers/${offerId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
-        setOffers((prev) => prev.filter((o) => o.id !== offerId));
-        return true;
-      } else {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
+      await apiClient.delete(`/api/offers/${offerId}`);
+      setOffers((prev) => prev.filter((o) => o.id !== offerId));
+      return true;
     } catch (err) {
       console.error('❌ Error eliminando oferta:', err);
       return false;

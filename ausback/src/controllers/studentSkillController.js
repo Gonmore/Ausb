@@ -7,47 +7,31 @@ export const studentSkillController = {
         try {
             const { studentId } = req.params;
             
-            const student = await Student.findByPk(studentId, {
+            // Obtener las relaciones StudentSkill con la información de Skill
+            const studentSkills = await StudentSkill.findAll({
+                where: { studentId },
                 include: [{
                     model: Skill,
-                    as: 'skills',
-                    through: {
-                        model: StudentSkill,
-                        as: 'studentSkills',
-                        attributes: ['proficiencyLevel', 'yearsOfExperience', 'isVerified', 'certificationUrl', 'notes', 'addedAt']
-                    }
-                }]
+                    as: 'skill',
+                    attributes: ['id', 'name', 'category']
+                }],
+                order: [['createdAt', 'DESC']]
             });
 
-            if (!student) {
-                return res.status(404).json({ 
-                    error: 'Estudiante no encontrado',
-                    code: 'STUDENT_NOT_FOUND'
-                });
-            }
-
-            // Formatear la respuesta para incluir los datos de la relación
-            const skillsWithDetails = student.skills.map(skill => ({
-                id: skill.id,
-                name: skill.name,
-                category: skill.category,
-                description: skill.description,
-                demandLevel: skill.demandLevel,
-                // Datos de la relación Student-Skill
-                proficiencyLevel: skill.studentSkills.proficiencyLevel,
-                yearsOfExperience: skill.studentSkills.yearsOfExperience,
-                isVerified: skill.studentSkills.isVerified,
-                certificationUrl: skill.studentSkills.certificationUrl,
-                notes: skill.studentSkills.notes,
-                addedAt: skill.studentSkills.addedAt
+            // Formatear la respuesta
+            const skillsWithDetails = studentSkills.map(studentSkill => ({
+                id: studentSkill.skill.id,
+                name: studentSkill.skill.name,
+                category: studentSkill.skill.category, // Usar 'category' como 'category'
+                proficiencyLevel: studentSkill.proficiencyLevel,
+                yearsOfExperience: studentSkill.yearsOfExperience,
+                isVerified: studentSkill.isVerified,
+                certificationUrl: studentSkill.certificationUrl,
+                notes: studentSkill.notes,
+                addedAt: studentSkill.createdAt
             }));
 
-            res.json({
-                studentId: student.id,
-                name: student.name,
-                skills: skillsWithDetails,
-                totalSkills: skillsWithDetails.length
-            });
+            res.json(skillsWithDetails);
 
         } catch (error) {
             console.error('Error al obtener skills del estudiante:', error);

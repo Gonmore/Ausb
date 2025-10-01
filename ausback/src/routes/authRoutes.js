@@ -9,37 +9,38 @@ function valida_http(req, res){
     
 } 
 
-// Ruta para iniciar sesión con Google
-router.get('/auth/google', passport.authenticate('google', { scope: ['profile'] }));
+// 🔐 AUTENTICACIÓN SOCIAL - Google
+router.get('/google', passport.authenticate('google', { scope: ['profile'] }));
 
 // Ruta de callback de Google
-router.get('/auth/google/callback', 
+router.get('/google/callback', 
     passport.authenticate('google', { failureRedirect: '/login', session:false }),
     (req, res) => {
         const token = generateToken(req.user);
         if (req.headers['user-agent'].includes('Mozilla')) {
-            res.cookie('jwt', token, { httpOnly: true, secure: true,  sameSite: 'strict' });
-            res.redirect('/dashboard');
-          } else {
+            res.cookie('jwt', token, { httpOnly: true, secure: true, sameSite: 'strict' });
+            res.redirect(process.env.FRONTEND_URL || 'http://localhost:3001/dashboard');
+        } else {
             res.json({ token, user: req.user });
-          }
+        }
         }
 );
 
-// Ruta para iniciar sesión con Facebook
-router.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email'] }));
+// 🔐 AUTENTICACIÓN SOCIAL - Facebook
+router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
 
 // Ruta de callback de Facebook
-router.get('/auth/facebook/callback', 
+router.get('/facebook/callback', 
     passport.authenticate('facebook', { failureRedirect: '/login', session:false }),
     (req, res) => {
         const token = generateToken(req.user);
         if (req.headers['user-agent'].includes('Mozilla')) {
             res.cookie('jwt', token, { httpOnly: true, secure: true, sameSite: 'strict' });
-            res.redirect('/dashboard');
-          } else {
+            res.redirect(process.env.FRONTEND_URL || 'http://localhost:3001/dashboard');
+        } else {
             res.json({ token, user: req.user });
-          }}
+        }
+    }
 );
 
 // Ruta para la página de inicio de sesión

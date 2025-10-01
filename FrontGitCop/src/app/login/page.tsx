@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -12,36 +12,14 @@ import { SimpleSocialButton } from '@/components/auth/simple-social-button'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { FpraxLogo } from '@/components/ui/logos/FpraxLogo'
 
-function LoginForm() {
+function LoginForm({ socialError }: { socialError: string | null }) {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   })
-  const [socialError, setSocialError] = useState<string | null>(null)
   
   const { login, isLoading, error } = useAuthStore()
   const router = useRouter()
-  const searchParams = useSearchParams()
-
-  // Check for social login errors in URL params
-  useEffect(() => {
-    const errorParam = searchParams.get('error')
-    if (errorParam) {
-      switch (errorParam) {
-        case 'social_login_failed':
-          setSocialError('Error en el inicio de sesión con redes sociales')
-          break
-        case 'missing_data':
-          setSocialError('Faltan datos en la respuesta del proveedor')
-          break
-        case 'callback_error':
-          setSocialError('Error procesando la autenticación')
-          break
-        default:
-          setSocialError('Error desconocido en el inicio de sesión')
-      }
-    }
-  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -173,7 +151,36 @@ function LoginForm() {
   )
 }
 
-export default function LoginPage() {
+// Componente separado que usa useSearchParams
+function LoginFormWithParams() {
+  const [socialError, setSocialError] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+
+  // Check for social login errors in URL params
+  useEffect(() => {
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      switch (errorParam) {
+        case 'social_login_failed':
+          setSocialError('Error en el inicio de sesión con redes sociales')
+          break
+        case 'missing_data':
+          setSocialError('Faltan datos en la respuesta del proveedor')
+          break
+        case 'callback_error':
+          setSocialError('Error procesando la autenticación')
+          break
+        default:
+          setSocialError('Error desconocido en el inicio de sesión')
+      }
+    }
+  }, [searchParams])
+
+  return <LoginForm socialError={socialError} />
+}
+
+// Componente que maneja la lógica de sesión expirada
+function LoginPageContent() {
   const [showExpiredMessage, setShowExpiredMessage] = useState(false);
   const searchParams = useSearchParams();
   const { clearError } = useAuthStore();
@@ -211,8 +218,16 @@ export default function LoginPage() {
           </div>
         )}
         
-        <LoginForm />
+        <LoginFormWithParams />
       </div>
     </AuthGuard>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center"><div className="text-center">Cargando...</div></div>}>
+      <LoginPageContent />
+    </Suspense>
   )
 }

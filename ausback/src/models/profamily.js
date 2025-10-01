@@ -8,6 +8,6 @@ export const Profamily = sequelize.define('profamilys', {
         autoIncrement: true,
         allowNull: false
     },
-    name:{type: DataTypes.STRING,allowNull: true},
-    description:{type: DataTypes.STRING,allowNull: true}
+    name:{type: DataTypes.STRING,allowNull: false},
+    description:{type: DataTypes.TEXT,allowNull: true}
 })

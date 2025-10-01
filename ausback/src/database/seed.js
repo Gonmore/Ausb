@@ -7,7 +7,6 @@ import { Student } from "../models/student.js";
 import { Profamily } from "../models/profamily.js";
 import { Tutor } from "../models/tutor.js";
 import { Application } from "../models/application.js";
-import { CompanyToken } from "../models/companyToken.js";
 import logger from '../logs/logger.js';
 
 async function seedDatabase() {

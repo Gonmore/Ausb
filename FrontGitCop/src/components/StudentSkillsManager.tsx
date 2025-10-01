@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from '@/components/ui/toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { useCV } from '@/hooks/useCV';
+import { apiClient } from '@/lib/api';
 import { 
     Plus, 
     Edit3, 
@@ -39,11 +41,17 @@ interface Skill {
     demandLevel: string;
 }
 
-interface StudentSkill extends Skill {
-    proficiencyLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+interface CvSkill {
+    id: number;
+    skillId: number;
+    skill: {
+        id: number;
+        name: string;
+        category?: string;
+    };
+    proficiencyLevel: 'bajo' | 'medio' | 'alto';
     yearsOfExperience: number;
-    isVerified: boolean;
-    certificationUrl?: string;
+    isHighlighted: boolean;
     notes?: string;
     addedAt: string;
 }
@@ -54,10 +62,9 @@ interface StudentSkillsManagerProps {
 }
 
 const PROFICIENCY_LEVELS = {
-    beginner: { label: 'Principiante', value: 25, color: 'bg-red-500' },
-    intermediate: { label: 'Intermedio', value: 50, color: 'bg-yellow-500' },
-    advanced: { label: 'Avanzado', value: 75, color: 'bg-blue-500' },
-    expert: { label: 'Experto', value: 100, color: 'bg-green-500' }
+    bajo: { label: 'Bajo', value: 33, color: 'bg-red-500' },
+    medio: { label: 'Medio', value: 66, color: 'bg-yellow-500' },
+    alto: { label: 'Alto', value: 100, color: 'bg-green-500' }
 };
 
 const CATEGORY_ICONS: Record<string, any> = {
@@ -72,20 +79,20 @@ const CATEGORY_ICONS: Record<string, any> = {
 };
 
 export default function StudentSkillsManager({ studentId, readonly = false }: StudentSkillsManagerProps) {
-    const [skills, setSkills] = useState<StudentSkill[]>([]);
+    const { cvData, loading: cvLoading, addSkillToCV, updateCVSkill, removeSkillFromCV } = useCV();
     const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [editingSkill, setEditingSkill] = useState<StudentSkill | null>(null);
+    const [editingSkill, setEditingSkill] = useState<CvSkill | null>(null);
     const [formData, setFormData] = useState<{
         skillId: string;
-        proficiencyLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+        proficiencyLevel: 'bajo' | 'medio' | 'alto';
         yearsOfExperience: number;
         certificationUrl: string;
         notes: string;
     }>({
         skillId: '',
-        proficiencyLevel: 'beginner',
+        proficiencyLevel: 'medio',
         yearsOfExperience: 0,
         certificationUrl: '',
         notes: ''
@@ -93,89 +100,36 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
     const { addToast, success, error: showError } = useToast();
 
     const fetchStudentSkills = useCallback(async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`/api/students/${studentId}/skills`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setSkills(data.skills || []);
-            } else {
-                throw new Error('Error al cargar skills');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            showError("No se pudieron cargar las skills del estudiante");
-        }
-    }, [studentId, showError]);
+        // Las skills ahora vienen del hook useCV
+        // No necesitamos hacer fetch manual
+    }, []);
 
     const fetchAvailableSkills = useCallback(async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`/api/students/${studentId}/skills/available`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setAvailableSkills(data.availableSkills || []);
-            }
+            const response = await apiClient.get('/api/skills');
+            setAvailableSkills(Array.isArray(response.data) ? response.data : response.data?.data || []);
         } catch (error) {
-            console.error('Error:', error);
+            console.error('Error fetching available skills:', error);
         }
-    }, [studentId]);
+    }, []);
 
     useEffect(() => {
         const loadData = async () => {
             setLoading(true);
-            await Promise.all([
-                fetchStudentSkills(),
-                fetchAvailableSkills()
-            ]);
+            await fetchAvailableSkills();
             setLoading(false);
         };
 
         loadData();
-    }, [fetchStudentSkills, fetchAvailableSkills]);
+    }, [fetchAvailableSkills]);
 
     const handleAddSkill = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`/api/students/${studentId}/skills`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    skillId: parseInt(formData.skillId),
-                    proficiencyLevel: formData.proficiencyLevel,
-                    yearsOfExperience: formData.yearsOfExperience,
-                    certificationUrl: formData.certificationUrl || null,
-                    notes: formData.notes || null
-                })
-            });
-
-            if (response.ok) {
-                success("La skill se agregó exitosamente a tu perfil");
-                await Promise.all([
-                    fetchStudentSkills(),
-                    fetchAvailableSkills()
-                ]);
-                setDialogOpen(false);
-                resetForm();
-            } else {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al agregar skill');
-            }
+            const skillId = parseInt(formData.skillId);
+            await addSkillToCV(skillId, formData.proficiencyLevel, formData.yearsOfExperience, false, formData.notes);
+            success("La skill se agregó exitosamente a tu perfil");
+            setDialogOpen(false);
+            resetForm();
         } catch (error) {
             console.error('Error:', error);
             showError(error instanceof Error ? error.message : "No se pudo agregar la skill");
@@ -186,30 +140,15 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
         if (!editingSkill) return;
 
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`/api/students/${studentId}/skills/${editingSkill.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    proficiencyLevel: formData.proficiencyLevel,
-                    yearsOfExperience: formData.yearsOfExperience,
-                    certificationUrl: formData.certificationUrl || null,
-                    notes: formData.notes || null
-                })
+            await updateCVSkill(editingSkill.id, {
+                proficiencyLevel: formData.proficiencyLevel,
+                yearsOfExperience: formData.yearsOfExperience,
+                notes: formData.notes
             });
-
-            if (response.ok) {
-                success("Los datos de la skill se actualizaron exitosamente");
-                await fetchStudentSkills();
-                setDialogOpen(false);
-                setEditingSkill(null);
-                resetForm();
-            } else {
-                throw new Error('Error al actualizar skill');
-            }
+            success("Los datos de la skill se actualizaron exitosamente");
+            setDialogOpen(false);
+            setEditingSkill(null);
+            resetForm();
         } catch (error) {
             console.error('Error:', error);
             showError("No se pudo actualizar la skill");
@@ -220,24 +159,8 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
         if (!confirm('¿Estás seguro de que quieres eliminar esta skill?')) return;
 
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`/api/students/${studentId}/skills/${skillId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.ok) {
-                success("La skill se eliminó de tu perfil");
-                await Promise.all([
-                    fetchStudentSkills(),
-                    fetchAvailableSkills()
-                ]);
-            } else {
-                throw new Error('Error al eliminar skill');
-            }
+            await removeSkillFromCV(skillId);
+            success("La skill se eliminó de tu perfil");
         } catch (error) {
             console.error('Error:', error);
             showError("No se pudo eliminar la skill");
@@ -247,20 +170,20 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
     const resetForm = () => {
         setFormData({
             skillId: '',
-            proficiencyLevel: 'beginner',
+            proficiencyLevel: 'medio',
             yearsOfExperience: 0,
             certificationUrl: '',
             notes: ''
         });
     };
 
-    const openEditDialog = (skill: StudentSkill) => {
+    const openEditDialog = (skill: CvSkill) => {
         setEditingSkill(skill);
         setFormData({
             skillId: skill.id.toString(),
             proficiencyLevel: skill.proficiencyLevel,
             yearsOfExperience: skill.yearsOfExperience,
-            certificationUrl: skill.certificationUrl || '',
+            certificationUrl: '',
             notes: skill.notes || ''
         });
         setDialogOpen(true);
@@ -273,33 +196,32 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
     };
 
     const getSkillsByCategory = () => {
-        const categories: Record<string, StudentSkill[]> = {};
-        skills.forEach(skill => {
-            if (!categories[skill.category]) {
-                categories[skill.category] = [];
+        const categories: Record<string, CvSkill[]> = {};
+        cvData.skills.forEach(skill => {
+            const category = skill.skill.category || 'General';
+            if (!categories[category]) {
+                categories[category] = [];
             }
-            categories[skill.category].push(skill);
+            categories[category].push(skill);
         });
         return categories;
     };
 
     const getOverallStats = () => {
-        const totalSkills = skills.length;
-        const verifiedSkills = skills.filter(s => s.isVerified).length;
-        const avgExperience = skills.length > 0 ? 
-            skills.reduce((acc, s) => acc + s.yearsOfExperience, 0) / skills.length : 0;
+        const totalSkills = cvData.skills.length;
+        const avgExperience = totalSkills > 0 ? 
+            cvData.skills.reduce((acc, s) => acc + s.yearsOfExperience, 0) / totalSkills : 0;
         
         const proficiencyDistribution = {
-            beginner: skills.filter(s => s.proficiencyLevel === 'beginner').length,
-            intermediate: skills.filter(s => s.proficiencyLevel === 'intermediate').length,
-            advanced: skills.filter(s => s.proficiencyLevel === 'advanced').length,
-            expert: skills.filter(s => s.proficiencyLevel === 'expert').length
+            bajo: cvData.skills.filter(s => s.proficiencyLevel === 'bajo').length,
+            medio: cvData.skills.filter(s => s.proficiencyLevel === 'medio').length,
+            alto: cvData.skills.filter(s => s.proficiencyLevel === 'alto').length
         };
 
-        return { totalSkills, verifiedSkills, avgExperience, proficiencyDistribution };
+        return { totalSkills, avgExperience, proficiencyDistribution };
     };
 
-    if (loading) {
+    if (cvLoading) {
         return (
             <Card>
                 <CardHeader>
@@ -337,16 +259,12 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
                             <div className="text-sm text-gray-600">Total Skills</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-green-600">{stats.verifiedSkills}</div>
-                            <div className="text-sm text-gray-600">Verificadas</div>
-                        </div>
-                        <div className="text-center">
                             <div className="text-2xl font-bold">{stats.avgExperience.toFixed(1)}</div>
                             <div className="text-sm text-gray-600">Años promedio</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-blue-600">{stats.proficiencyDistribution.expert}</div>
-                            <div className="text-sm text-gray-600">Nivel experto</div>
+                            <div className="text-2xl font-bold text-blue-600">{stats.proficiencyDistribution.alto}</div>
+                            <div className="text-sm text-gray-600">Nivel alto</div>
                         </div>
                     </div>
                 </CardContent>
@@ -395,7 +313,11 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
                                                         <SelectValue placeholder="Selecciona una skill" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {availableSkills.map(skill => (
+                                                        {availableSkills
+                                                            .filter(skill => 
+                                                                !cvData.skills.some((cvSkill: CvSkill) => cvSkill.skillId === skill.id)
+                                                            )
+                                                            .map(skill => (
                                                             <SelectItem key={skill.id} value={skill.id.toString()}>
                                                                 <div className="flex flex-col">
                                                                     <span>{skill.name}</span>
@@ -488,7 +410,7 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
                     </div>
                 </CardHeader>
                 <CardContent>
-                    {skills.length === 0 ? (
+                    {cvData.skills.length === 0 ? (
                         <div className="text-center py-8">
                             <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                             <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -520,7 +442,7 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
                                 <TabsContent key={category} value={category} className="space-y-4">
                                     <div className="grid gap-4">
                                         {categorySkills.map(skill => {
-                                            const IconComponent = CATEGORY_ICONS[skill.category] || CATEGORY_ICONS.default;
+                                            const IconComponent = CATEGORY_ICONS[skill.skill.category || 'General'] || CATEGORY_ICONS.default;
                                             const proficiencyConfig = PROFICIENCY_LEVELS[skill.proficiencyLevel];
                                             
                                             return (
@@ -530,12 +452,12 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
                                                             <IconComponent className="h-5 w-5 text-blue-600" />
                                                             <div>
                                                                 <h4 className="font-medium flex items-center gap-2">
-                                                                    {skill.name}
-                                                                    {skill.isVerified && (
+                                                                    {skill.skill.name}
+                                                                    {skill.isHighlighted && (
                                                                         <CheckCircle className="h-4 w-4 text-green-500" />
                                                                     )}
                                                                 </h4>
-                                                                <p className="text-sm text-gray-600">{skill.description}</p>
+                                                                <p className="text-sm text-gray-600">{skill.skill.category || 'General'}</p>
                                                             </div>
                                                         </div>
                                                         {!readonly && (
@@ -575,29 +497,15 @@ export default function StudentSkillsManager({ studentId, readonly = false }: St
                                                             {skill.yearsOfExperience} años
                                                         </Badge>
                                                         
-                                                        {skill.isVerified ? (
+                                                        {skill.isHighlighted ? (
                                                             <Badge variant="default" className="bg-green-500 flex items-center gap-1">
                                                                 <Award className="h-3 w-3" />
-                                                                Verificada
+                                                                Destacada
                                                             </Badge>
                                                         ) : (
                                                             <Badge variant="outline" className="flex items-center gap-1">
                                                                 <AlertTriangle className="h-3 w-3" />
-                                                                Sin verificar
-                                                            </Badge>
-                                                        )}
-
-                                                        {skill.certificationUrl && (
-                                                            <Badge variant="outline" className="flex items-center gap-1">
-                                                                <ExternalLink className="h-3 w-3" />
-                                                                <a 
-                                                                    href={skill.certificationUrl} 
-                                                                    target="_blank" 
-                                                                    rel="noopener noreferrer"
-                                                                    className="hover:underline"
-                                                                >
-                                                                    Certificación
-                                                                </a>
+                                                                Normal
                                                             </Badge>
                                                         )}
                                                     </div>

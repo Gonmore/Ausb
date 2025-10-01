@@ -35,6 +35,7 @@ import { useRevealedCVs } from '@/hooks/useRevealedCVs';
 import ConfirmationDialog from '@/components/ui/ConfirmationDialog';
 import LoadingStats from '@/components/ui/LoadingStats';
 import { useToast } from '@/components/ui/toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 // 🚀 OPTIMIZACIÓN: Componente memoizado para cada oferta
 const OfferCard = memo(({ 
@@ -259,6 +260,7 @@ function CompanyOffersContent() {
   // 🚀 OPTIMIZACIÓN: Usar hooks customizados
   const { offers, loading, error, deleteOffer } = useOffers();
   const { revealedCVs, addRevealedCV, isRevealed } = useRevealedCVs();
+  const queryClient = useQueryClient();
   
   // 🎯 UX: Sistema de toasts mejorado
   const { addToast, success, error: showError, warning, info } = useToast();
@@ -281,6 +283,8 @@ function CompanyOffersContent() {
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [generatedInterviewDetails, setGeneratedInterviewDetails] = useState<any>(null);
   const [acceptForm, setAcceptForm] = useState({ message: '' });
   const [interviewForm, setInterviewForm] = useState({
     date: '',
@@ -668,6 +672,7 @@ function CompanyOffersContent() {
     }
   };
 
+  // 🎯 UX MEJORADA: Programar entrevista con feedback visual
   const handleConfirmInterview = async () => {
     if (!selectedStudentForAction) return;
 
@@ -681,6 +686,7 @@ function CompanyOffersContent() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          status: 'interview_requested',
           interviewDetails: {
             date: interviewForm.date,
             time: interviewForm.time,
@@ -696,12 +702,27 @@ function CompanyOffersContent() {
         throw new Error('Error al programar entrevista');
       }
 
-      alert('📅 Entrevista programada exitosamente');
+      const result = await response.json();
       
-      // Cerrar modal y recargar
+      // � MOSTRAR MODAL DE CONFIRMACIÓN CON DETALLES GENERADOS
+      setGeneratedInterviewDetails(result.application.interviewDetails);
+      setShowConfirmationModal(true);
+      
+      // Cerrar modal de solicitud y refrescar datos
       setShowInterviewModal(false);
       setShowCandidatesModal(false);
-      window.location.reload();
+      
+      // 🔥 REFRESCAR LOS DATOS DE LAS OFERTAS PARA ACTUALIZAR EL ESTADO
+      queryClient.invalidateQueries({ queryKey: ['offers'] });
+      
+      // Limpiar formulario
+      setInterviewForm({
+        date: '',
+        time: '',
+        location: '',
+        type: 'presencial',
+        notes: ''
+      });
       
     } catch (error) {
       console.error('❌ Error programando entrevista:', error);
@@ -1353,11 +1374,16 @@ function CompanyOffersContent() {
                 onChange={(e) => setInterviewForm(prev => ({ ...prev, location: e.target.value }))}
                 placeholder={
                   interviewForm.type === 'presencial' ? 'Dirección de la oficina' :
-                  interviewForm.type === 'online' ? 'Enlace de videollamada' :
+                  interviewForm.type === 'online' ? 'Plataforma de videollamada (ej: Google Meet)' :
                   'Número de teléfono'
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
+              {interviewForm.type === 'online' && (
+                <p className="text-xs text-purple-600 mt-1">
+                  💡 El enlace de Google Meet se generará automáticamente al enviar la solicitud.
+                </p>
+              )}
             </div>
 
             <div>
@@ -1480,6 +1506,122 @@ function CompanyOffersContent() {
         isLoading={loadingStates.deletingOffer === confirmations.deleteOffer.offerId}
         loadingText="Eliminando..."
       />
+
+      {/* Modal de confirmación de entrevista solicitada */}
+      {showConfirmationModal && generatedInterviewDetails && selectedStudentForAction && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-xl font-bold text-green-700">✅ Entrevista Solicitada Exitosamente</h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowConfirmationModal(false);
+                    setGeneratedInterviewDetails(null);
+                    setSelectedStudentForAction(null);
+                  }}
+                >
+                  ✕
+                </Button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Información del candidato */}
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <h3 className="font-semibold text-green-800 mb-2">Entrevista programada con:</h3>
+                  <p className="text-green-700 font-medium">
+                    {selectedStudentForAction.student?.User?.name} {selectedStudentForAction.student?.User?.surname}
+                  </p>
+                  <p className="text-green-600 text-sm">
+                    Oferta: {selectedOffer?.name}
+                  </p>
+                </div>
+
+                {/* Detalles de la entrevista generados */}
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h4 className="font-semibold text-blue-800 mb-3">📅 Detalles de la Entrevista</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Fecha:</span>
+                      <p className="text-blue-700">{new Date(generatedInterviewDetails.date).toLocaleDateString('es-ES', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Hora:</span>
+                      <p className="text-blue-700">{generatedInterviewDetails.time}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Modalidad:</span>
+                      <p className="text-blue-700 capitalize">{generatedInterviewDetails.type}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Ubicación:</span>
+                      <p className="text-blue-700">{generatedInterviewDetails.location}</p>
+                    </div>
+                    {generatedInterviewDetails.link && (
+                      <div className="col-span-2">
+                        <span className="font-medium text-gray-700">🔗 Enlace de reunión:</span>
+                        <p className="text-blue-700 mt-1">
+                          <a
+                            href={generatedInterviewDetails.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline hover:text-blue-800 break-all"
+                          >
+                            {generatedInterviewDetails.link}
+                          </a>
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Este enlace ha sido generado automáticamente para la videollamada.
+                        </p>
+                      </div>
+                    )}
+                    {generatedInterviewDetails.notes && (
+                      <div className="col-span-2">
+                        <span className="font-medium text-gray-700">Notas:</span>
+                        <p className="text-blue-700 mt-1">{generatedInterviewDetails.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Próximos pasos */}
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <h4 className="font-semibold text-yellow-800 mb-2">📋 Próximos Pasos</h4>
+                  <ul className="text-sm text-yellow-700 space-y-1">
+                    <li>• El estudiante recibirá una notificación con los detalles de la entrevista</li>
+                    <li>• El estudiante podrá confirmar o rechazar la entrevista</li>
+                    <li>• Recibirás una notificación cuando el estudiante responda</li>
+                    {generatedInterviewDetails.type === 'online' && (
+                      <li>• El enlace de Google Meet está listo para usar en la fecha programada</li>
+                    )}
+                  </ul>
+                </div>
+
+                {/* Botón de cerrar */}
+                <div className="flex justify-end pt-4 border-t">
+                  <Button
+                    onClick={() => {
+                      setShowConfirmationModal(false);
+                      setGeneratedInterviewDetails(null);
+                      setSelectedStudentForAction(null);
+                    }}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    Entendido
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

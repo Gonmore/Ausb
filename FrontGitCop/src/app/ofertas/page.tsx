@@ -6,8 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle,
+  DialogFooter
+} from '@/components/ui/dialog';
 // import { ConditionalHeader } from '@/components/conditional-header';
-import { Search, MapPin, Calendar, Building, Users, Clock, Car, Tag } from 'lucide-react';
+import { Search, MapPin, Calendar, Building, Users, Clock, Car, Tag, Check, X, Loader2 } from 'lucide-react';
 import { offerService } from '@/lib/services';
 import { applicationService } from '@/lib/application-service-v2';
 import { useAuthStore } from '@/stores/auth';
@@ -22,6 +29,15 @@ export default function OfertasPage() {
   // 🔥 AGREGAR ESTADO PARA APLICACIONES
   const [userApplications, setUserApplications] = useState<{[key: string]: any}>({});
   const [loadingApplications, setLoadingApplications] = useState(true);
+  const [applyingToOffer, setApplyingToOffer] = useState<string | null>(null); // 🔥 NUEVO: ID de la oferta que se está aplicando
+  
+  // 🔥 ESTADOS PARA EL MODAL DE ENTREVISTA
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState<any | null>(null);
+  const [interviewAction, setInterviewAction] = useState<'confirm' | 'reject' | null>(null);
+  const [interviewNotes, setInterviewNotes] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [loadingInterviewAction, setLoadingInterviewAction] = useState(false);
   
   const { user, token } = useAuthStore();
   const queryClient = useQueryClient();
@@ -169,6 +185,9 @@ export default function OfertasPage() {
       return;
     }
     
+    // 🔥 MARCAR QUE SE ESTÁ APLICANDO A ESTA OFERTA
+    setApplyingToOffer(offer.id.toString());
+    
     try {
       const response = await fetch('http://localhost:5000/api/applications', {
         method: 'POST',
@@ -186,58 +205,72 @@ export default function OfertasPage() {
         const result = await response.json();
         console.log('✅ Application created:', result);
         
-        // 🔥 ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE
+        // 🔥 ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE CON EL ID REAL
+        const newApplication = {
+          id: result.application?.id || result.id || Date.now(),
+          status: 'pending',
+          appliedAt: new Date().toISOString(),
+          message: `Aplicación a ${offer.name}`,
+          reviewedAt: null,
+          cvViewed: false,
+          cvViewedAt: null,
+          companyNotes: null,
+          rejectionReason: null
+        };
+        
         setUserApplications(prev => ({
           ...prev,
-          [offer.id.toString()]: {
-            id: result.application?.id || Date.now(), // Usar el ID real si está disponible
-            status: 'pending',
-            appliedAt: new Date().toISOString(),
-            message: `Aplicación a ${offer.name}`,
-            reviewedAt: null,
-            cvViewed: false
-          }
+          [offer.id.toString()]: newApplication
         }));
 
         // 🔥 REFRESCAR DATOS DE OFERTAS Y APLICACIONES
         queryClient.invalidateQueries({ queryKey: ['offers'] });
         queryClient.invalidateQueries({ queryKey: ['applications'] });
         
-        // 🔥 RECARGAR APLICACIONES DEL USUARIO INMEDIATAMENTE
-        const updatedApplicationsResponse = await fetch('http://localhost:5000/api/applications/user', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        if (updatedApplicationsResponse.ok) {
-          const updatedApplicationsData = await updatedApplicationsResponse.json();
-          const updatedApplications = Array.isArray(updatedApplicationsData) ? updatedApplicationsData : [];
-          
-          const updatedApplicationsMap: {[key: string]: any} = {};
-          updatedApplications.forEach((app: any) => {
-            const offerId = app.offerId || app.offer?.id;
-            if (offerId) {
-              updatedApplicationsMap[offerId.toString()] = {
-                id: app.id,
-                status: app.status,
-                appliedAt: app.appliedAt,
-                reviewedAt: app.reviewedAt,
-                cvViewed: app.cvViewed || false,
-                cvViewedAt: app.cvViewedAt,
-                message: app.message,
-                companyNotes: app.companyNotes,
-                rejectionReason: app.rejectionReason
-              };
+        // 🔥 RECARGAR APLICACIONES DEL USUARIO INMEDIATAMENTE PARA ASEGURAR CONSISTENCIA
+        try {
+          const updatedApplicationsResponse = await fetch('http://localhost:5000/api/applications/user', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
             }
           });
           
-          setUserApplications(updatedApplicationsMap);
-          console.log('🔄 Applications refreshed after apply:', updatedApplicationsMap);
+          if (updatedApplicationsResponse.ok) {
+            const updatedApplicationsData = await updatedApplicationsResponse.json();
+            const updatedApplications = Array.isArray(updatedApplicationsData) ? updatedApplicationsData : updatedApplicationsData?.applications || [];
+            
+            const updatedApplicationsMap: {[key: string]: any} = {};
+            updatedApplications.forEach((app: any) => {
+              const offerId = app.offerId || app.offer?.id;
+              if (offerId) {
+                updatedApplicationsMap[offerId.toString()] = {
+                  id: app.id,
+                  status: app.status,
+                  appliedAt: app.appliedAt,
+                  reviewedAt: app.reviewedAt,
+                  cvViewed: app.cvViewed || false,
+                  cvViewedAt: app.cvViewedAt,
+                  message: app.message,
+                  companyNotes: app.companyNotes,
+                  rejectionReason: app.rejectionReason
+                };
+              }
+            });
+            
+            setUserApplications(updatedApplicationsMap);
+            console.log('🔄 Applications refreshed after apply:', updatedApplicationsMap);
+          }
+        } catch (refreshError) {
+          console.warn('⚠️ Could not refresh applications, using local state:', refreshError);
         }
 
         alert(`¡Aplicación enviada exitosamente!\n\nOferta: ${offer.name}\nEmpresa: ${offer.sector || 'N/A'}\n\nTe contactaremos pronto.`);
+        
+        // 🔥 CERRAR MODAL DESPUÉS DE APLICAR EXITOSAMENTE
+        if (showDetailsModal) {
+          closeDetailsModal();
+        }
         
       } else {
         const errorData = await response.json();
@@ -247,6 +280,9 @@ export default function OfertasPage() {
     } catch (error: any) {
       console.error('❌ Application failed:', error);
       alert(`Error al aplicar: ${error.message || 'Error desconocido'}`);
+    } finally {
+      // 🔥 LIMPIAR ESTADO DE CARGA
+      setApplyingToOffer(null);
     }
   };
 
@@ -291,6 +327,104 @@ export default function OfertasPage() {
   const closeDetailsModal = () => {
     setShowDetailsModal(false);
     setSelectedOffer(null);
+  };
+
+  // 🔥 FUNCIONES PARA MANEJAR ENTREVISTAS
+  const handleViewInterview = (application: any) => {
+    setSelectedApplication(application);
+    setShowInterviewModal(true);
+    setInterviewAction(null);
+    setInterviewNotes('');
+    setRejectionReason('');
+  };
+
+  const handleConfirmInterview = async () => {
+    if (!selectedApplication) return;
+
+    setLoadingInterviewAction(true);
+    try {
+      const response = await fetch(`http://localhost:5000/api/applications/${selectedApplication.id}/confirm-interview`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          studentNotes: interviewNotes
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Interview confirmed:', result);
+
+      // Actualizar estado local
+      setUserApplications(prev => ({
+        ...prev,
+        [selectedApplication.id]: {
+          ...prev[selectedApplication.id],
+          status: 'interview_confirmed'
+        }
+      }));
+
+      alert('Entrevista confirmada exitosamente');
+      setShowInterviewModal(false);
+      
+    } catch (err: any) {
+      console.error('❌ Error confirming interview:', err);
+      alert(`Error al confirmar la entrevista: ${err.message}`);
+    } finally {
+      setLoadingInterviewAction(false);
+    }
+  };
+
+  const handleRejectInterview = async () => {
+    if (!selectedApplication) return;
+
+    setLoadingInterviewAction(true);
+    try {
+      const response = await fetch(`http://localhost:5000/api/applications/${selectedApplication.id}/reject-interview`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          rejectionReason: rejectionReason,
+          studentNotes: interviewNotes
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('❌ Interview rejected:', result);
+
+      // Actualizar estado local
+      setUserApplications(prev => ({
+        ...prev,
+        [selectedApplication.id]: {
+          ...prev[selectedApplication.id],
+          status: 'interview_rejected'
+        }
+      }));
+
+      alert('Entrevista rechazada');
+      setShowInterviewModal(false);
+      
+    } catch (err: any) {
+      console.error('❌ Error rejecting interview:', err);
+      alert(`Error al rechazar la entrevista: ${err.message}`);
+    } finally {
+      setLoadingInterviewAction(false);
+    }
   };
 
   if (isLoading) {
@@ -571,6 +705,18 @@ export default function OfertasPage() {
                                   📋 Aplicación revisada
                                 </span>
                               )}
+                              {/* 🔥 BOTÓN PARA VER ENTREVISTA */}
+                              {userApplications[offer.id].status === 'interview_requested' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleViewInterview(userApplications[offer.id])}
+                                  className="text-purple-600 hover:text-purple-700 border-purple-300 hover:bg-purple-50 mt-2"
+                                >
+                                  <Calendar className="w-3 h-3 mr-1" />
+                                  Ver Entrevista
+                                </Button>
+                              )}
                             </div>
                           )}
                           
@@ -613,9 +759,18 @@ export default function OfertasPage() {
                               size="sm"
                               onClick={() => handleApplyToOffer(offer)}
                               className="btn-fprax-primary"
-                              disabled={loadingApplications}
+                              disabled={loadingApplications || applyingToOffer === offer.id.toString()}
                             >
-                              {loadingApplications ? 'Cargando...' : 'Aplicar'}
+                              {applyingToOffer === offer.id.toString() ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                  Aplicando...
+                                </>
+                              ) : loadingApplications ? (
+                                'Cargando...'
+                              ) : (
+                                'Aplicar'
+                              )}
                             </Button>
                           )}
                         </div>
@@ -743,10 +898,18 @@ export default function OfertasPage() {
                       console.log('🔥 Modal apply button clicked!');
                       handleApplyToOffer(selectedOffer);
                     }}
-                    disabled={!!user && user.role !== 'student'}
+                    disabled={!!user && user.role !== 'student' || applyingToOffer === selectedOffer.id.toString()}
                   >
                     {!user ? 'Iniciar sesión' : 
                      user.role !== 'student' ? 'Solo estudiantes pueden aplicar' : 
+                     applyingToOffer === selectedOffer.id.toString() ? (
+                       <>
+                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                         Aplicando...
+                       </>
+                     ) :
+                     userApplications[selectedOffer.id] && userApplications[selectedOffer.id].status !== 'withdrawn' ? 
+                     'Ya aplicado' : 
                      'Aplicar a esta oferta'}
                   </Button>
                 </div>
@@ -755,6 +918,235 @@ export default function OfertasPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de Entrevista */}
+      <Dialog open={showInterviewModal} onOpenChange={setShowInterviewModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-600" />
+              Detalles de la Entrevista
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedApplication && (
+            <div className="space-y-6">
+              {/* Información de la oferta */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-lg mb-2">{selectedApplication?.offer?.name || selectedOffer?.name || 'Oferta'}</h3>
+                <p className="text-sm text-gray-600 mb-2">{selectedApplication?.offer?.company?.name || selectedApplication?.offer?.sector || selectedOffer?.sector || 'Empresa'}</p>
+                <p className="text-sm text-gray-700">{selectedApplication?.offer?.description || selectedOffer?.description || 'Descripción no disponible'}</p>
+              </div>
+
+              {/* Estado de la entrevista */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h4 className="font-semibold text-blue-800 mb-3">Estado de la Entrevista</h4>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-purple-600 border-purple-300 bg-purple-50">
+                    📅 Entrevista Solicitada
+                  </Badge>
+                  {selectedApplication.interviewRequestedAt && (
+                    <span className="text-sm text-gray-600">
+                      Solicitada el {new Date(selectedApplication.interviewRequestedAt).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Detalles de la entrevista - solo si existen */}
+              {selectedApplication.interviewDetails ? (
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <h4 className="font-semibold text-purple-800 mb-3">Detalles de la Entrevista</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Fecha:</span>
+                      <p className="text-purple-700">{new Date(selectedApplication.interviewDetails.date).toLocaleDateString('es-ES', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Hora:</span>
+                      <p className="text-purple-700">{selectedApplication.interviewDetails.time}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Modalidad:</span>
+                      <p className="text-purple-700 capitalize">{selectedApplication.interviewDetails.type}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Ubicación:</span>
+                      <p className="text-purple-700">{selectedApplication.interviewDetails.location}</p>
+                    </div>
+                    {selectedApplication.interviewDetails.link && (
+                      <div className="col-span-2">
+                        <span className="font-medium text-gray-700">Enlace de reunión:</span>
+                        <p className="text-purple-700">
+                          <a 
+                            href={selectedApplication.interviewDetails.link} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="underline hover:text-purple-800"
+                          >
+                            {selectedApplication.interviewDetails.link}
+                          </a>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  {selectedApplication.interviewDetails.notes && (
+                    <div className="mt-3">
+                      <span className="font-medium text-gray-700">Notas:</span>
+                      <p className="text-purple-700 mt-1">{selectedApplication.interviewDetails.notes}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <h4 className="font-semibold text-yellow-800 mb-2">Esperando Detalles de la Entrevista</h4>
+                  <p className="text-yellow-700 text-sm">
+                    La empresa aún no ha proporcionado los detalles específicos de la entrevista. 
+                    Te notificaremos cuando estén disponibles.
+                  </p>
+                </div>
+              )}
+
+              {/* Notas de la empresa */}
+              {selectedApplication.companyNotes && (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h4 className="font-semibold text-blue-800 mb-2">Mensaje de la Empresa</h4>
+                  <p className="text-blue-700 text-sm">{selectedApplication.companyNotes}</p>
+                </div>
+              )}
+
+              {/* Acciones del estudiante */}
+              {interviewAction === null ? (
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button
+                    onClick={() => setInterviewAction('confirm')}
+                    className="bg-green-600 hover:bg-green-700 flex-1"
+                    disabled={!selectedApplication.interviewDetails}
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    Confirmar Entrevista
+                  </Button>
+                  <Button
+                    onClick={() => setInterviewAction('reject')}
+                    variant="destructive"
+                    className="flex-1"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Rechazar Entrevista
+                  </Button>
+                </div>
+              ) : interviewAction === 'confirm' ? (
+                <div className="space-y-4 pt-4 border-t">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Notas adicionales (opcional)
+                    </label>
+                    <textarea
+                      value={interviewNotes}
+                      onChange={(e) => setInterviewNotes(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="¿Algo que quieras comunicar a la empresa?"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleConfirmInterview}
+                      disabled={loadingInterviewAction}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {loadingInterviewAction ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Confirmando...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4 mr-2" />
+                          Confirmar Entrevista
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => setInterviewAction(null)}
+                      variant="outline"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 pt-4 border-t">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Motivo de rechazo
+                    </label>
+                    <select
+                      value={rejectionReason}
+                      onChange={(e) => setRejectionReason(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                    >
+                      <option value="">Selecciona un motivo</option>
+                      <option value="fecha_inconveniente">Fecha u hora inconveniente</option>
+                      <option value="tipo_entrevista">Tipo de entrevista no adecuado</option>
+                      <option value="ubicacion_lejana">Ubicación muy lejana</option>
+                      <option value="compromiso_previo">Tengo un compromiso previo</option>
+                      <option value="cambio_opinion">He cambiado de opinión sobre la oferta</option>
+                      <option value="otro">Otro motivo</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Mensaje adicional (opcional)
+                    </label>
+                    <textarea
+                      value={interviewNotes}
+                      onChange={(e) => setInterviewNotes(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                      placeholder="Explica brevemente el motivo..."
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleRejectInterview}
+                      disabled={loadingInterviewAction || !rejectionReason}
+                      variant="destructive"
+                    >
+                      {loadingInterviewAction ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Rechazando...
+                        </>
+                      ) : (
+                        <>
+                          <X className="w-4 h-4 mr-2" />
+                          Rechazar Entrevista
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => setInterviewAction(null)}
+                      variant="outline"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

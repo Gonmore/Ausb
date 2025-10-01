@@ -13,7 +13,7 @@ export const Skill = sequelize.define('skills', {
     allowNull: false,
     unique: true
   },
-  area: {
+  category: {
     type: DataTypes.STRING,
     allowNull: true
   }

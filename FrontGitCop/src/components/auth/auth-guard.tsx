@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/auth';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -17,6 +18,7 @@ export function AuthGuard({
   const [mounted, setMounted] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const router = useRouter();
+  const { logout } = useAuthStore();
 
   useEffect(() => {
     setMounted(true);
@@ -27,7 +29,9 @@ export function AuthGuard({
         const hasValidAuth = authData && JSON.parse(authData).state?.user && JSON.parse(authData).state?.token;
         
         if (requireAuth && !hasValidAuth) {
-          // Requiere autenticación pero no está logueado
+          // Requiere autenticación pero no está logueado - cerrar sesión y redirigir
+          console.log('🔐 AuthGuard: No hay autenticación válida, cerrando sesión...');
+          logout();
           router.push(redirectTo || '/login');
           return;
         }
@@ -41,8 +45,10 @@ export function AuthGuard({
         // Todo está bien
         setIsAuthorized(true);
       } catch (error) {
-        console.error('Error checking auth:', error);
+        console.error('❌ AuthGuard: Error checking auth:', error);
         if (requireAuth) {
+          // Error al verificar autenticación - cerrar sesión y redirigir
+          logout();
           router.push(redirectTo || '/login');
         } else {
           setIsAuthorized(true);
@@ -51,7 +57,7 @@ export function AuthGuard({
     };
 
     checkAuth();
-  }, [requireAuth, redirectTo, router]);
+  }, [requireAuth, redirectTo, router, logout]);
 
   if (!mounted) {
     return null;

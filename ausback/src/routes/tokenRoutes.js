@@ -1,23 +1,16 @@
 import { Router } from 'express';
-import companyTokenController from '../controllers/companyTokenController.js';
 import { authenticateJWT } from '../middlewares/authenticate.midlleware.js';
+import { searchIntelligentStudents, getTokenBalance } from '../controllers/studentController.js';
+
+console.log('🎯 ===== tokenRoutes.js CARGADO =====');
 
 const router = Router();
 
 // Rutas para gestión de tokens
 router.route('/balance')
-    .get(authenticateJWT, companyTokenController.getTokenBalance);  // Obtener balance de tokens
-
-router.route('/recharge')
-    .post(authenticateJWT, companyTokenController.rechargeTokens);  // Recargar tokens
+    .get(authenticateJWT, getTokenBalance);  // Obtener balance de tokens
 
 router.route('/search-students')
-    .post(authenticateJWT, companyTokenController.searchStudents);  // Buscar estudiantes
-
-router.route('/access-cv/:studentId')
-    .post(authenticateJWT, companyTokenController.accessStudentCV);  // Acceder al CV
-
-router.route('/usage-history')
-    .get(authenticateJWT, companyTokenController.getTokenUsageHistory);  // Historial de uso
+    .post(authenticateJWT, searchIntelligentStudents);  // 🔥 Búsqueda inteligente de estudiantes
 
 export default router;

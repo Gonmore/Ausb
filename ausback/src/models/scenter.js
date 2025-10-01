@@ -10,19 +10,15 @@ export const Scenter = sequelize.define('scenters', {
         validate:{notNull:{ msg:'Name must not be null'}},
     },
     code:{
-        type: DataTypes.STRING,allowNull: false,
-        validate:{notNull:{ msg:'Description must not be null' }}
+        type: DataTypes.STRING,allowNull: true
     },
     city:{type: DataTypes.STRING, allowNull: true},
     active:{type: DataTypes.BOOLEAN, defaultValue:true},
     address:{
-        type: DataTypes.STRING, allowNull: false,
-        validate:{notNull:{msg:'Serie must not be null'}}
+        type: DataTypes.STRING, allowNull: true
     },
     phone:{
-        type: DataTypes.STRING, allowNull: false,
-        validate:{
-            notNull:{msg:'Type must not be null'}}
+        type: DataTypes.STRING, allowNull: true
     },
     email:{type: DataTypes.STRING,allowNull: true},
     codigo_postal:{type: DataTypes.STRING,allowNull: true},       

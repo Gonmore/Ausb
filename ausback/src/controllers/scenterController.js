@@ -1,169 +1,327 @@
-import { Scenter } from '../models/scenter.js';
-import { User } from '../models/users.js';
-import { Status } from '../constants/index.js'
-import sequelize from '../database/database.js';
-import logger from '../logs/logger.js'
+﻿import { Scenter, Profamily, ScenterProfamily, User } from '../models/relations.js';
+import logger from '../logs/logger.js';
+import { Status } from '../constants/index.js';
 
-async function listScenters(req, res) {
-    Scenter.findAll({
-    })
-        .then(scenters => {
-        if (!scenters) {
-            return res.status(404).json({ mensaje: 'No hay centros de estudio' });
-        }
-        return res.json(scenters); // Retornar los centros asociados al usuario
-        })
-        .catch(error => {
-        console.error('Error obteniendo centros del usuario:', error);
-        return res.status(500).json({ mensaje: 'Error interno del servidor' });
+/**
+ * Obtener todos los scenters activos con sus profamilys
+ */
+export async function getActiveScenters(req, res) {
+    try {
+        const scenters = await Scenter.findAll({
+            where: { active: true },
+            include: [
+                {
+                    model: Profamily,
+                    as: 'profamilys',
+                    through: { attributes: [] }
+                }
+            ],
+            order: [['name', 'ASC']]
         });
-}
-async function getScenters(req, res) {
-    const { userId } = req.user;
-    console.log(userId)
-    User.findByPk(userId, {
-        include: {
-            model: Scenter,
-            through: { attributes: [] } // Excluir la tabla intermedia en la respuesta
-        }
-        })
-        .then(usuario => {
-        if (!usuario) {
-            return res.status(404).json({ mensaje: 'Usuario no encontrado' });
-        }
-        return res.json(usuario.Scenters); // Retornar los centros asociados al usuario
-        })
-        .catch(error => {
-        console.error('Error obteniendo centros del usuario:', error);
-        return res.status(500).json({ mensaje: 'Error interno del servidor' });
+
+        res.json({
+            success: true,
+            data: scenters
         });
+
+    } catch (error) {
+        logger.error('Error getting active scenters:', error);
+        res.status(500).json({ message: 'Error obteniendo centros de estudios' });
+    }
 }
-async function getScenter(req, res) {
-    const { userId } = req.user;
-    const { id } = req.params.id;
-    console.log(userId)
+
+/**
+ * Obtener un scenter específico con sus profamilys
+ */
+export async function getScenterById(req, res) {
+    const { id } = req.params;
+
     try {
         const scenter = await Scenter.findOne({
-            where: {
-                id:id,
-            },
+            where: { id, active: true },
+            include: [
+                {
+                    model: Profamily,
+                    as: 'profamilys',
+                    through: { attributes: [] }
+                }
+            ]
         });
-        res.json(scenter);
 
-    }catch(err){
-        logger.error('Error getScenter: '+err);
-        res.status(500).json({message: 'Server error getting Sdudent'})
-    }
-}
-
-async function createScenter(req, res){
-    const { userId } = req.user;
-    const { name,code,city,address,
-        phone,email} = req.body;
-    
-        
-    try {
-        await sequelize.transaction(async (t) => {
-            const usuario = await User.findByPk(userId)
-            const scenter = await Scenter.create({
-                name,code,city,address,
-                phone,email
-            },
-            { tansaction: t}
-            );
-            logger.info({ userId }, "Scenter created");
-            usuario.addScenter(scenter)
-            res.json(scenter);
-        })
-    }catch(err){
-        logger.error('Error createScenter: '+err);
-        res.status(500).json({message: 'Server error creating scenter'})
-    }
-}
-
-async function updateScenter(req, res) {
-    const { userId } = req.user;
-    const { scenterId } = req.params.id; // ID del centro en la URL
-    const { name,code,city,address,
-        phone,email} = req.body; // Datos a actualizar
-
-  // Primero, verificar si el usuario está relacionado con el centro
-    UserScenter.findOne({ where: { userId, scenterId } })
-    .then(relacion => {
-        if (!relacion) {
-        return res.status(403).json({ mensaje: 'No tienes permiso para actualizar este centro' });
+        if (!scenter) {
+            return res.status(404).json({ message: 'Centro de estudios no encontrado' });
         }
 
-      // Si la relación existe, proceder con la actualización
-        return Scenter.update(name,code,city,address,
-            phone,email, { where: { id: scenterId } });
-    })
-    .then(() => res.json({ mensaje: 'Centro actualizado exitosamente' }))
-    .catch(error => {
-        console.error('Error al actualizar centro:', error);
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
-    });
+        res.json({
+            success: true,
+            data: scenter
+        });
+
+    } catch (error) {
+        logger.error('Error getting scenter:', error);
+        res.status(500).json({ message: 'Error obteniendo centro de estudios' });
+    }
 }
 
-async function activateInactivate(req, res) {
-    const { userId }= req.user;
-    const {scenterId} = req.params.id;
-    const {active} = req.body;
+/**
+ * Agregar una profamily a un scenter
+ */
+export async function addProfamilyToScenter(req, res) {
+    const { scenterId } = req.params;
+    const { profamilyId } = req.body;
+    const { userId, role } = req.user;
+
     try {
-        if(!active)   return res.status(400).json({message:'Active is required'});
         const scenter = await Scenter.findByPk(scenterId);
         if (!scenter) {
-            return res.status(404).json({message: 'scenter not found'});
+            return res.status(404).json({ message: 'Centro de estudios no encontrado' });
         }
-        UserScenter.findOne({ where: { userId, scenterId } })
-            .then(relacion => {
-            if (!relacion) {
-            return res.status(403).json({ mensaje: 'No tienes permiso para actualizar este centro' });
-            }
-            if (scenter.active === active){
-                return res
-                    .status(400).json({message: 'User already has this status'});
-            }
-            // Si la relación existe, proceder con la actualización
-            return Scenter.update(active, { where: { id: scenterId } });
-            })
-            .then(() => res.json({ mensaje: 'Centro actualizado exitosamente' }))
-            
-    }catch(error){
-        logger.error('Error activateInactivate: '+error);
-        res.status(500).json({message: 'Server error'});
+
+        const profamily = await Profamily.findByPk(profamilyId);
+        if (!profamily) {
+            return res.status(404).json({ message: 'Familia profesional no encontrada' });
+        }
+
+        if (role !== 'admin') {
+            return res.status(403).json({ message: 'No autorizado para modificar este centro' });
+        }
+
+        const existingRelation = await ScenterProfamily.findOne({
+            where: { scenterId, profamilyId }
+        });
+
+        if (existingRelation) {
+            return res.status(409).json({ message: 'Esta familia profesional ya está asociada al centro' });
+        }
+
+        await ScenterProfamily.create({
+            scenterId,
+            profamilyId
+        });
+
+        logger.info({ userId, scenterId, profamilyId }, 'Profamily added to scenter');
+        res.status(201).json({
+            success: true,
+            message: 'Familia profesional agregada al centro exitosamente'
+        });
+
+    } catch (error) {
+        logger.error('Error adding profamily to scenter:', error);
+        res.status(500).json({ message: 'Error agregando familia profesional al centro' });
     }
 }
 
-async function deleteScenter(req,res){
-    const { userId }= req.user;
-    const {scenterId} = req.params;
+/**
+ * Remover una profamily de un scenter
+ */
+export async function removeProfamilyFromScenter(req, res) {
+    const { scenterId, profamilyId } = req.params;
+    const { userId, role } = req.user;
 
-    try{
-        UserScenter.findOne({ where: { userId, scenterId } })
-            .then(relacion => {
-            if (!relacion) {
-            return res.status(403).json({ mensaje: 'No tienes permiso para actualizar este centro' });
-            }
-            })
-            const scenter = await Scenter.destroy({ done }, {where: { id, UserId:userId } });
-            //destroy no es recomendado
-            if (scenter[0] === 0)
-                return res.status(404).json({message: 'Scenter not found'});
-            res.json(scenter, { mensaje: 'Centro eliminado exitosamente' });
-    
-    }catch(err){
-        logger.error('Error deleteScenter: '+err);
-        res.status(500).json({message: 'Server error'})
+    try {
+        if (role !== 'admin') {
+            return res.status(403).json({ message: 'No autorizado para modificar este centro' });
+        }
+
+        const relation = await ScenterProfamily.findOne({
+            where: { scenterId, profamilyId }
+        });
+
+        if (!relation) {
+            return res.status(404).json({ message: 'Relación no encontrada' });
+        }
+
+        await relation.destroy();
+
+        logger.info({ userId, scenterId, profamilyId }, 'Profamily removed from scenter');
+        res.json({
+            success: true,
+            message: 'Familia profesional removida del centro exitosamente'
+        });
+
+    } catch (error) {
+        logger.error('Error removing profamily from scenter:', error);
+        res.status(500).json({ message: 'Error removiendo familia profesional del centro' });
     }
 }
+
+/**
+ * Obtener profamilys disponibles para agregar a un scenter
+ */
+export async function getAvailableProfamilysForScenter(req, res) {
+    const { scenterId } = req.params;
+
+    try {
+        const associatedProfamilys = await ScenterProfamily.findAll({
+            where: { scenterId },
+            attributes: ['profamilyId']
+        });
+
+        const associatedIds = associatedProfamilys.map(rel => rel.profamilyId);
+
+        const availableProfamilys = await Profamily.findAll({
+            where: {
+                id: { [require('sequelize').Op.notIn]: associatedIds }
+            },
+            order: [['name', 'ASC']]
+        });
+
+        res.json({
+            success: true,
+            data: availableProfamilys
+        });
+
+    } catch (error) {
+        logger.error('Error getting available profamilys:', error);
+        res.status(500).json({ message: 'Error obteniendo familias profesionales disponibles' });
+    }
+}
+
+/**
+ * Obtener scenters asociados a un usuario
+ */
+export async function getUserScenters(req, res) {
+    const { userId } = req.user;
+
+    try {
+        const user = await User.findByPk(userId, {
+            include: {
+                model: Scenter,
+                as: 'scenters',
+                through: { attributes: [] },
+                where: { active: true },
+                required: false
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+
+        res.json({
+            success: true,
+            data: user.scenters || []
+        });
+
+    } catch (error) {
+        logger.error('Error getting user scenters:', error);
+        res.status(500).json({ message: 'Error obteniendo centros del usuario' });
+    }
+}
+
+/**
+ * Crear un nuevo scenter
+ */
+export async function createScenter(req, res) {
+    const { userId, role } = req.user;
+    const { name, code, city, address, phone, email } = req.body;
+
+    try {
+        if (role !== 'admin') {
+            return res.status(403).json({ message: 'No autorizado para crear centros de estudio' });
+        }
+
+        const scenter = await Scenter.create({
+            name,
+            code,
+            city,
+            address,
+            phone,
+            email,
+            active: true
+        });
+
+        logger.info({ userId, scenterId: scenter.id }, 'Scenter created');
+        res.status(201).json({
+            success: true,
+            data: scenter
+        });
+
+    } catch (error) {
+        logger.error('Error creating scenter:', error);
+        res.status(500).json({ message: 'Error creando centro de estudios' });
+    }
+}
+
+/**
+ * Actualizar un scenter
+ */
+export async function updateScenter(req, res) {
+    const { id } = req.params;
+    const { userId, role } = req.user;
+    const { name, code, city, address, phone, email } = req.body;
+
+    try {
+        if (role !== 'admin') {
+            return res.status(403).json({ message: 'No autorizado para actualizar centros' });
+        }
+
+        const scenter = await Scenter.findByPk(id);
+        if (!scenter) {
+            return res.status(404).json({ message: 'Centro de estudios no encontrado' });
+        }
+
+        await scenter.update({
+            name,
+            code,
+            city,
+            address,
+            phone,
+            email
+        });
+
+        logger.info({ userId, scenterId: id }, 'Scenter updated');
+        res.json({
+            success: true,
+            data: scenter
+        });
+
+    } catch (error) {
+        logger.error('Error updating scenter:', error);
+        res.status(500).json({ message: 'Error actualizando centro de estudios' });
+    }
+}
+
+/**
+ * Activar/desactivar un scenter
+ */
+export async function toggleScenterStatus(req, res) {
+    const { id } = req.params;
+    const { userId, role } = req.user;
+    const { active } = req.body;
+
+    try {
+        if (role !== 'admin') {
+            return res.status(403).json({ message: 'No autorizado para cambiar estado de centros' });
+        }
+
+        const scenter = await Scenter.findByPk(id);
+        if (!scenter) {
+            return res.status(404).json({ message: 'Centro de estudios no encontrado' });
+        }
+
+        await scenter.update({ active });
+
+        logger.info({ userId, scenterId: id, active }, 'Scenter status changed');
+        res.json({
+            success: true,
+            message: `Centro ${active ? 'activado' : 'desactivado'} exitosamente`
+        });
+
+    } catch (error) {
+        logger.error('Error toggling scenter status:', error);
+        res.status(500).json({ message: 'Error cambiando estado del centro' });
+    }
+}
+
 export default {
-    listScenters,
-    getScenters,
-    getScenter,
+    getActiveScenters,
+    getScenterById,
+    addProfamilyToScenter,
+    removeProfamilyFromScenter,
+    getAvailableProfamilysForScenter,
+    getUserScenters,
     createScenter,
     updateScenter,
-    activateInactivate,
-    deleteScenter
-}
-
+    toggleScenterStatus
+};

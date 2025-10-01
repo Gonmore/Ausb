@@ -73,13 +73,25 @@ export function SmartPhoneInput({
 
   const fetchCountries = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/geography/countries`);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      console.log('🔍 FetchCountries - API URL:', apiUrl);
+      console.log('🔍 FetchCountries - Full URL:', `${apiUrl}/api/geography/countries`);
+      
+      const response = await fetch(`${apiUrl}/api/geography/countries`);
+      console.log('🔍 FetchCountries - Response status:', response.status);
+      
       const data = await response.json();
+      console.log('🔍 FetchCountries - Response data:', data);
+      
       if (data.success) {
         setCountries(data.data);
+        console.log('✅ FetchCountries - Countries loaded:', data.data.length);
+      } else {
+        console.error('❌ FetchCountries - API error:', data.message);
       }
     } catch (error) {
-      console.error('Error fetching countries:', error);
+      console.error('❌ FetchCountries - Network error:', error);
+      console.error('❌ FetchCountries - Error details:', error instanceof Error ? error.message : String(error));
     }
   };
 

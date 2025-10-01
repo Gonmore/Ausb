@@ -27,7 +27,9 @@ export const Application = sequelize.define('applications', {
         type: DataTypes.ENUM(
             'pending', 
             'reviewed', 
-            'interview_requested',  // 🔥 AGREGAR ESTE VALOR
+            'interview_requested',
+            'interview_confirmed',
+            'interview_rejected',
             'accepted', 
             'rejected', 
             'withdrawn'
@@ -67,5 +69,35 @@ export const Application = sequelize.define('applications', {
         type: DataTypes.TEXT,
         allowNull: true,
         comment: 'Razón del rechazo si aplica'
+    },
+    interviewDetails: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Detalles de la entrevista en formato JSON'
+    },
+    interviewRequestedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Cuándo se solicitó la entrevista'
+    },
+    interviewConfirmedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Cuándo el estudiante confirmó la entrevista'
+    },
+    interviewRejectedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Cuándo el estudiante rechazó la entrevista'
+    },
+    interviewRejectionReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Razón del rechazo de la entrevista'
+    },
+    studentNotes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Notas adicionales del estudiante'
     }
 });

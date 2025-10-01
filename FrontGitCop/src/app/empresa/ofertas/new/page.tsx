@@ -48,7 +48,6 @@ export default function EmpresaOfertasNewPage() {
 			schedule: 'Mañana',
 			min_hr: 200,
 			car: false,
-			sector: 'Tecnología',
 			tag: 'programacion',
 			jobs: '',
 			requisites: '',
@@ -111,7 +110,6 @@ export default function EmpresaOfertasNewPage() {
 										schedule: data.schedule || 'Mañana',
 										min_hr: data.min_hr || 200,
 										car: data.car || false,
-										sector: data.sector || '',
 										tag: data.tag || '',
 										jobs: data.jobs || '',
 										requisites: data.requisites || '',
@@ -239,18 +237,6 @@ export default function EmpresaOfertasNewPage() {
 											))}
 										</SelectContent>
 									</Select>
-								</div>
-
-								<div>
-									<Label htmlFor="sector" className="text-sm font-semibold text-gray-700 mb-2 block">
-										Sector
-									</Label>
-									<Input 
-										id="sector"
-										placeholder="ej. Tecnología, Salud, Educación" 
-										value={newOffer.sector} 
-										onChange={e => handleChange('sector', e.target.value)} 
-									/>
 								</div>
 							</div>
 						</CardContent>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '@/stores/auth';
+import { apiClient } from '@/lib/api';
 
 interface Notification {
   id: string;
@@ -43,54 +44,84 @@ export const useNotifications = () => {
 
   // 🚀 Conectar WebSocket
   const connectWebSocket = useCallback(() => {
-    if (!token || !user) return;
-
-    try {
-      const wsUrl = `ws://localhost:5000/ws/notifications?token=${token}`;
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log('🔌 WebSocket conectado');
-        setIsConnected(true);
-        reconnectAttempts.current = 0;
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          handleWebSocketMessage(data);
-        } catch (error) {
-          console.error('❌ Error procesando mensaje WebSocket:', error);
-        }
-      };
-
-      ws.onclose = (event) => {
-        console.log('🔌 WebSocket desconectado:', event.code, event.reason);
-        setIsConnected(false);
-        wsRef.current = null;
-
-        // Intentar reconexión automática
-        if (reconnectAttempts.current < maxReconnectAttempts) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-          console.log(`🔄 Reintentando conexión en ${delay}ms (intento ${reconnectAttempts.current + 1})`);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttempts.current++;
-            connectWebSocket();
-          }, delay);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('❌ Error en WebSocket:', error);
-        // No mostrar el objeto error completo ya que puede causar problemas de serialización
-        console.log('WebSocket error event triggered');
-      };
-
-      wsRef.current = ws;
-    } catch (error) {
-      console.error('❌ Error conectando WebSocket:', error);
+    if (!token || !user) {
+      console.log('🔌 WebSocket: esperando autenticación completa...');
+      return;
     }
+
+    // Verificar que el token no esté vacío o malformado
+    if (!token || token.split('.').length !== 3) {
+      console.error('❌ WebSocket: token JWT inválido');
+      return;
+    }
+
+    const attemptConnection = (useSecure: boolean) => {
+      try {
+        const wsProtocol = useSecure ? 'wss:' : 'ws:';
+        // El backend está corriendo en localhost:5000
+        const wsUrl = `ws://localhost:5000/ws/notifications?token=${encodeURIComponent(token)}`;
+        console.log(`🔌 Intentando conexión WebSocket a:`, wsUrl.replace(token, '[TOKEN]'));
+
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          console.log('🔌 WebSocket conectado');
+          setIsConnected(true);
+          reconnectAttempts.current = 0;
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            handleWebSocketMessage(data);
+          } catch (error) {
+            console.error('❌ Error procesando mensaje WebSocket:', error);
+          }
+        };
+
+        ws.onclose = (event) => {
+          console.log('🔌 WebSocket desconectado:', {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean
+          });
+          setIsConnected(false);
+          wsRef.current = null;
+
+          // Solo reconectar si no fue un cierre por error de autenticación
+          if (event.code !== 1008 && reconnectAttempts.current < maxReconnectAttempts) {
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+            console.log(`🔄 Reintentando conexión en ${delay}ms (intento ${reconnectAttempts.current + 1})`);
+
+            reconnectTimeoutRef.current = setTimeout(() => {
+              reconnectAttempts.current++;
+              connectWebSocket();
+            }, delay);
+          } else if (event.code === 1008) {
+            console.log('🔐 WebSocket cerrado por autenticación - no reconectando automáticamente');
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('❌ Error en WebSocket - intentando reconectar...');
+          // El objeto error del WebSocket no es serializable, así que no lo logueamos
+          setIsConnected(false);
+
+          // Intentar reconexión inmediata si no hay reconexión programada
+          if (!reconnectTimeoutRef.current) {
+            reconnectAttempts.current = 0;
+            setTimeout(() => connectWebSocket(), 1000);
+          }
+        };
+
+        wsRef.current = ws;
+      } catch (error) {
+        console.error('❌ Error conectando WebSocket:', error);
+      }
+    };
+
+    // Siempre intentar WS a localhost:5000
+    attemptConnection(false);
   }, [token, user]);
 
   // 🚀 Manejar mensajes del WebSocket
@@ -204,20 +235,11 @@ export const useNotifications = () => {
   // 🚀 Marcar todas como leídas
   const markAllAsRead = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/notifications/mark-all-read', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        setNotifications(prev =>
-          prev.map(notification => ({ ...notification, read: true }))
-        );
-        setUnreadCount(0);
-      }
+      await apiClient.put('/api/notifications/mark-all-read');
+      setNotifications(prev =>
+        prev.map(notification => ({ ...notification, read: true }))
+      );
+      setUnreadCount(0);
     } catch (error) {
       console.error('❌ Error marcando todas las notificaciones:', error);
     }
@@ -229,20 +251,9 @@ export const useNotifications = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/notifications/history?limit=${limit}&offset=${offset}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setNotifications(data.notifications);
-        setUnreadCount(data.unread_count);
-      }
+      const response = await apiClient.get(`/api/notifications/history?limit=${limit}&offset=${offset}`);
+      setNotifications(response.data.notifications);
+      setUnreadCount(response.data.unread_count);
     } catch (error) {
       console.error('❌ Error obteniendo historial de notificaciones:', error);
     } finally {
@@ -255,16 +266,8 @@ export const useNotifications = () => {
     if (!token) return;
 
     try {
-      const response = await fetch('http://localhost:5000/api/notifications/preferences', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPreferences(data.preferences);
-      }
+      const response = await apiClient.get('/api/notifications/preferences');
+      setPreferences(response.data.preferences);
     } catch (error) {
       console.error('❌ Error obteniendo preferencias:', error);
     }
@@ -275,25 +278,15 @@ export const useNotifications = () => {
     if (!token) return;
 
     try {
-      const response = await fetch('http://localhost:5000/api/notifications/preferences', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newPreferences),
-      });
-
-      if (response.ok) {
-        setPreferences(prev => prev ? { ...prev, ...newPreferences } as NotificationPreferences : null);
-        
-        // Enviar al WebSocket también
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({
-            type: 'update_preferences',
-            preferences: newPreferences
-          }));
-        }
+      await apiClient.put('/api/notifications/preferences', newPreferences);
+      setPreferences(prev => prev ? { ...prev, ...newPreferences } as NotificationPreferences : null);
+      
+      // Enviar al WebSocket también
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: 'update_preferences',
+          preferences: newPreferences
+        }));
       }
     } catch (error) {
       console.error('❌ Error actualizando preferencias:', error);
@@ -314,21 +307,13 @@ export const useNotifications = () => {
     if (!token) return false;
 
     try {
-      const response = await fetch('http://localhost:5000/api/notifications/test', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: '🧪 Notificación de Prueba',
-          message: 'Esta es una notificación de prueba del sistema.',
-          type: 'test',
-          priority: 'medium'
-        }),
+      await apiClient.post('/api/notifications/test', {
+        title: '🧪 Notificación de Prueba',
+        message: 'Esta es una notificación de prueba del sistema.',
+        type: 'test',
+        priority: 'medium'
       });
-
-      return response.ok;
+      return true;
     } catch (error) {
       console.error('❌ Error enviando notificación de prueba:', error);
       return false;
@@ -338,20 +323,19 @@ export const useNotifications = () => {
   // 🚀 Efectos
   useEffect(() => {
     if (token && user) {
-      connectWebSocket();
-      fetchNotificationHistory();
-      fetchPreferences();
-    }
+      // Pequeño delay para asegurar que todo esté inicializado
+      const connectTimeout = setTimeout(() => {
+        connectWebSocket();
+      }, 500);
 
-    return () => {
+      return () => clearTimeout(connectTimeout);
+    } else {
+      // Cerrar conexión si el usuario se desautentica
       if (wsRef.current) {
-        wsRef.current.close();
+        wsRef.current.close(1000, 'Usuario desautenticado');
       }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-    };
-  }, [token, user, connectWebSocket, fetchNotificationHistory, fetchPreferences]);
+    }
+  }, [token, user, connectWebSocket]);
 
   // 🚀 Cleanup al desmontar
   useEffect(() => {

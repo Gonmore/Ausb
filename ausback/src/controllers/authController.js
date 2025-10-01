@@ -1,25 +1,47 @@
 import jwt from 'jsonwebtoken';
-import { User } from '../models/relations.js';
+import { User, Student } from '../models/relations.js';
 import { Op } from 'sequelize';
 import logger from '../logs/logger.js';
+import { comparar } from '../common/bcrypt.js';
 
 class AuthController {
     async register(req, res) {
         try {
-            const { username, email, password, role, name, surname, phone, description, countryCode, cityId } = req.body;
+            const { username, email, password, role, name, surname, phone, description, countryCode, cityId, address, studentData } = req.body;
 
-            console.log('=== DEBUG REGISTRO ===');
-            console.log('1. Datos recibidos:', { username, email, role, name, surname, phone, countryCode, cityId });
-            
             // Validaciones básicas
             if (!username || !email || !password || !role) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Campos obligatorios faltantes'
+                    message: 'Campos obligatorios faltantes: username, email, password, role'
                 });
             }
 
-            console.log('2. Validaciones básicas: OK');
+            // Validar formato de email
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Formato de email inválido'
+                });
+            }
+
+            // Validar role
+            const validRoles = ['student', 'company', 'scenter', 'tutor', 'admin'];
+            if (!validRoles.includes(role)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Role inválido. Debe ser: student, company, scenter, tutor, o admin'
+                });
+            }
+
+            // Validar longitud de contraseña
+            if (password.length < 6) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'La contraseña debe tener al menos 6 caracteres'
+                });
+            }
 
             // Verificar si el usuario ya existe
             const existingUser = await User.findOne({
@@ -29,39 +51,54 @@ class AuthController {
             });
 
             if (existingUser) {
-                return res.status(400).json({
+                return res.status(409).json({
                     success: false,
-                    message: 'El usuario o email ya existe'
+                    message: existingUser.email === email ? 'El email ya está registrado' : 'El username ya está en uso'
                 });
             }
 
-            console.log('3. Usuario no existe: OK');
-
             // Datos para crear usuario
             const userData = {
-                username,
-                email,
-                password, // Sin hashear - que lo haga el modelo
+                username: username.trim(),
+                email: email.toLowerCase().trim(),
+                password, // El hook beforeCreate lo hasheará
                 role,
-                name: name || null,
-                surname: surname || null,
-                phone: phone || null,
-                description: description || null,
-                countryCode: countryCode || null,
-                cityId: cityId || null,
+                name: name?.trim() || null,
+                surname: surname?.trim() || null,
+                phone: phone?.trim() || null,
+                description: description?.trim() || null,
+                countryCode: countryCode?.trim() || null,
+                cityId: cityId?.trim() || null,
+                address: address?.trim() || null,
                 active: true,
                 status: 'active'
             };
 
-            console.log('4. UserData preparado:', { ...userData, password: '[HIDDEN]' });
-
-            // Aquí es donde probablemente falla
-            console.log('5. Intentando crear usuario...');
+            // Crear usuario
             const user = await User.create(userData);
-            console.log('6. Usuario creado:', { id: user.id });
-            
 
-            // Si llegamos aquí, el usuario se creó bien
+            // Crear registro de estudiante si es necesario
+            let student = null;
+            if (role === 'student' && studentData) {
+                try {
+                    student = await Student.create({
+                        userId: user.id,
+                        grade: studentData.grade,
+                        course: studentData.course,
+                        car: studentData.car || false,
+                        tag: studentData.tag,
+                        description: studentData.description,
+                        profamilyId: studentData.profamilyId,
+                        active: true
+                    });
+                } catch (studentError) {
+                    // Si falla la creación del estudiante, eliminar el usuario creado
+                    await User.destroy({ where: { id: user.id } });
+                    throw new Error('Error creando perfil de estudiante: ' + studentError.message);
+                }
+            }
+
+            // Generar token
             const token = jwt.sign({
                 userId: user.id,
                 role: user.role,
@@ -83,38 +120,69 @@ class AuthController {
                     phone: user.phone,
                     countryCode: user.countryCode,
                     cityId: user.cityId,
-                    needsOnboarding: true
+                    address: user.address,
+                    needsOnboarding: true,
+                    studentId: student?.id
                 }
             });
 
         } catch (error) {
-            console.error('=== ERROR COMPLETO ===');
-            console.error('Message:', error.message);
-            console.error('Name:', error.name);
-            console.error('Stack:', error.stack);
-            console.error('SQL:', error.sql);
-            console.error('Original:', error.original);
-            
+            console.error('❌ Error en registro:', error);
+
+            // Manejar errores específicos de Sequelize
+            if (error.name === 'SequelizeValidationError') {
+                const messages = error.errors.map(err => err.message);
+                return res.status(400).json({
+                    success: false,
+                    message: 'Error de validación',
+                    errors: messages
+                });
+            }
+
+            if (error.name === 'SequelizeUniqueConstraintError') {
+                return res.status(409).json({
+                    success: false,
+                    message: 'El usuario ya existe'
+                });
+            }
+
             res.status(500).json({
                 success: false,
                 message: 'Error interno del servidor',
-                error: error.message
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }
     }
 
     async login(req, res) {
         try {
-            const { email, password } = req.body;
+            const { email, username, password } = req.body;
 
-            if (!email || !password) {
+            // Validar que se proporcionen las credenciales
+            if (!password) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Email y contraseña son requeridos'
+                    message: 'La contraseña es requerida'
                 });
             }
 
-            const user = await User.findOne({ where: { email } });
+            const searchField = email || username;
+            if (!searchField) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Email o username es requerido'
+                });
+            }
+
+            // Buscar usuario
+            const user = await User.findOne({ 
+                where: { 
+                    [Op.or]: [
+                        { email: searchField.toLowerCase() },
+                        { username: searchField }
+                    ]
+                } 
+            });
 
             if (!user) {
                 return res.status(401).json({
@@ -123,10 +191,16 @@ class AuthController {
                 });
             }
 
-            // Usar bcrypt directamente por ahora
-            const bcrypt = await import('bcrypt');
-            const isValidPassword = await bcrypt.compare(password, user.password);
+            // Verificar que el usuario esté activo
+            if (!user.active) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Cuenta desactivada. Contacte al administrador.'
+                });
+            }
 
+            // Verificar contraseña
+            const isValidPassword = await comparar(password, user.password);
             if (!isValidPassword) {
                 return res.status(401).json({
                     success: false,
@@ -134,6 +208,14 @@ class AuthController {
                 });
             }
 
+            // Obtener studentId si el usuario es estudiante
+            let studentId = null;
+            if (user.role === 'student') {
+                const student = await Student.findOne({ where: { userId: user.id } });
+                studentId = student?.id || null;
+            }
+
+            // Generar token
             const token = jwt.sign({
                 userId: user.id,
                 role: user.role,
@@ -154,15 +236,18 @@ class AuthController {
                     surname: user.surname,
                     phone: user.phone,
                     countryCode: user.countryCode,
-                    cityId: user.cityId
+                    cityId: user.cityId,
+                    address: user.address,
+                    studentId: studentId
                 }
             });
 
         } catch (error) {
-            console.error('Error during login:', error);
+            console.error('❌ Error en login:', error);
             res.status(500).json({
                 success: false,
-                message: 'Error interno del servidor'
+                message: 'Error interno del servidor',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }
     }

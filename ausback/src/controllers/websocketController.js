@@ -28,21 +28,39 @@ class WebSocketController {
    * 🚀 Manejar nueva conexión WebSocket
    */
   async handleConnection(ws, request) {
+    console.log('🔌 WebSocket: Nueva conexión entrante desde:', request.socket.remoteAddress);
+    console.log('🔌 WebSocket: URL de conexión:', request.url);
+    
     try {
       // Extraer token de la query string o headers
-      const url = new URL(request.url, `http://${request.headers.host}`);
-      const token = url.searchParams.get('token') || 
-                   request.headers.authorization?.replace('Bearer ', '');
+      let token;
+      try {
+        const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+        token = url.searchParams.get('token');
+      } catch (error) {
+        // Si falla el parsing de URL, intentar con el path directamente
+        const urlParts = request.url.split('?');
+        if (urlParts.length > 1) {
+          const params = new URLSearchParams(urlParts[1]);
+          token = params.get('token');
+        }
+      }
+      
+      // También verificar en headers como fallback
+      if (!token) {
+        token = request.headers.authorization?.replace('Bearer ', '');
+      }
 
       if (!token) {
+        console.log('❌ WebSocket: Token de autenticación requerido');
         ws.close(1008, 'Token de autenticación requerido');
         return;
       }
 
       // Verificar y decodificar token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const userId = decoded.id;
-      const userRole = decoded.role;
+      const userId = decoded.id; // Corregir: usar 'id' en lugar de 'userId'
+      const userRole = decoded.userType || decoded.role; // Usar userType o role como fallback
 
       // Registrar conexión en el servicio de notificaciones
       notificationService.registerConnection(userId, ws, userRole);

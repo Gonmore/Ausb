@@ -17,11 +17,16 @@ export const Offer =  sequelize.define('offers', {
     schedule:{type: DataTypes.STRING,allowNull: false},
     min_hr: {type: DataTypes.INTEGER, defaultValue: 200},
     car:{type: DataTypes.BOOLEAN,defaultValue: false},
-    sector:{type: DataTypes.STRING,allowNull: false},
+    sector:{type: DataTypes.STRING,allowNull: true},
     tag:{type: DataTypes.STRING,allowNull: false},
     description:{type: DataTypes.STRING,allowNull: false},
     jobs:{type: DataTypes.STRING,allowNull: false},
     requisites:{type: DataTypes.STRING,allowNull: false},
+    active: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+        allowNull: false
+    },
     companyId: {
         type: DataTypes.INTEGER,
         allowNull: false,

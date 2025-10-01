@@ -6,7 +6,7 @@ const router = express.Router();
 
 /**
  * @swagger
- * /api/students/{studentId}/skills:
+ * /api/student-skills/{studentId}/skills:
  *   get:
  *     summary: Obtener todas las skills de un estudiante
  *     tags: [Student Skills]
