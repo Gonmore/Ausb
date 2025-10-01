@@ -594,17 +594,25 @@ export default function OfertasPage() {
                             Disponible
                           </Badge>
                           {/* 🔥 MOSTRAR APTITUD PARA ESTUDIANTES */}
-                          {user?.role === 'student' && offer.aptitude !== undefined && (
+                          {user?.role === 'student' && offer.aptitudeDetails && offer.aptitudeDetails.level && (
                             <div className="text-sm font-medium">
-                              <Badge 
+                              <Badge
                                 className={
-                                  offer.aptitude >= 80 ? 'bg-green-100 text-green-800' :
-                                  offer.aptitude >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                                  offer.aptitudeDetails.level === 'muy alto' ? 'bg-green-100 text-green-800' :
+                                  offer.aptitudeDetails.level === 'alto' ? 'bg-yellow-100 text-yellow-800' :
+                                  offer.aptitudeDetails.level === 'medio' ? 'bg-blue-100 text-blue-800' :
                                   'bg-red-100 text-red-800'
                                 }
                               >
-                                {offer.aptitude}% compatibilidad
+                                {offer.aptitudeDetails.level === 'muy alto' ? 'Muy Alta' :
+                                 offer.aptitudeDetails.level === 'alto' ? 'Alta' :
+                                 offer.aptitudeDetails.level === 'medio' ? 'Media' :
+                                 offer.aptitudeDetails.level === 'bajo' ? 'Baja' :
+                                 'Sin Datos'} compatibilidad
                               </Badge>
+                              <div className="text-xs text-gray-500 mt-1">
+                                ({offer.aptitude}%)
+                              </div>
                             </div>
                           )}
                           {offer.min_hr && (

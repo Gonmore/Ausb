@@ -33,7 +33,8 @@ import {
   Brain,          // 🔥 AGREGAR
   Star,           // 🔥 AGREGAR
   CreditCard,     // 🔥 AGREGAR
-  Video           // 🔥 AGREGAR PARA GOOGLE MEET
+  Video,          // 🔥 AGREGAR PARA GOOGLE MEET
+  AlertTriangle   // 🔥 AGREGAR PARA PROFAMILIA SIMILAR
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { AuthGuard } from '@/components/auth-guard';
@@ -591,6 +592,53 @@ function CandidateSearchContent() {
     return <Badge className="bg-yellow-100 text-yellow-800">⏳ {stats.pending} pendiente{stats.pending > 1 ? 's' : ''}</Badge>;
   };
 
+  // 🔥 FUNCIONES PARA RESALTAR COINCIDENCIAS CON LA OFERTA
+  const getMatchingSkills = (studentSkills: any[], offerSkills: any) => {
+    if (!studentSkills || !offerSkills) return [];
+    
+    const offerSkillNames = Object.keys(offerSkills).map(name => name.toLowerCase().trim());
+    return studentSkills.filter(skill => 
+      offerSkillNames.includes(skill.name.toLowerCase().trim())
+    );
+  };
+
+  const isMatchingProFamily = (studentProFamily: any, offerProFamily: any) => {
+    if (!studentProFamily || !offerProFamily) return false;
+    
+    // Comparar por ID o por nombre (case insensitive)
+    return studentProFamily.id === offerProFamily.id || 
+           studentProFamily.name?.toLowerCase().trim() === offerProFamily.name?.toLowerCase().trim();
+  };
+
+  const isSimilarProFamily = (studentProFamily: any, offerProFamily: any) => {
+    if (!studentProFamily || !offerProFamily) return false;
+    
+    // Si ya es matching, no es "similar"
+    if (isMatchingProFamily(studentProFamily, offerProFamily)) return false;
+    
+    // Comparar por descripción o palabras clave similares
+    const studentDesc = studentProFamily.description?.toLowerCase() || '';
+    const offerDesc = offerProFamily.description?.toLowerCase() || '';
+    
+    // Palabras clave comunes que indican similitud
+    const techKeywords = ['informática', 'tecnología', 'desarrollo', 'programación', 'software', 'it', 'computación'];
+    const hasTechMatch = techKeywords.some(keyword => 
+      studentDesc.includes(keyword) && offerDesc.includes(keyword)
+    );
+    
+    return hasTechMatch;
+  };
+
+  const getAffinityColor = (level: string) => {
+    switch (level) {
+      case 'muy alto': return 'bg-green-100 text-green-800 border-green-300';
+      case 'alto': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'medio': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case 'bajo': return 'bg-orange-100 text-orange-800 border-orange-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
   // AGREGAR esta función después de las funciones existentes:
 
   const fetchRevealedStudents = async () => {
@@ -779,10 +827,8 @@ function CandidateSearchContent() {
                               </div>
                               <div className="flex-1">
                                 <h3 className="text-lg font-semibold">{student.User.name} {student.User.surname}</h3>
-                                <p className="text-gray-600">{student.User.email}</p>
-                                {student.User.phone && (
-                                  <p className="text-gray-500 text-sm">{student.User.phone}</p>
-                                )}
+                                <p className="text-gray-600">•••••••••••@•••••••••••</p>
+                                <p className="text-gray-500 text-sm">•••••••••••</p>
                               </div>
                               <div className="flex flex-col gap-2">
                                 {getPrimaryStatusBadge(studentData.primaryStatus, studentData.stats)}
@@ -1071,10 +1117,8 @@ function CandidateSearchContent() {
                               </div>
                               <div className="flex-1">
                                 <h3 className="text-lg font-semibold">{student.User.name} {student.User.surname}</h3>
-                                <p className="text-gray-600">{student.User.email}</p>
-                                {student.User.phone && (
-                                  <p className="text-gray-500 text-sm">{student.User.phone}</p>
-                                )}
+                                <p className="text-gray-600">•••••••••••@•••••••••••</p>
+                                <p className="text-gray-500 text-sm">•••••••••••</p>
                               </div>
                               <div className="flex flex-col gap-2">
                                 <Badge className="bg-purple-100 text-purple-800 border-purple-300">
@@ -1215,19 +1259,19 @@ function CandidateSearchContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Nombre completo</p>
-                    <p className="font-medium">{selectedStudent.User.name} {selectedStudent.User.surname}</p>
+                    <p className="font-medium">{selectedStudent.cvData?.student?.User?.name || selectedStudent.User?.name} {selectedStudent.cvData?.student?.User?.surname || selectedStudent.User?.surname}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Email</p>
-                    <p className="font-medium">{selectedStudent.User.email}</p>
+                    <p className="font-medium">{selectedStudent.cvData?.student?.User?.email || selectedStudent.User?.email}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Teléfono</p>
-                    <p className="font-medium">{selectedStudent.User.phone || 'No especificado'}</p>
+                    <p className="font-medium">{selectedStudent.cvData?.student?.User?.phone || selectedStudent.User?.phone || 'No especificado'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Vehículo propio</p>
-                    <p className="font-medium">{selectedStudent.car ? 'Sí' : 'No'}</p>
+                    <p className="font-medium">{selectedStudent.cvData?.student?.car !== undefined ? (selectedStudent.cvData.student.car ? 'Sí' : 'No') : (selectedStudent.car ? 'Sí' : 'No')}</p>
                   </div>
                 </div>
               </div>
@@ -1235,26 +1279,96 @@ function CandidateSearchContent() {
               {/* Formación académica */}
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-lg mb-3">Formación Académica</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Grado</p>
-                    <p className="font-medium">{selectedStudent.grade}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Curso</p>
-                    <p className="font-medium">{selectedStudent.course}</p>
-                  </div>
-                  {selectedStudent.profamily && (
-                    <div className="col-span-2">
-                      <p className="text-sm text-gray-600">Familia Profesional</p>
-                      <p className="font-medium">{selectedStudent.profamily.name}</p>
+                {selectedStudent.cvData?.student?.academicInfo ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Centro de Estudios</p>
+                      <p className="font-medium">{selectedStudent.cvData.student.academicInfo.scenter?.name || 'No especificado'}</p>
+                      {selectedStudent.cvData.student.academicInfo.scenter?.code && (
+                        <p className="text-xs text-gray-500">Código: {selectedStudent.cvData.student.academicInfo.scenter.code}</p>
+                      )}
+                      {selectedStudent.cvData.student.academicInfo.scenter?.city && (
+                        <p className="text-xs text-gray-500">Ciudad: {selectedStudent.cvData.student.academicInfo.scenter.city}</p>
+                      )}
                     </div>
-                  )}
-                </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm text-gray-600">Familia Profesional</p>
+                        {/* 🔥 INDICADORES DE COINCIDENCIA CON OFERTA - AQUÍ NO HAY OFERTA ESPECÍFICA */}
+                        <Badge className="bg-gray-100 text-gray-800 text-xs">
+                          Información académica
+                        </Badge>
+                      </div>
+                      <p className="font-medium">{selectedStudent.cvData.student.academicInfo.profamily?.name || 'No especificado'}</p>
+                      {selectedStudent.cvData.student.academicInfo.profamily?.description && (
+                        <p className="text-xs text-gray-500">{selectedStudent.cvData.student.academicInfo.profamily.description}</p>
+                      )}
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="text-sm text-gray-600">Estado Académico</p>
+                      <p className="font-medium">{selectedStudent.cvData.student.academicInfo.status || 'No especificado'}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Grado</p>
+                      <p className="font-medium">{selectedStudent.grade}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Curso</p>
+                      <p className="font-medium">{selectedStudent.course}</p>
+                    </div>
+                    {selectedStudent.profamily && (
+                      <div className="col-span-2">
+                        <p className="text-sm text-gray-600">Familia Profesional</p>
+                        <p className="font-medium">{selectedStudent.profamily.name}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Habilidades */}
-              {selectedStudent.tag && (
+              {selectedStudent.cvData?.student?.skills && selectedStudent.cvData.student.skills.length > 0 ? (
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-lg mb-3">Habilidades y Tecnologías</h3>
+                  <div className="grid gap-3">
+                    {selectedStudent.cvData.student.skills.map((skill: any, index: number) => (
+                      <div key={index} className="bg-white p-3 rounded border border-gray-200">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium">{skill.name}</span>
+                              <Badge variant="outline" className={
+                                skill.proficiencyLevel === 'alto' ? 'bg-green-50 text-green-700 border-green-300' :
+                                skill.proficiencyLevel === 'medio' ? 'bg-yellow-50 text-yellow-700 border-yellow-300' :
+                                'bg-red-50 text-red-700 border-red-300'
+                              }>
+                                {skill.proficiencyLevel === 'alto' ? 'Avanzado' :
+                                 skill.proficiencyLevel === 'medio' ? 'Intermedio' : 'Básico'}
+                              </Badge>
+                              {skill.category && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {skill.category}
+                                </Badge>
+                              )}
+                            </div>
+                            {skill.yearsOfExperience && skill.yearsOfExperience > 0 && (
+                              <p className="text-sm text-gray-600">
+                                {skill.yearsOfExperience} año{skill.yearsOfExperience !== 1 ? 's' : ''} de experiencia
+                              </p>
+                            )}
+                            {skill.notes && (
+                              <p className="text-sm text-gray-700 mt-1 italic">"{skill.notes}"</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : selectedStudent.tag ? (
                 <div className="bg-green-50 p-4 rounded-lg">
                   <h3 className="font-semibold text-lg mb-3">Habilidades y Tecnologías</h3>
                   <div className="flex flex-wrap gap-2">
@@ -1263,15 +1377,19 @@ function CandidateSearchContent() {
                     ))}
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* Descripción */}
-              {selectedStudent.description && (
+              {selectedStudent.cvData?.cv?.description || selectedStudent.cvData?.student?.description || selectedStudent.description ? (
                 <div className="bg-purple-50 p-4 rounded-lg">
                   <h3 className="font-semibold text-lg mb-3">Descripción Personal</h3>
-                  <p className="text-gray-700">{selectedStudent.description}</p>
+                  <p className="text-gray-700">
+                    {selectedStudent.cvData?.cv?.description || 
+                     selectedStudent.cvData?.student?.description || 
+                     selectedStudent.description}
+                  </p>
                 </div>
-              )}
+              ) : null}
 
               {/* Información de acceso */}
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
@@ -1282,6 +1400,14 @@ function CandidateSearchContent() {
                 <p className="text-sm text-green-700">
                   Este estudiante aplicó a tus ofertas, por lo que puedes ver su CV completo y contactarlo sin costo adicional.
                 </p>
+                {selectedStudent.cvData?.access && (
+                  <div className="mt-2 text-xs text-green-600">
+                    <p>Tipo de acceso: {selectedStudent.cvData.access.type}</p>
+                    {selectedStudent.cvData.access.tokensUsed > 0 && (
+                      <p>Tokens utilizados: {selectedStudent.cvData.access.tokensUsed}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Acciones adicionales */}

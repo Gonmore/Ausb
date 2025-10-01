@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { User, Student } from '../models/relations.js';
+import { User, Student, UserCompany } from '../models/relations.js';
 import { Op } from 'sequelize';
 import logger from '../logs/logger.js';
 import { comparar } from '../common/bcrypt.js';
@@ -215,6 +215,13 @@ class AuthController {
                 studentId = student?.id || null;
             }
 
+            // Obtener companyId si el usuario es empresa
+            let companyId = null;
+            if (user.role === 'company') {
+                const userCompany = await UserCompany.findOne({ where: { userId: user.id } });
+                companyId = userCompany?.companyId || null;
+            }
+
             // Generar token
             const token = jwt.sign({
                 userId: user.id,
@@ -238,7 +245,8 @@ class AuthController {
                     countryCode: user.countryCode,
                     cityId: user.cityId,
                     address: user.address,
-                    studentId: studentId
+                    studentId: studentId,
+                    companyId: companyId
                 }
             });
 

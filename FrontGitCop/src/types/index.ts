@@ -110,10 +110,12 @@ export interface Offer {
   description: string;
   jobs: string;
   requisites: string;
-  profamilyId: number | null;
+  profamilyId: number | null; // Legacy field for backward compatibility
+  profamilyIds?: number[]; // New field for multiple profamilies
   createdAt: string;
   updatedAt: string;
-  profamily?: Profamily;
+  profamily?: Profamily; // Legacy field for backward compatibility
+  profamilys?: Profamily[]; // New field for multiple profamilies
   companies?: Company;
   Skills?: Array<{
     id: number;
@@ -189,13 +191,14 @@ export interface CreateOfferData {
   period: string;
   schedule: string;
     min_hr?: number;
-    skills?: number[]; // IDs de skills seleccionados
+    skills?: number[]; // IDs de skills seleccionados (3-6 requeridos)
   car?: boolean;
   tag: string;
   description: string;
   jobs: string;
   requisites: string;
-  profamilyId: number;
+  profamilyId: number; // Legacy field for backward compatibility
+  profamilyIds?: number[]; // New field for multiple profamilies (1-4 requeridos)
   companyId?: number;
 }
 

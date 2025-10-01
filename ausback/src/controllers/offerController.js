@@ -1,4 +1,4 @@
-import { Offer, Profamily, Company, Application, Student, User, Skill, UserCompany } from '../models/relations.js';
+import { Offer, Profamily, Company, Application, Student, User, Skill, UserCompany, Cv } from '../models/relations.js';
 import companyService from '../services/companyService.js'; // 🔥 AÑADIR ESTE IMPORT
 import affinityCalculator from '../services/affinityCalculator.js';
 import logger from '../logs/logger.js';
@@ -158,7 +158,9 @@ async function getOffer(req, res) {
                 },
                 {
                     model: Skill,
-                    attributes: ['id', 'name']
+                    as: 'skills',
+                    attributes: ['id', 'name'],
+                    through: { attributes: [] }
                 }
             ]
         });
@@ -167,7 +169,14 @@ async function getOffer(req, res) {
             return res.status(404).json({ mensaje: 'Oferta no encontrada' });
         }
         
-        res.json(offer);
+        // Formatear la respuesta para incluir profamilyId del primer profamily (para compatibilidad con frontend)
+        const offerData = offer.toJSON();
+        if (offerData.profamilys && offerData.profamilys.length > 0) {
+            offerData.profamilyId = offerData.profamilys[0].id;
+            offerData.profamily = offerData.profamilys[0]; // También incluir como singular para consistencia
+        }
+        
+        res.json(offerData);
     } catch (err) {
         logger.error('Error getOffer: ' + err);
         res.status(500).json({ message: 'Error del servidor obteniendo la oferta' });
@@ -375,7 +384,9 @@ async function getMyCompanyOffers(req, res) {
                 },
                 {
                     model: Skill,
-                    attributes: ['id', 'name']
+                    as: 'skills',
+                    attributes: ['id', 'name'],
+                    through: { attributes: [] }
                 }
             ],
             order: [['createdAt', 'DESC']]
@@ -524,6 +535,12 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
                     model: Skill,
                     as: 'skills',
                     attributes: ['id', 'name']
+                },
+                {
+                    model: Profamily,
+                    as: 'profamilys',
+                    attributes: ['id', 'name', 'description'],
+                    through: { attributes: [] }
                 }
             ],
             order: [['createdAt', 'DESC']]
@@ -542,11 +559,99 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
 
             console.log(`Oferta "${offer.name}" (ID: ${offer.id}): ${applications.length} aplicaciones`);
 
+            // 🔥 PREPARAR SKILLS DE LA OFERTA ANTES DEL LOOP
+            const offerSkills = {};
+            if (offer.skills && offer.skills.length > 0) {
+                offer.skills.forEach(skill => {
+                    offerSkills[skill.name.toLowerCase()] = 2; // Nivel por defecto
+                });
+                console.log(`✅ Oferta "${offer.name}" tiene ${offer.skills.length} skills:`, offerSkills);
+            } else {
+                console.log(`⚠️ Oferta "${offer.name}" NO tiene skills asignadas`);
+            }
+
+            const offerProfamilyIds = offer.profamilys ? offer.profamilys.map(p => p.id) : [];
+            console.log(`🏢 Profamilys de oferta:`, offerProfamilyIds);
+
             const candidates = [];
             for (const app of applications) {
-                const student = await Student.findByPk(app.studentId, { raw: true });
-                const user = student ? await User.findByPk(student.userId, { raw: true }) : null;
-                if (student && user) {
+                // 🔥 OBTENER ESTUDIANTE CON SKILLS Y CV
+                const student = await Student.findByPk(app.studentId, {
+                    include: [
+                        {
+                            model: Skill,
+                            as: 'skills',
+                            through: {
+                                attributes: ['proficiencyLevel', 'yearsOfExperience']
+                            }
+                        },
+                        {
+                            model: Cv,
+                            as: 'cv',
+                            attributes: ['id', 'academicBackground', 'academicVerificationStatus'],
+                            required: false
+                        },
+                        {
+                            model: User,
+                            as: 'user',
+                            attributes: ['id', 'name', 'surname', 'email', 'phone']
+                        }
+                    ]
+                });
+
+                if (student) {
+                    // 🔥 EXTRAER PROFAMILY DEL CV DEL ESTUDIANTE
+                    let studentProfamilyId = null;
+                    let academicVerificationStatus = 'unverified'; // Default
+                    if (student.cv?.academicBackground) {
+                        try {
+                            const academicBg = student.cv.academicBackground;
+                            if (academicBg.profamily) {
+                                studentProfamilyId = parseInt(academicBg.profamily);
+                            }
+                            // 🔥 EXTRAER ESTADO DE VERIFICACIÓN
+                            if (student.cv.academicVerificationStatus) {
+                                academicVerificationStatus = student.cv.academicVerificationStatus;
+                            }
+                        } catch (error) {
+                            console.error('❌ Error extrayendo profamily del CV:', error);
+                        }
+                    }
+
+                    // 🔥 CONVERTIR SKILLS DEL ESTUDIANTE
+                    const studentSkills = {};
+                    if (student.skills && student.skills.length > 0) {
+                        student.skills.forEach(skill => {
+                            const levelMap = {
+                                'beginner': 1,
+                                'intermediate': 2,
+                                'advanced': 3,
+                                'expert': 4
+                            };
+                            const proficiencyLevel = skill.StudentSkill?.proficiencyLevel || skill.student_skills?.proficiencyLevel || 'beginner';
+                            studentSkills[skill.name.toLowerCase()] = levelMap[proficiencyLevel] || 1;
+                        });
+                    }
+
+                    // 🔥 CALCULAR AFINIDAD REAL
+                    let affinity;
+                    if (Object.keys(offerSkills).length > 0 && Object.keys(studentSkills).length > 0) {
+                        affinity = affinityCalculator.calculateAffinity(offerSkills, studentSkills, {
+                            profamilyId: studentProfamilyId,
+                            offerProfamilyIds: offerProfamilyIds,
+                            academicVerificationStatus: academicVerificationStatus
+                        });
+                        console.log(`✅ Afinidad calculada para ${student.user.name} ${student.user.surname}: ${affinity.level} (${affinity.score})`);
+                    } else {
+                        affinity = {
+                            level: 'sin datos',
+                            score: 0,
+                            matches: 0,
+                            coverage: 0,
+                            explanation: 'No hay suficientes datos para calcular afinidad'
+                        };
+                    }
+
                     candidates.push({
                         id: app.id,
                         status: app.status,
@@ -559,44 +664,39 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
                             course: student.course,
                             car: student.car,
                             tag: student.tag,
-                            User: {
-                                id: user.id,
-                                name: user.name,
-                                surname: user.surname,
-                                email: user.email,
-                                phone: user.phone
-                            }
+                            User: student.user
                         },
                         affinity: {
-                            level: 'medio',
-                            score: 50,
-                            matches: 0,
-                            coverage: 0,
-                            explanation: 'Candidato con perfil compatible para esta oferta'
+                            level: affinity.level,
+                            score: Math.round(affinity.score * 10) / 10,
+                            matches: affinity.matches,
+                            coverage: Math.round(affinity.coverage || 0),
+                            explanation: affinity.explanation,
+                            matchingSkills: affinity.matchingSkills || []
                         }
                     });
                 }
             }
 
-            // Calcular estadísticas
+            // 🔥 ORDENAR CANDIDATOS POR AFINIDAD (MEJORES PRIMERO)
+            candidates.sort((a, b) => {
+                if (a.affinity.score !== b.affinity.score) {
+                    return b.affinity.score - a.affinity.score;
+                }
+                return new Date(b.appliedAt) - new Date(a.appliedAt);
+            });
+
+            // 🔥 CALCULAR ESTADÍSTICAS REALES DE AFINIDAD
             const candidateStats = {
                 total: candidates.length,
                 byAffinity: {
-                    'muy alto': 0,
-                    'alto': 0,
-                    'medio': candidates.length,
-                    'bajo': 0,
-                    'sin datos': 0
+                    'muy alto': candidates.filter(c => c.affinity.level === 'muy alto').length,
+                    'alto': candidates.filter(c => c.affinity.level === 'alto').length,
+                    'medio': candidates.filter(c => c.affinity.level === 'medio').length,
+                    'bajo': candidates.filter(c => c.affinity.level === 'bajo').length,
+                    'sin datos': candidates.filter(c => c.affinity.level === 'sin datos').length
                 }
             };
-
-            // Convertir skills a formato offerSkills para el frontend
-            const offerSkills = {};
-            if (offer.skills && offer.skills.length > 0) {
-                offer.skills.forEach(skill => {
-                    offerSkills[skill.name.toLowerCase()] = 2; // Nivel por defecto
-                });
-            }
 
             results.push({
                 id: offer.id,
@@ -610,7 +710,9 @@ export const getCompanyOffersWithCandidates = async (req, res) => {
                 candidates: candidates,
                 candidateStats: candidateStats,
                 offerSkills: offerSkills,
-                skills: offer.skills ? offer.skills.map(s => ({ id: s.id, name: s.name })) : []
+                skills: offer.skills ? offer.skills.map(s => ({ id: s.id, name: s.name })) : [],
+                profamily: offer.profamilys && offer.profamilys.length > 0 ? offer.profamilys[0] : null, // Legacy single profamily for backward compatibility
+                profamilys: offer.profamilys || [] // New multiple profamilies field
             });
         }
 
@@ -644,16 +746,28 @@ export const getApplicationsByOffer = async (req, res) => {
     try {
         const { offerId } = req.params;
         const company = await companyService.getCompanyByUserId(req.user.userId);
-        
+
         console.log(`🔍 Buscando aplicaciones para oferta ${offerId} de empresa ${company.id}`);
 
-        // Verificar que la oferta pertenece a la empresa
+        // Verificar que la oferta pertenece a la empresa y obtenerla completa
         const offer = await Offer.findOne({
-            where: { 
+            where: {
                 id: offerId,
-                companyId: company.id 
+                companyId: company.id
             },
-            raw: true
+            include: [
+                {
+                    model: Skill,
+                    as: 'skills',
+                    through: { attributes: [] }
+                },
+                {
+                    model: Profamily,
+                    as: 'profamilys',
+                    attributes: ['id', 'name'],
+                    through: { attributes: [] }
+                }
+            ]
         });
 
         if (!offer) {
@@ -663,7 +777,19 @@ export const getApplicationsByOffer = async (req, res) => {
             });
         }
 
-        // Obtener aplicaciones con raw data
+        // 🔥 PREPARAR SKILLS DE LA OFERTA
+        const offerSkills = {};
+        if (offer.skills && offer.skills.length > 0) {
+            offer.skills.forEach(skill => {
+                offerSkills[skill.name.toLowerCase()] = 2; // Nivel por defecto
+            });
+        }
+
+        const offerProfamilyIds = offer.profamilys ? offer.profamilys.map(p => p.id) : [];
+        console.log(`🏢 Skills de oferta:`, offerSkills);
+        console.log(`🏢 Profamilys de oferta:`, offerProfamilyIds);
+
+        // Obtener aplicaciones
         const applications = await Application.findAll({
             where: { offerId: offerId },
             raw: true
@@ -672,12 +798,91 @@ export const getApplicationsByOffer = async (req, res) => {
         console.log(`📋 Aplicaciones encontradas: ${applications.length}`);
 
         const candidates = [];
-        
+
         for (const app of applications) {
-            const student = await Student.findByPk(app.studentId, { raw: true });
-            const user = student ? await User.findByPk(student.userId, { raw: true }) : null;
-            
-            if (student && user) {
+            // 🔥 OBTENER ESTUDIANTE CON SKILLS Y CV
+            const student = await Student.findByPk(app.studentId, {
+                include: [
+                    {
+                        model: Skill,
+                        as: 'skills',
+                        through: {
+                            attributes: ['proficiencyLevel', 'yearsOfExperience']
+                        }
+                    },
+                    {
+                        model: Cv,
+                        as: 'cv',
+                        attributes: ['id', 'academicBackground', 'academicVerificationStatus'],
+                        required: false
+                    },
+                    {
+                        model: User,
+                        as: 'user',
+                        attributes: ['id', 'name', 'surname', 'email', 'phone']
+                    }
+                ]
+            });
+
+            if (student) {
+                // 🔥 EXTRAER PROFAMILY DEL CV DEL ESTUDIANTE
+                let studentProfamilyId = null;
+                let academicVerificationStatus = 'unverified'; // Default
+                if (student.cv?.academicBackground) {
+                    try {
+                        const academicBg = student.cv.academicBackground;
+                        if (academicBg.profamily) {
+                            studentProfamilyId = parseInt(academicBg.profamily);
+                        }
+                        // 🔥 EXTRAER ESTADO DE VERIFICACIÓN
+                        if (student.cv.academicVerificationStatus) {
+                            academicVerificationStatus = student.cv.academicVerificationStatus;
+                        }
+                    } catch (error) {
+                        console.error('❌ Error extrayendo profamily del CV:', error);
+                    }
+                }
+
+                // 🔥 CONVERTIR SKILLS DEL ESTUDIANTE
+                const studentSkills = {};
+                if (student.skills && student.skills.length > 0) {
+                    student.skills.forEach(skill => {
+                        const levelMap = {
+                            'beginner': 1,
+                            'intermediate': 2,
+                            'advanced': 3,
+                            'expert': 4
+                        };
+                        const proficiencyLevel = skill.StudentSkill?.proficiencyLevel || skill.student_skills?.proficiencyLevel || 'beginner';
+                        studentSkills[skill.name.toLowerCase()] = levelMap[proficiencyLevel] || 1;
+                    });
+                    console.log(`✅ Estudiante ${student.user.name} ${student.user.surname} tiene ${student.skills.length} skills:`, studentSkills);
+                } else {
+                    console.log(`⚠️ Estudiante ${student.user.name} ${student.user.surname} NO tiene skills asignadas`);
+                }
+
+                // 🔥 CALCULAR AFINIDAD REAL
+                let affinity;
+                if (Object.keys(offerSkills).length > 0 && Object.keys(studentSkills).length > 0) {
+                    affinity = affinityCalculator.calculateAffinity(offerSkills, studentSkills, {
+                        profamilyId: studentProfamilyId,
+                        offerProfamilyIds: offerProfamilyIds,
+                        academicVerificationStatus: academicVerificationStatus
+                    });
+                    console.log(`✅ Afinidad calculada para ${student.user.name} ${student.user.surname}: ${affinity.level} (${affinity.score})`);
+                } else {
+                    console.log(`❌ NO se puede calcular afinidad para ${student.user.name} ${student.user.surname}:`);
+                    console.log(`   - Oferta tiene skills: ${Object.keys(offerSkills).length > 0}`);
+                    console.log(`   - Estudiante tiene skills: ${Object.keys(studentSkills).length > 0}`);
+                    affinity = {
+                        level: 'sin datos',
+                        score: 0,
+                        matches: 0,
+                        coverage: 0,
+                        explanation: 'No hay suficientes datos para calcular afinidad'
+                    };
+                }
+
                 candidates.push({
                     id: app.id,
                     status: app.status,
@@ -692,24 +897,27 @@ export const getApplicationsByOffer = async (req, res) => {
                         car: student.car,
                         tag: student.tag,
                         description: student.description,
-                        User: {
-                            id: user.id,
-                            name: user.name,
-                            surname: user.surname,
-                            email: user.email,
-                            phone: user.phone
-                        }
+                        User: student.user
                     },
                     affinity: {
-                        level: 'medio',
-                        score: 50,
-                        matches: 0,
-                        coverage: 0,
-                        explanation: 'Calculado automáticamente'
+                        level: affinity.level,
+                        score: Math.round(affinity.score * 10) / 10,
+                        matches: affinity.matches,
+                        coverage: Math.round(affinity.coverage || 0),
+                        explanation: affinity.explanation,
+                        matchingSkills: affinity.matchingSkills || []
                     }
                 });
             }
         }
+
+        // 🔥 ORDENAR CANDIDATOS POR AFINIDAD (MEJORES PRIMERO)
+        candidates.sort((a, b) => {
+            if (a.affinity.score !== b.affinity.score) {
+                return b.affinity.score - a.affinity.score;
+            }
+            return new Date(b.appliedAt) - new Date(a.appliedAt);
+        });
 
         res.json({
             success: true,
@@ -744,17 +952,25 @@ async function getOffersWithAptitude(req, res) {
         console.log(`🎯 Obteniendo ofertas con aptitud para usuario: ${userId}`);
         console.log('🔍 req.user completo:', req.user);
 
-        // 1. Buscar el estudiante y sus skills
+        // 1. Buscar el estudiante y sus skills Y CV
         console.log('👤 Buscando estudiante...');
         const student = await Student.findOne({
             where: { userId },
-            include: [{
-                model: Skill,
-                as: 'skills',
-                through: {
-                    attributes: ['proficiencyLevel', 'yearsOfExperience']
+            include: [
+                {
+                    model: Skill,
+                    as: 'skills',
+                    through: {
+                        attributes: ['proficiencyLevel', 'yearsOfExperience']
+                    }
+                },
+                {
+                    model: Cv,
+                    as: 'cv',
+                    attributes: ['id', 'academicBackground', 'academicVerificationStatus'],
+                    required: false
                 }
-            }]
+            ]
         });
 
         console.log('👤 Estudiante encontrado:', student ? { id: student.id, userId: student.userId } : 'NO ENCONTRADO');
@@ -762,6 +978,28 @@ async function getOffersWithAptitude(req, res) {
         if (!student) {
             console.log('❌ Estudiante no encontrado para userId:', userId);
             return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+        }
+
+        // 🔥 EXTRAER PROFAMILY DEL CV DEL ESTUDIANTE
+        let studentProfamilyId = null;
+        let academicVerificationStatus = 'unverified'; // Default
+        if (student.cv?.academicBackground) {
+            try {
+                const academicBg = student.cv.academicBackground;
+                if (academicBg.profamily) {
+                    studentProfamilyId = parseInt(academicBg.profamily);
+                    console.log(`🎓 Profamily del estudiante extraído del CV: ${studentProfamilyId}`);
+                }
+                // 🔥 EXTRAER ESTADO DE VERIFICACIÓN
+                if (student.cv.academicVerificationStatus) {
+                    academicVerificationStatus = student.cv.academicVerificationStatus;
+                    console.log(`🎓 Estado de verificación académica: ${academicVerificationStatus}`);
+                }
+            } catch (error) {
+                console.error('❌ Error extrayendo profamily del CV:', error);
+            }
+        } else {
+            console.log('⚠️ Estudiante no tiene CV o academicBackground');
         }
 
         // 2. Convertir skills del estudiante al formato esperado por el calculador
@@ -831,12 +1069,29 @@ async function getOffersWithAptitude(req, res) {
 
                 console.log(`🎯 Skills de oferta ${offer.name}:`, offerSkills);
 
+                // 🔥 OBTENER PROFAMILY IDS DE LA OFERTA
+                const offerProfamilyIds = offer.profamilys ? offer.profamilys.map(p => p.id) : [];
+                console.log(`🏢 Profamilys de oferta ${offer.name}:`, offerProfamilyIds);
+
                 // Calcular aptitud/afinidad
                 let aptitude;
                 if (Object.keys(offerSkills).length > 0 && Object.keys(studentSkills).length > 0) {
-                    aptitude = affinityCalculator.calculateAffinity(offerSkills, studentSkills);
-                    console.log(`✅ Aptitud calculada para ${offer.name}:`, aptitude);
+                    console.log(`🔍 DEBUG: Calculando afinidad para oferta "${offer.name}"`);
+                    console.log(`🔍 DEBUG: offerSkills (${Object.keys(offerSkills).length}):`, offerSkills);
+                    console.log(`🔍 DEBUG: studentSkills (${Object.keys(studentSkills).length}):`, studentSkills);
+                    console.log(`🔍 DEBUG: profamily data:`, { profamilyId: studentProfamilyId, offerProfamilyIds: offerProfamilyIds });
+                    
+                    aptitude = affinityCalculator.calculateAffinity(offerSkills, studentSkills, {
+                        profamilyId: studentProfamilyId,
+                        offerProfamilyIds: offerProfamilyIds,
+                        academicVerificationStatus: academicVerificationStatus
+                    });
+                    
+                    console.log(`✅ DEBUG: Resultado afinidad para "${offer.name}":`, aptitude);
                 } else {
+                    console.log(`❌ DEBUG: NO se puede calcular afinidad para "${offer.name}":`);
+                    console.log(`   - offerSkills: ${Object.keys(offerSkills).length} skills`);
+                    console.log(`   - studentSkills: ${Object.keys(studentSkills).length} skills`);
                     aptitude = {
                         level: 'sin datos',
                         score: 0,
@@ -846,7 +1101,6 @@ async function getOffersWithAptitude(req, res) {
                             ? 'Esta oferta no tiene skills específicos definidos'
                             : 'Necesitas agregar skills a tu perfil para ver tu compatibilidad'
                     };
-                    console.log(`⚠️ Aptitud por defecto para ${offer.name}:`, aptitude);
                 }
 
                 // Formatear para el frontend

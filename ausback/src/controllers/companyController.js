@@ -27,7 +27,7 @@ async function getCompanys(req, res) {
 }
 async function getCompany(req, res) {
     const { userId } = req.user;
-    const { id } = req.params.id;
+    const { id } = req.params;
     console.log(userId)
     try {
         const company = await Company.findOne({

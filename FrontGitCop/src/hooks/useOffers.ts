@@ -24,6 +24,16 @@ interface Offer {
   };
   offerSkills: {[key: string]: number};
   skills?: { id: number; name: string }[];
+  profamily?: {
+    id: number;
+    name: string;
+    description?: string;
+  };
+  profamilys?: {
+    id: number;
+    name: string;
+    description?: string;
+  }[];
 }
 
 export const useOffers = () => {

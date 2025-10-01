@@ -599,8 +599,6 @@ function CompanyApplicationsContent() {
                       <h3 className="font-semibold mb-3">Información del Candidato</h3>
                       <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                         <p><span className="font-medium">Nombre:</span> {selectedApplication.Student.User.name} {selectedApplication.Student.User.surname}</p>
-                        <p><span className="font-medium">Email:</span> {selectedApplication.Student.User.email}</p>
-                        <p><span className="font-medium">Teléfono:</span> {selectedApplication.Student.User.phone}</p>
                         <p><span className="font-medium">Grado:</span> {selectedApplication.Student.grade}</p>
                         <p><span className="font-medium">Curso:</span> {selectedApplication.Student.course}</p>
                         {selectedApplication.Student.Profamily && (

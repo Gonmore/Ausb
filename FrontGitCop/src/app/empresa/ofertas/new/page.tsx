@@ -24,7 +24,6 @@ import {
   Calendar, 
   Briefcase, 
   Star,
-  Plus,
   X,
   Save,
   ArrowLeft,
@@ -32,7 +31,7 @@ import {
   DollarSign
 } from 'lucide-react';
 
-export default function EmpresaOfertasNewPage() {
+export default function EmpresaOfertasNewPage({ editId: propEditId }: { editId?: string } = {}) {
 	const router = useRouter();
 	const { user } = useAuthStore();
 		const [submitting, setSubmitting] = useState(false);
@@ -40,7 +39,8 @@ export default function EmpresaOfertasNewPage() {
 		const [newOffer, setNewOffer] = useState<CreateOfferData>({
 			name: '',
 			description: '',
-			profamilyId: 0,
+			profamilyId: 0, // Legacy field for backward compatibility
+			profamilyIds: [], // New field for multiple profamilies
 			mode: 'presencial',
 			location: '',
 			type: 'full-time',
@@ -73,8 +73,8 @@ export default function EmpresaOfertasNewPage() {
 						.then(data => {
 							if (data.success) setSkills(data.data);
 						});
-					if (user?.role === 'company' && user?.id) {
-						companyService.getById(user.id).then(res => {
+					if (user?.role === 'company' && user?.companyId) {
+						companyService.getById(user.companyId).then(res => {
 							setCompanyCity(res.data.city || '');
 							setNewOffer(prev => ({ ...prev, location: res.data.city || '' }));
 						});
@@ -86,23 +86,36 @@ export default function EmpresaOfertasNewPage() {
 								});
 						}
 					}
-					// Detectar modo edición por URL (compatible con SSR y client)
-					let id: number | null = null;
-					if (typeof window !== 'undefined') {
+
+					// Usar prop editId si está disponible, sino detectar por URL
+					let id: number | null = propEditId ? Number(propEditId) : null;
+					if (!id && typeof window !== 'undefined') {
 						const path = window.location.pathname;
 						const match = path.match(/\/empresa\/ofertas\/edit\/(\d+)/);
 						if (match) id = Number(match[1]);
 					}
+
 					if (id) {
 						setEditId(id);
+						console.log('🔄 Cargando datos de oferta para edición, ID:', id);
 						fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/offers/${id}`)
 							.then(r => r.json())
 							.then(data => {
+								console.log('📋 Datos recibidos del backend:', data);
 								if (data && data.id) {
+									console.log('✅ Configurando formulario con datos:', {
+										name: data.name,
+										profamilyId: data.profamilyId,
+										profamilyIds: data.profamilyIds,
+										profamily: data.profamily,
+										profamilys: data.profamilys,
+										skills: data.skills
+									});
 									setNewOffer({
 										name: data.name || '',
 										description: data.description || '',
-										profamilyId: data.profamilyId ? Number(data.profamilyId) : 0,
+										profamilyId: data.profamilyId ? Number(data.profamilyId) : (data.profamilys && data.profamilys.length > 0 ? data.profamilys[0].id : 0), // Legacy field
+										profamilyIds: data.profamilyIds || (data.profamilys ? data.profamilys.map((p: any) => p.id) : (data.profamilyId ? [data.profamilyId] : [])), // New field
 										mode: data.mode || 'presencial',
 										location: data.location || '',
 										type: data.type || 'full-time',
@@ -115,10 +128,16 @@ export default function EmpresaOfertasNewPage() {
 										requisites: data.requisites || '',
 										skills: data.skills ? data.skills.map((s: any) => s.id) : [],
 									});
+									console.log('✅ Formulario configurado correctamente');
+								} else {
+									console.error('❌ Datos inválidos recibidos:', data);
 								}
+							})
+							.catch(error => {
+								console.error('❌ Error cargando datos de oferta:', error);
 							});
 					}
-				}, [user]);
+				}, [user, propEditId]);
 
 			const handleSkillChange = (id: number) => {
 				setNewOffer(prev => {
@@ -132,10 +151,36 @@ export default function EmpresaOfertasNewPage() {
 				});
 			};
 
+			const handleProfamilyChange = (selected: any) => {
+				const profamilyIds = selected ? (Array.isArray(selected) ? selected.map((s: any) => s.value) : []) : [];
+				setNewOffer(prev => ({
+					...prev,
+					profamilyIds,
+					profamilyId: profamilyIds.length > 0 ? profamilyIds[0] : 0, // Set legacy field to first profamily for backward compatibility
+				}));
+			};
+
 				const handleSubmit = async (e: React.FormEvent) => {
 					e.preventDefault();
 					setSubmitting(true);
 					setError(null);
+
+					// Validation
+					const profamilyCount = newOffer.profamilyIds?.length || 0;
+					const skillCount = newOffer.skills?.length || 0;
+
+					if (profamilyCount < 1 || profamilyCount > 4) {
+						setError(`Debes seleccionar entre 1 y 4 familias profesionales. Actualmente tienes ${profamilyCount} seleccionadas.`);
+						setSubmitting(false);
+						return;
+					}
+
+					if (skillCount < 3 || skillCount > 6) {
+						setError(`Debes seleccionar entre 3 y 6 skills. Actualmente tienes ${skillCount} seleccionados.`);
+						setSubmitting(false);
+						return;
+					}
+
 					try {
 						if (editId) {
 							// Usar apiClient para PUT y manejo automático del token
@@ -223,20 +268,65 @@ export default function EmpresaOfertasNewPage() {
 									/>
 								</div>
 
-								<div>
+								<div className="md:col-span-2">
 									<Label htmlFor="profamily" className="text-sm font-semibold text-gray-700 mb-2 block">
-										Familia Profesional *
+										Familias Profesionales * <span className="text-xs text-gray-500">(1-4 requeridas)</span>
 									</Label>
-									<Select value={String(newOffer.profamilyId)} onValueChange={v => handleChange('profamilyId', Number(v))}>
-										<SelectTrigger id="profamily">
-											<SelectValue placeholder="Selecciona una familia profesional" />
-										</SelectTrigger>
-										<SelectContent>
-											{profamilies.map((fam) => (
-												<SelectItem key={fam.id} value={String(fam.id)}>{fam.name}</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
+									{profamilies.length > 0 ? (
+										<SelectRS
+											isMulti
+											options={profamilies.map(profamily => ({ value: profamily.id, label: profamily.name }))}
+											value={(newOffer.profamilyIds || []).map(id => {
+												const profamily = profamilies.find(p => p.id === id);
+												return profamily ? { value: profamily.id, label: profamily.name } : null;
+											}).filter(Boolean)}
+											onChange={handleProfamilyChange}
+											placeholder="Selecciona familias profesionales..."
+											className="react-select-container"
+											classNamePrefix="react-select"
+											styles={{
+												control: (base) => ({
+													...base,
+													border: '2px solid #e2e8f0',
+													borderRadius: '8px',
+													padding: '4px',
+													boxShadow: 'none',
+													'&:hover': {
+														border: '2px solid #cbd5e1'
+													},
+													'&:focus-within': {
+														border: '2px solid #3b82f6',
+														boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)'
+													}
+												}),
+												multiValue: (base) => ({
+													...base,
+													backgroundColor: '#dbeafe',
+													borderRadius: '6px'
+												}),
+												multiValueLabel: (base) => ({
+													...base,
+													color: '#1e40af',
+													fontWeight: '500'
+												}),
+												multiValueRemove: (base) => ({
+													...base,
+													color: '#1e40af',
+													'&:hover': {
+														backgroundColor: '#bfdbfe',
+														color: '#1e3a8a'
+													}
+												})
+											}}
+										/>
+									) : (
+										<div className="text-gray-400 p-4 text-center border-2 border-dashed border-gray-200 rounded-lg">
+											Cargando familias profesionales...
+										</div>
+									)}
+									<p className="text-xs text-gray-500 mt-1">
+										Selecciona entre 1 y 4 familias profesionales relacionadas con la oferta
+									</p>
 								</div>
 							</div>
 						</CardContent>
@@ -253,7 +343,7 @@ export default function EmpresaOfertasNewPage() {
 						<CardContent className="p-6 space-y-4">
 							<div>
 								<Label className="text-sm font-semibold text-gray-700 mb-2 block">
-									Selecciona Skills
+									Selecciona Skills <span className="text-red-500">*</span> <span className="text-xs text-gray-500">(3-6 requeridos)</span>
 								</Label>
 								{skills.length > 0 ? (
 									<SelectRS
@@ -493,57 +583,6 @@ export default function EmpresaOfertasNewPage() {
 									<Label htmlFor="car" className="text-sm font-medium text-gray-700">
 										Requiere vehículo propio
 									</Label>
-								</div>
-							</div>
-						</CardContent>
-					</Card>
-
-					{/* Información Adicional */}
-					<Card className="shadow-lg border-0">
-						<CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white">
-							<CardTitle className="flex items-center gap-2">
-								<Plus className="w-5 h-5" />
-								Información Adicional
-							</CardTitle>
-						</CardHeader>
-						<CardContent className="p-6 space-y-6">
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-								<div>
-									<Label htmlFor="tag" className="text-sm font-semibold text-gray-700 mb-2 block">
-										Etiqueta Principal
-									</Label>
-									<Input 
-										id="tag"
-										placeholder="ej. frontend, backend, diseño" 
-										value={newOffer.tag} 
-										onChange={e => handleChange('tag', e.target.value)} 
-									/>
-								</div>
-
-								<div>
-									<Label htmlFor="jobs" className="text-sm font-semibold text-gray-700 mb-2 block">
-										Puesto Específico
-									</Label>
-									<Input 
-										id="jobs"
-										placeholder="ej. Junior Frontend Developer" 
-										value={newOffer.jobs} 
-										onChange={e => handleChange('jobs', e.target.value)} 
-									/>
-								</div>
-
-								<div className="md:col-span-2">
-									<Label htmlFor="requisites" className="text-sm font-semibold text-gray-700 mb-2 block">
-										Requisitos Específicos
-									</Label>
-									<Textarea 
-										id="requisites"
-										placeholder="Menciona requisitos específicos, experiencia requerida, certificaciones, etc."
-										value={newOffer.requisites} 
-										onChange={e => handleChange('requisites', e.target.value)} 
-										rows={3}
-										className="resize-none"
-									/>
 								</div>
 							</div>
 						</CardContent>

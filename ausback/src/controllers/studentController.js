@@ -3,7 +3,7 @@ import sequelize from '../database/database.js';
 import logger from '../logs/logger.js'
 import { TokenService } from '../services/tokenService.js';
 import * as companyService from '../services/companyService.js'; // 🔥 AGREGAR ESTA LÍNEA
-import { Student, User, Profamily, UserCompany, Company, RevealedCV, Application, Offer, Skill, StudentSkill, Scenter } from '../models/relations.js';
+import { Student, User, Profamily, UserCompany, Company, RevealedCV, Application, Offer, Skill, StudentSkill, Scenter, Cv } from '../models/relations.js';
 import { AffinityCalculator } from '../services/affinityCalculator.js';
 import { Op } from 'sequelize';
 
@@ -284,7 +284,7 @@ export const searchIntelligentStudents = async (req, res) => {
           console.log('🔍 Skills de la oferta profesionales:', offer.skills.map(s => s.name));
 
           offer.skills.forEach(skill => {
-            companySkillsObject[skill.name.toLowerCase()] = 3; // nivel requerido
+            companySkillsObject[skill.name.toLowerCase()] = 2; // nivel requerido (intermediate)
           });
         }
 
@@ -306,7 +306,7 @@ export const searchIntelligentStudents = async (req, res) => {
       
       skills.forEach(skill => {
         const normalizedSkill = skill.toLowerCase().trim();
-        companySkillsObject[normalizedSkill] = 3; // nivel requerido
+        companySkillsObject[normalizedSkill] = 2; // nivel requerido (intermediate)
       });
 
       offerInfo = {
@@ -725,23 +725,33 @@ export const viewStudentCV = async (req, res) => {
 
     // 🔥 MARCAR AUTOMÁTICAMENTE TODAS LAS APLICACIONES COMO "CV REVISADO"
     try {
-      const updatedApplications = await Application.update(
-        {
-          reviewedAt: new Date(),
-          status: 'reviewed' // Cambiar de 'pending' a 'reviewed'
+      // First find applications that need to be updated
+      const applicationsToUpdate = await Application.findAll({
+        where: {
+          studentId: parseInt(studentId),
+          status: 'pending',
+          reviewedAt: null
         },
-        {
-          where: {
-            studentId: parseInt(studentId),
-            companyId: company.id,
-            status: 'pending', // Solo cambiar las que están pendientes
-            reviewedAt: null    // Solo las que no han sido revisadas
-          }
-        }
-      );
+        include: [{
+          model: Offer,
+          as: 'offer',
+          where: { companyId: company.id },
+          required: true,
+          attributes: [] // We don't need offer data, just the join
+        }]
+      });
 
-      if (updatedApplications[0] > 0) {
-        console.log(`✅ Marcadas ${updatedApplications[0]} aplicaciones como "CV revisado" para estudiante ${studentId}`);
+      if (applicationsToUpdate.length > 0) {
+        // Update each application
+        const updatePromises = applicationsToUpdate.map(app =>
+          app.update({
+            reviewedAt: new Date(),
+            status: 'reviewed'
+          })
+        );
+
+        await Promise.all(updatePromises);
+        console.log(`✅ Marcadas ${applicationsToUpdate.length} aplicaciones como "CV revisado" para estudiante ${studentId}`);
       }
     } catch (updateError) {
       console.error('⚠️ Error actualizando aplicaciones a "revisado":', updateError);
@@ -749,6 +759,7 @@ export const viewStudentCV = async (req, res) => {
     }
 
     // 🔥 OBTENER DATOS COMPLETOS DEL ESTUDIANTE
+    console.log(`🔍 Buscando estudiante con ID: ${studentId}`);
     const student = await Student.findByPk(studentId, {
       include: [
         {
@@ -761,12 +772,116 @@ export const viewStudentCV = async (req, res) => {
           as: 'profamily',
           attributes: ['id', 'name', 'description'],
           required: false
+        },
+        {
+          model: Cv,
+          as: 'cv',
+          attributes: ['id', 'academicBackground', 'summary'],
+          required: false,
+          include: [
+            {
+              model: Skill,
+              as: 'skills',
+              through: {
+                attributes: ['proficiencyLevel', 'yearsOfExperience', 'isHighlighted', 'notes', 'addedAt']
+              },
+              required: false
+            }
+          ]
         }
       ]
     });
 
+    console.log(`🔍 Resultado búsqueda estudiante:`, student ? 'ENCONTRADO' : 'NO ENCONTRADO');
+    
     if (!student) {
+      console.log(`❌ Estudiante ${studentId} no encontrado`);
       return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+    }
+
+    console.log(`👤 Datos del estudiante:`, {
+      id: student.id,
+      grade: student.grade,
+      course: student.course,
+      car: student.car,
+      tag: student.tag,
+      description: student.description,
+      hasUser: !!student.user,
+      hasProfamily: !!student.profamily,
+      hasCv: !!student.cv,
+      cvId: student.cv?.id
+    });
+
+    // 🔥 OBTENER INFORMACIÓN ACADÉMICA DEL CV
+    let academicInfo = null;
+    if (student.cv?.academicBackground) {
+      const academicBg = student.cv.academicBackground;
+      console.log(`📚 Academic Background encontrado:`, academicBg);
+      
+      // Buscar información del scenter y profamily
+      let scenterInfo = null;
+      let profamilyInfo = null;
+      
+      if (academicBg.scenter) {
+        try {
+          scenterInfo = await Scenter.findByPk(academicBg.scenter, {
+            attributes: ['id', 'name', 'code', 'city']
+          });
+          console.log(`🏫 Scenter encontrado:`, scenterInfo?.name);
+        } catch (error) {
+          console.error(`❌ Error obteniendo scenter ${academicBg.scenter}:`, error);
+        }
+      }
+      
+      if (academicBg.profamily) {
+        try {
+          profamilyInfo = await Profamily.findByPk(academicBg.profamily, {
+            attributes: ['id', 'name', 'description']
+          });
+          console.log(`🎓 Profamily encontrado:`, profamilyInfo?.name);
+        } catch (error) {
+          console.error(`❌ Error obteniendo profamily ${academicBg.profamily}:`, error);
+        }
+      }
+      
+      academicInfo = {
+        scenter: scenterInfo ? {
+          id: scenterInfo.id,
+          name: scenterInfo.name,
+          code: scenterInfo.code,
+          city: scenterInfo.city
+        } : null,
+        profamily: profamilyInfo ? {
+          id: profamilyInfo.id,
+          name: profamilyInfo.name,
+          description: profamilyInfo.description
+        } : null,
+        status: academicBg.status || null
+      };
+    } else {
+      console.log(`⚠️ No se encontró academicBackground en el CV`);
+    }
+
+    // 🔥 OBTENER SKILLS REALES DEL CV
+    const cvSkills = [];
+    if (student.cv?.skills && student.cv.skills.length > 0) {
+      console.log(`🎯 Skills del CV encontradas: ${student.cv.skills.length}`);
+      
+      student.cv.skills.forEach(skill => {
+        cvSkills.push({
+          id: skill.id,
+          name: skill.name,
+          category: skill.category,
+          proficiencyLevel: skill.cv_skills.proficiencyLevel,
+          yearsOfExperience: skill.cv_skills.yearsOfExperience,
+          isHighlighted: skill.cv_skills.isHighlighted,
+          notes: skill.cv_skills.notes,
+          addedAt: skill.cv_skills.addedAt
+        });
+        console.log(`   - ${skill.name} (${skill.cv_skills.proficiencyLevel})`);
+      });
+    } else {
+      console.log(`⚠️ No se encontraron skills en el CV`);
     }
 
     // 🔥 PREPARAR RESPUESTA COMPLETA
@@ -779,14 +894,19 @@ export const viewStudentCV = async (req, res) => {
         tag: student.tag,
         description: student.description,
         User: student.user,
-        profamily: student.profamily
+        profamily: student.profamily,
+        skills: cvSkills, // 🔥 USAR SKILLS DEL CV
+        academicInfo: academicInfo // 🔥 AGREGAR INFORMACIÓN ACADÉMICA
       },
       cv: {
-        education: `${student.grade} - ${student.course}`,
-        skills: student.tag ? student.tag.split(',').map(s => s.trim()) : [],
+        education: academicInfo ? 
+          `${academicInfo.profamily?.name || 'Carrera no especificada'} - ${academicInfo.scenter?.name || 'Centro no especificado'} (${academicInfo.status || 'Estado no especificado'})` :
+          'Información académica no disponible',
+        skills: cvSkills.map(skill => `${skill.name} (${skill.proficiencyLevel})`),
         hasVehicle: student.car,
         availability: student.disp,
-        description: student.description || 'Sin descripción adicional'
+        description: student.cv?.summary || student.description || 'Sin descripción adicional',
+        academicBackground: academicInfo
       },
       access: {
         type: accessType,
@@ -806,6 +926,13 @@ export const viewStudentCV = async (req, res) => {
     };
 
     console.log(`✅ CV enviado exitosamente. Tipo: ${accessType}, Tokens: ${tokensUsed}`);
+    console.log(`📊 Respuesta final:`, {
+      studentGrade: responseData.student.grade,
+      studentCourse: responseData.student.course,
+      academicInfo: responseData.student.academicInfo,
+      skillsCount: responseData.student.skills.length
+    });
+    
     res.json(responseData);
 
   } catch (error) {

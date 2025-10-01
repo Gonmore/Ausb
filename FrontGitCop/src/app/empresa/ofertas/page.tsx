@@ -26,7 +26,8 @@ import {
   XCircle,
   Loader2,
   Edit,
-  Trash2
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { AuthGuard } from '@/components/auth-guard';
@@ -251,6 +252,16 @@ interface Offer {
   };
   offerSkills: {[key: string]: number};
   skills?: { id: number; name: string }[];
+  profamily?: {
+    id: number;
+    name: string;
+    description?: string;
+  };
+  profamilys?: {
+    id: number;
+    name: string;
+    description?: string;
+  }[];
 }
 
 function CompanyOffersContent() {
@@ -316,6 +327,61 @@ function CompanyOffersContent() {
     scheduleInterview: { isOpen: false }
   });
 
+  // 🎯 UX MEJORADA: Funciones para resaltar coincidencias con la oferta
+  const getMatchingSkills = useCallback((studentSkills: any[], offerSkills: any) => {
+    if (!studentSkills || !offerSkills) return [];
+    
+    const offerSkillNames = Object.keys(offerSkills).map(name => name.toLowerCase().trim());
+    return studentSkills.filter(skill => 
+      offerSkillNames.includes(skill.name.toLowerCase().trim())
+    );
+  }, []);
+
+  const isMatchingProFamily = useCallback((studentProFamily: any, offerProfamilies: any) => {
+    if (!studentProFamily || !offerProfamilies) return false;
+    
+    // Handle both single profamily and array of profamilies
+    const profamilyArray = Array.isArray(offerProfamilies) ? offerProfamilies : [offerProfamilies];
+    
+    return profamilyArray.some((profamily: any) => 
+      studentProFamily.id === profamily.id || 
+      studentProFamily.name?.toLowerCase().trim() === profamily.name?.toLowerCase().trim()
+    );
+  }, []);
+
+  const isSimilarProFamily = useCallback((studentProFamily: any, offerProfamilies: any) => {
+    if (!studentProFamily || !offerProfamilies) return false;
+    
+    // Handle both single profamily and array of profamilies
+    const profamilyArray = Array.isArray(offerProfamilies) ? offerProfamilies : [offerProfamilies];
+    
+    // If already matching any profamily, not similar
+    if (isMatchingProFamily(studentProFamily, offerProfamilies)) return false;
+    
+    // Check if similar to any profamily in the offer
+    return profamilyArray.some((profamily: any) => {
+      const studentDesc = studentProFamily.description?.toLowerCase() || '';
+      const offerDesc = profamily.description?.toLowerCase() || '';
+      
+      // Palabras clave comunes que indican similitud
+      const techKeywords = ['informática', 'tecnología', 'desarrollo', 'programación', 'software', 'it', 'computación'];
+      const hasTechMatch = techKeywords.some(keyword => 
+        studentDesc.includes(keyword) && offerDesc.includes(keyword)
+      );
+      
+      return hasTechMatch;
+    });
+  }, [isMatchingProFamily]);
+
+  const getAffinityIcon = useCallback((level: string) => {
+    switch (level) {
+      case 'muy alto': return <Star className="w-4 h-4 text-green-600" />;
+      case 'alto': return <Target className="w-4 h-4 text-blue-600" />;
+      case 'medio': return <Brain className="w-4 h-4 text-yellow-600" />;
+      default: return <Brain className="w-4 h-4 text-gray-600" />;
+    }
+  }, []);
+
   // � OPTIMIZACIÓN: Memoizar funciones que no cambian
   const getAffinityColor = useCallback((level: string) => {
     switch (level) {
@@ -324,15 +390,6 @@ function CompanyOffersContent() {
       case 'medio': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
       case 'bajo': return 'bg-orange-100 text-orange-800 border-orange-300';
       default: return 'bg-gray-100 text-gray-800 border-gray-300';
-    }
-  }, []);
-
-  const getAffinityIcon = useCallback((level: string) => {
-    switch (level) {
-      case 'muy alto': return <Star className="w-4 h-4 text-green-600" />;
-      case 'alto': return <Target className="w-4 h-4 text-blue-600" />;
-      case 'medio': return <Brain className="w-4 h-4 text-yellow-600" />;
-      default: return <Brain className="w-4 h-4 text-gray-600" />;
     }
   }, []);
 
@@ -404,11 +461,19 @@ function CompanyOffersContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Error al obtener el CV');
+        const errorData = await response.json();
+        console.error('❌ Error en respuesta del servidor:', errorData);
+        throw new Error(errorData.mensaje || 'Error al obtener el CV');
       }
 
       const cvData = await response.json();
       console.log('✅ CV obtenido gratuitamente:', cvData);
+      console.log('📊 Estructura de cvData:', {
+        hasStudent: !!cvData.student,
+        studentGrade: cvData.student?.grade,
+        studentCourse: cvData.student?.course,
+        studentSkills: cvData.student?.skills?.length || 0
+      });
       
       // Mostrar modal elegante en lugar de alert
       setSelectedStudentForAction(student);
@@ -418,14 +483,13 @@ function CompanyOffersContent() {
       
     } catch (error) {
       console.error('❌ Error obteniendo CV:', error);
-      alert('Error al obtener el CV del estudiante');
+      alert(`Error al obtener el CV del estudiante: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     }
   }, [token]);
 
   // 🔥 CONTACTAR GRATUITO para candidatos que aplicaron
   const handleContactFree = useCallback((student: any, offerName: string) => {
     // Mostrar modal elegante en lugar de alert
-    setSelectedStudentForAction(student);
     setActionType('free');
     setContactForm({
       subject: `Interés en tu aplicación - ${offerName}`,
@@ -540,20 +604,20 @@ function CompanyOffersContent() {
     setActionType('paid');
     setContactForm({
       subject: `Interés en tu perfil - ${selectedOffer?.name}`,
-      message: `Estimado/a ${student?.User?.name},\n\nHemos encontrado tu perfil y nos interesa conocerte para la oferta "${selectedOffer?.name}".\n\n¿Te gustaría conocer más sobre esta oportunidad?\n\nSaludos cordiales.`
+      message: `Estimado/a ${cvData?.student?.User?.name},\n\nHemos encontrado tu perfil y nos interesa conocerte para la oferta "${selectedOffer?.name}".\n\n¿Te gustaría conocer más sobre esta oportunidad?\n\nSaludos cordiales.`
     });
     setShowContactModal(true);
   };
 
   // 🎯 UX MEJORADA: Contactar estudiante con feedback visual
   const handleSendContact = async () => {
-    if (!selectedStudentForAction) return;
+    if (!cvData?.student) return;
 
     // Activar loading state específico
     setLoadingStates(prev => ({ ...prev, contacting: true }));
 
     try {
-      const response = await fetch(`http://localhost:5000/api/students/${selectedStudentForAction.id}/contact`, {
+      const response = await fetch(`http://localhost:5000/api/students/${cvData.student.id}/contact`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -581,14 +645,14 @@ function CompanyOffersContent() {
       // Abrir cliente de email
       const emailBody = encodeURIComponent(contactForm.message);
       const emailSubject = encodeURIComponent(contactForm.subject);
-      const emailUrl = `mailto:${selectedStudentForAction.User.email}?subject=${emailSubject}&body=${emailBody}`;
+      const emailUrl = `mailto:${cvData.student.User.email}?subject=${emailSubject}&body=${emailBody}`;
       
       window.open(emailUrl);
       
       // Cerrar modal y mostrar éxito
       setShowContactModal(false);
       setContactForm({ subject: '', message: '' });
-      success(`Contacto enviado a ${selectedStudentForAction.User?.name}`);
+      success(`Contacto enviado a ${cvData.student.User?.name}`);
       
     } catch (error) {
       console.error('❌ Error contactando estudiante:', error);
@@ -866,7 +930,10 @@ function CompanyOffersContent() {
                               {candidate.student?.User?.name || 'Nombre no disponible'} {candidate.student?.User?.surname || ''}
                             </h4>
                             <p className="text-sm text-gray-600">
-                              {candidate.student?.User?.email || 'Email no disponible'}
+                              •••••••••••@•••••••••••
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              •••••••••••
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1016,7 +1083,10 @@ function CompanyOffersContent() {
                               {student.User?.name || 'Nombre no disponible'} {student.User?.surname || ''}
                             </h4>
                             <p className="text-sm text-gray-600">
-                              {student.User?.email || 'Email no disponible'}
+                              •••••••••••@•••••••••••
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              •••••••••••
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1088,7 +1158,7 @@ function CompanyOffersContent() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="w-5 h-5" />
-              CV de {selectedStudentForAction?.User?.name} {selectedStudentForAction?.User?.surname}
+              CV de {cvData?.student?.User?.name} {cvData?.student?.User?.surname}
               <Badge className={actionType === 'free' ? 'bg-green-100 text-green-800 ml-2' : 'bg-purple-100 text-purple-800 ml-2'}>
                 {actionType === 'free' ? 'Acceso Gratuito' : 'Con Tokens'}
               </Badge>
@@ -1103,19 +1173,19 @@ function CompanyOffersContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Nombre completo</p>
-                    <p className="font-medium">{selectedStudentForAction.User.name} {selectedStudentForAction.User.surname}</p>
+                    <p className="font-medium">{cvData?.student?.User?.name || 'No disponible'} {cvData?.student?.User?.surname || ''}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Email</p>
-                    <p className="font-medium">{selectedStudentForAction.User.email}</p>
+                    <p className="font-medium">{cvData?.student?.User?.email || 'No disponible'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Teléfono</p>
-                    <p className="font-medium">{selectedStudentForAction.User.phone || 'No especificado'}</p>
+                    <p className="font-medium">{cvData?.student?.User?.phone || 'No especificado'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Vehículo propio</p>
-                    <p className="font-medium">{selectedStudentForAction.car ? 'Sí' : 'No'}</p>
+                    <p className="font-medium">{cvData?.student?.car ? 'Sí' : 'No'}</p>
                   </div>
                 </div>
               </div>
@@ -1123,27 +1193,130 @@ function CompanyOffersContent() {
               {/* Formación académica */}
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-lg mb-3">Formación Académica</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Grado</p>
-                    <p className="font-medium">{selectedStudentForAction.grade}</p>
+                {cvData.student.academicInfo ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Centro de Estudios</p>
+                      <p className="font-medium">{cvData.student.academicInfo.scenter?.name || 'No especificado'}</p>
+                      {cvData.student.academicInfo.scenter?.code && (
+                        <p className="text-xs text-gray-500">Código: {cvData.student.academicInfo.scenter.code}</p>
+                      )}
+                      {cvData.student.academicInfo.scenter?.city && (
+                        <p className="text-xs text-gray-500">Ciudad: {cvData.student.academicInfo.scenter.city}</p>
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm text-gray-600">Familia Profesional</p>
+                        {selectedOffer && (
+                          <>
+                            {isMatchingProFamily(cvData.student.academicInfo.profamily, selectedOffer.profamilys || selectedOffer.profamily) && (
+                              <Badge className="bg-green-100 text-green-800 text-xs">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Coincide con oferta
+                              </Badge>
+                            )}
+                            {isSimilarProFamily(cvData.student.academicInfo.profamily, selectedOffer.profamilys || selectedOffer.profamily) && (
+                              <Badge className="bg-yellow-100 text-yellow-800 text-xs">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                Similar a oferta
+                              </Badge>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <p className="font-medium">
+                        {selectedOffer && selectedOffer.profamilys && selectedOffer.profamilys.length > 0 
+                          ? selectedOffer.profamilys.map((p: any) => p.name).join(', ')
+                          : selectedOffer?.profamily?.name || 'No especificado'
+                        }
+                      </p>
+                      {selectedOffer && (
+                        (selectedOffer.profamilys && selectedOffer.profamilys.length > 0 
+                          ? selectedOffer.profamilys[0] 
+                          : selectedOffer.profamily
+                        )?.description && (
+                          <p className="text-xs text-gray-500">
+                            {(selectedOffer.profamilys && selectedOffer.profamilys.length > 0 
+                              ? selectedOffer.profamilys[0] 
+                              : selectedOffer.profamily
+                            )?.description}
+                          </p>
+                        )
+                      )}
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="text-sm text-gray-600">Estado Académico</p>
+                      <p className="font-medium">{cvData.student.academicInfo.status || 'No especificado'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Curso</p>
-                    <p className="font-medium">{selectedStudentForAction.course}</p>
-                  </div>
-                </div>
+                ) : (
+                  <p className="text-gray-600">Información académica no disponible</p>
+                )}
               </div>
 
               {/* Habilidades */}
-              {selectedStudentForAction.tag && (
+              {cvData?.student?.skills && cvData.student.skills.length > 0 ? (
                 <div className="bg-green-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-lg mb-3">Habilidades y Tecnologías</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedStudentForAction.tag.split(',').map((tag: string, index: number) => (
-                      <Badge key={index} variant="secondary">{tag.trim()}</Badge>
-                    ))}
+                  <div className="flex items-center gap-2 mb-3">
+                    <h3 className="font-semibold text-lg">Habilidades y Tecnologías</h3>
+                    {selectedOffer && (
+                      <Badge className="bg-green-100 text-green-800 text-xs">
+                        ⭐ Habilidades destacadas según oferta
+                      </Badge>
+                    )}
                   </div>
+                  <div className="grid gap-3">
+                    {cvData.student.skills.map((skill: any, index: number) => {
+                      const isMatching = selectedOffer ? getMatchingSkills([skill], selectedOffer.offerSkills).length > 0 : false;
+                      return (
+                        <div key={index} className={`p-3 rounded border ${isMatching ? 'bg-yellow-50 border-yellow-300' : 'bg-white border-gray-200'}`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`font-medium ${isMatching ? 'text-yellow-800' : ''}`}>{skill.name}</span>
+                                {isMatching && (
+                                  <Badge className="bg-green-100 text-green-800 text-xs">
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Coincide con oferta
+                                  </Badge>
+                                )}
+                                <Badge variant="outline" className={
+                                  skill.proficiencyLevel === 'alto' ? 'bg-green-50 text-green-700 border-green-300' :
+                                  skill.proficiencyLevel === 'medio' ? 'bg-yellow-50 text-yellow-700 border-yellow-300' :
+                                  'bg-red-50 text-red-700 border-red-300'
+                                }>
+                                  {skill.proficiencyLevel === 'alto' ? 'Avanzado' :
+                                   skill.proficiencyLevel === 'medio' ? 'Intermedio' : 'Básico'}
+                                </Badge>
+                                {skill.category && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {skill.category}
+                                  </Badge>
+                                )}
+                              </div>
+                              {skill.yearsOfExperience && skill.yearsOfExperience > 0 && (
+                                <p className="text-sm text-gray-600">
+                                  {skill.yearsOfExperience} año{skill.yearsOfExperience !== 1 ? 's' : ''} de experiencia
+                                </p>
+                              )}
+                              {skill.notes && (
+                                <p className="text-sm text-gray-700 mt-1 italic">"{skill.notes}"</p>
+                              )}
+                            </div>
+                            {isMatching && (
+                              <Star className="w-5 h-5 text-yellow-500 fill-current" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-lg mb-3">Habilidades y Tecnologías</h3>
+                  <p className="text-gray-600">No hay habilidades registradas</p>
                 </div>
               )}
 
@@ -1168,9 +1341,9 @@ function CompanyOffersContent() {
                   onClick={() => {
                     setShowCVModal(false);
                     if (actionType === 'free') {
-                      handleContactFree(selectedStudentForAction, selectedOffer?.name || 'la oferta');
+                      handleContactFree(cvData.student, selectedOffer?.name || 'la oferta');
                     } else {
-                      handleContactWithTokens(selectedStudentForAction.id);
+                      handleContactWithTokens(cvData.student.id);
                     }
                   }}
                   className="bg-blue-600 hover:bg-blue-700"
@@ -1196,7 +1369,7 @@ function CompanyOffersContent() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Mail className="w-5 h-5" />
-              Contactar a {selectedStudentForAction?.User?.name} {selectedStudentForAction?.User?.surname}
+              Contactar a {cvData?.student?.User?.name} {cvData?.student?.User?.surname}
               <Badge className="bg-green-100 text-green-800 ml-2">
                 {actionType === 'free' ? 'Gratuito' : 'Sin Costo Adicional'}
               </Badge>
@@ -1265,7 +1438,7 @@ function CompanyOffersContent() {
           <div className="space-y-4">
             <div className="bg-green-50 p-4 rounded-lg border border-green-200">
               <p className="text-sm text-green-800">
-                <strong>Candidato:</strong> {selectedStudentForAction?.student?.User?.name} {selectedStudentForAction?.student?.User?.surname}
+                <strong>Candidato:</strong> {cvData?.student?.User?.name} {cvData?.student?.User?.surname}
               </p>
               <p className="text-sm text-green-800">
                 <strong>Oferta:</strong> {selectedOffer?.name}

@@ -531,7 +531,7 @@ function IntelligentSearchContent() {
                         </div>
                         <div className="flex-1">
                           <h3 className="text-lg font-semibold">{student.User.name} {student.User.surname}</h3>
-                          <p className="text-gray-600">{student.User.email}</p>
+                          <p className="text-gray-600">{student.grade} - {student.course}</p>
                         </div>
                         {/* Badges */}
                         <div className="flex items-center gap-2">
@@ -674,22 +674,24 @@ function IntelligentSearchContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Grado</p>
-                    <p className="font-medium">{selectedStudentForAction.grade}</p>
+                    <p className="font-medium">{cvData.student.grade}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Curso</p>
-                    <p className="font-medium">{selectedStudentForAction.course}</p>
+                    <p className="font-medium">{cvData.student.course}</p>
                   </div>
                 </div>
               </div>
 
               {/* Habilidades */}
-              {selectedStudentForAction.tag && (
+              {cvData.student.skills && cvData.student.skills.length > 0 && (
                 <div className="bg-green-50 p-4 rounded-lg">
                   <h3 className="font-semibold text-lg mb-3">Habilidades y Tecnologías</h3>
                   <div className="flex flex-wrap gap-2">
-                    {selectedStudentForAction.tag.split(',').map((tag: string, index: number) => (
-                      <Badge key={index} variant="secondary">{tag.trim()}</Badge>
+                    {cvData.student.skills.map((skill: any, index: number) => (
+                      <Badge key={index} variant="secondary">
+                        {skill.name} ({skill.proficiencyLevel})
+                      </Badge>
                     ))}
                   </div>
                 </div>
