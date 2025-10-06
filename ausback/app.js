@@ -18,6 +18,7 @@ import studentRouter from './src/routes/studentRoutes.js'
 import scenterRouter from './src/routes/scenterRoutes.js'
 import companyRouter from './src/routes/companyRoutes.js'
 import userCompanyRouter from './src/routes/userCompanyRoutes.js'
+import userScenterRouter from './src/routes/userScenterRoutes.js'
 import debugRouter from './src/routes/debugRoutes.js'
 import offerRouter from './src/routes/offerRoutes.js'
 import profamilyRouter from './src/routes/profamilyRoutes.js'
@@ -35,6 +36,7 @@ import studentSkillRoutes from './src/routes/studentSkillRoutes.js';
 import notificationRoutes from './src/routes/notifications.js';
 import validationRoutes from './src/routes/validationRoutes.js';
 import cvRoutes from './src/routes/cvRoutes.js';
+import scenterUserRoutes from './src/routes/scenterUserRoutes.js';
 import academicVerificationRoutes from './src/routes/academicVerificationRoutes.js';
 import http from 'http';
 import websocketController from './src/controllers/websocketController.js';
@@ -52,7 +54,6 @@ function getLocalIP() {
   }
   return 'localhost';
 }
-// Skills API
 
 
 const app = express();
@@ -135,6 +136,7 @@ app.use('/api/students', studentSkillRoutes); // 🔥 studentSkillRoutes PRIMERO
 app.use('/api/scenter', scenterRouter);
 app.use('/api/company', companyRouter);
 app.use('/api/user-company', userCompanyRouter);
+app.use('/api/user-scenter', userScenterRouter);
 app.use('/api/offers', offerRouter);
 app.use('/api/profamilies', profamilyRouter);
 app.use('/api/tutors', tutorRouter);
@@ -148,6 +150,7 @@ app.use('/api/skills', skillRoutes);
 app.use('/api/students', studentRouter);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/cv', cvRoutes);
+app.use('/api/scenter-user', scenterUserRoutes);
 app.use('/api/academic-verifications', academicVerificationRoutes);
 app.use('/api', validationRoutes);
 

@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { User, Student, UserCompany } from '../models/relations.js';
+import { User, Student, UserCompany, UserScenter, Scenter } from '../models/relations.js';
 import { Op } from 'sequelize';
 import logger from '../logs/logger.js';
 import { comparar } from '../common/bcrypt.js';
@@ -7,7 +7,7 @@ import { comparar } from '../common/bcrypt.js';
 class AuthController {
     async register(req, res) {
         try {
-            const { username, email, password, role, name, surname, phone, description, countryCode, cityId, address, studentData } = req.body;
+            const { username, email, password, role, name, surname, phone, description, countryCode, cityId, address, studentData, scenterId } = req.body;
 
             // Validaciones básicas
             if (!username || !email || !password || !role) {
@@ -33,6 +33,25 @@ class AuthController {
                     success: false,
                     message: 'Role inválido. Debe ser: student, company, scenter, tutor, o admin'
                 });
+            }
+
+            // Validar scenterId si el role es scenter
+            if (role === 'scenter' && !scenterId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Para usuarios de centro educativo, se requiere seleccionar un centro educativo (scenterId)'
+                });
+            }
+
+            // Verificar que el scenter existe si se proporciona
+            if (role === 'scenter' && scenterId) {
+                const scenter = await Scenter.findByPk(scenterId);
+                if (!scenter) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'El centro educativo seleccionado no existe'
+                    });
+                }
             }
 
             // Validar longitud de contraseña
@@ -222,6 +241,15 @@ class AuthController {
                 companyId = userCompany?.companyId || null;
             }
 
+            // Obtener scenterId si el usuario es de centro educativo
+            let scenterId = null;
+            if (user.role === 'scenter') {
+                const userScenter = await UserScenter.findOne({ 
+                    where: { userId: user.id, isActive: true }
+                });
+                scenterId = userScenter?.scenterId || null;
+            }
+
             // Generar token
             const token = jwt.sign({
                 userId: user.id,
@@ -246,7 +274,8 @@ class AuthController {
                     cityId: user.cityId,
                     address: user.address,
                     studentId: studentId,
-                    companyId: companyId
+                    companyId: companyId,
+                    scenterId: scenterId
                 }
             });
 

@@ -117,18 +117,33 @@ async function getScenterVerifications(req, res) {
     try {
         const { userId } = req.user;
 
-        // Verificar que el usuario pertenece a un centro de estudios
-        const user = await User.findByPk(userId);
-        if (!user || user.role !== 'scenter') {
+        // Verificar que el usuario pertenece a un centro de estudios y obtener su scenter
+        const user = await User.findByPk(userId, {
+            include: {
+                model: Scenter,
+                as: 'scenters',
+                through: { 
+                    attributes: [],
+                    where: { isActive: true }
+                },
+                required: false
+            }
+        });
+
+        if (!user || user.role !== 'scenter' || !user.scenters || user.scenters.length === 0) {
             return res.status(403).json({
                 success: false,
-                message: 'Acceso no autorizado'
+                message: 'Acceso no autorizado - Usuario no está asociado a ningún centro de estudios activo'
             });
         }
 
-        // Por ahora, obtener todas las verificaciones. En el futuro, filtrar por el scenter del usuario
-        // TODO: Agregar relación User-Scenter para filtrar correctamente
+        const userScenterIds = user.scenters.map(scenter => scenter.id);
+
+        // Obtener verificaciones solo para los scenters del usuario
         const verifications = await AcademicVerification.findAll({
+            where: {
+                scenterId: userScenterIds
+            },
             include: [
                 {
                     model: Student,
@@ -138,6 +153,11 @@ async function getScenterVerifications(req, res) {
                             model: User,
                             as: 'user',
                             attributes: ['id', 'name', 'surname', 'email']
+                        },
+                        {
+                            model: Cv,
+                            as: 'cv',
+                            attributes: ['academicBackground']
                         }
                     ]
                 },
@@ -145,11 +165,6 @@ async function getScenterVerifications(req, res) {
                     model: Scenter,
                     as: 'scenter',
                     attributes: ['id', 'name']
-                },
-                {
-                    model: Cv,
-                    as: 'cv',
-                    attributes: ['academicBackground']
                 }
             ],
             order: [['submittedAt', 'DESC']]
@@ -157,37 +172,42 @@ async function getScenterVerifications(req, res) {
 
         // Transformar los datos para el frontend
         const transformedVerifications = await Promise.all(verifications.map(async (verification) => {
-            let profamilyData = null;
-            if (verification.cv?.academicBackground?.profamily) {
-                try {
-                    const profamily = await Profamily.findByPk(verification.cv.academicBackground.profamily);
-                    profamilyData = profamily ? { id: profamily.id, name: profamily.name } : null;
-                } catch (error) {
-                    console.error('Error fetching profamily:', error);
+            try {
+                let profamilyData = null;
+                if (verification.student?.cv?.academicBackground?.profamily) {
+                    try {
+                        const profamily = await Profamily.findByPk(verification.student.cv.academicBackground.profamily);
+                        profamilyData = profamily ? { id: profamily.id, name: profamily.name } : null;
+                    } catch (error) {
+                        console.error('Error fetching profamily:', error);
+                    }
                 }
-            }
 
-            return {
-                id: verification.id,
-                studentId: verification.studentId,
-                scenterId: verification.scenterId,
-                status: verification.status,
-                comments: verification.comments,
-                submittedAt: verification.submittedAt,
-                reviewedAt: verification.verifiedAt,
-                reviewedBy: verification.verifiedBy,
-                student: {
-                    id: verification.student.user.id,
-                    name: `${verification.student.user.name} ${verification.student.user.surname || ''}`.trim(),
-                    email: verification.student.user.email
-                },
-                scenter: verification.scenter,
-                cv: {
-                    academicBackground: verification.cv?.academicBackground || {},
-                    profamily: profamilyData
-                }
-            };
-        }));
+                return {
+                    id: verification.id,
+                    studentId: verification.studentId,
+                    scenterId: verification.scenterId,
+                    status: verification.status,
+                    comments: verification.comments,
+                    submittedAt: verification.submittedAt,
+                    reviewedAt: verification.verifiedAt,
+                    reviewedBy: verification.verifiedBy,
+                    student: verification.student?.user ? {
+                        id: verification.student.user.id,
+                        name: `${verification.student.user.name} ${verification.student.user.surname || ''}`.trim(),
+                        email: verification.student.user.email
+                    } : null,
+                    scenter: verification.scenter,
+                    cv: {
+                        academicBackground: verification.student?.cv?.academicBackground || {},
+                        profamily: profamilyData
+                    }
+                };
+            } catch (error) {
+                console.error('Error transforming verification:', verification.id, error);
+                return null;
+            }
+        })).then(results => results.filter(r => r !== null));
 
         res.json({
             success: true,

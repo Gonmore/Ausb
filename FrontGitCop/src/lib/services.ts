@@ -38,12 +38,22 @@ export const authService = {
 export const offerService = {
   getAllOffers: async () => {
     try {
-      // Para estudiantes, usar el endpoint que calcula aptitud
-      const response = await apiClient.get<Offer[]>('/api/offers/with-aptitude');
+      // Para centros de estudios y usuarios generales, usar el endpoint público que lista todas las ofertas
+      const response = await apiClient.get<Offer[]>('/api/offers');
       return response.data;
     } catch (error: any) {
       console.error('❌ Error fetching offers from backend:', error);
       // No retornar datos mock, lanzar el error para que se maneje en el componente
+      throw error;
+    }
+  },
+  getOffersWithAptitude: async () => {
+    try {
+      // Para estudiantes, usar el endpoint que calcula aptitud
+      const response = await apiClient.get<Offer[]>('/api/offers/with-aptitude');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error fetching offers with aptitude from backend:', error);
       throw error;
     }
   },
@@ -125,6 +135,8 @@ export const scenterService = {
   getAll: () => apiClient.get<Scenter[]>('/api/scenter'),
   getUserScenters: () => apiClient.put<Scenter[]>('/api/scenter'), // GET user's centers
   getById: (id: number) => apiClient.get<Scenter>(`/api/scenter/${id}`),
+  getUserScenterInfo: () => apiClient.get('/api/scenter-user/info'), // GET current user's scenter info
+  getScenterStudents: () => apiClient.get('/api/scenter-user/students'), // GET students from user's scenter
   create: (data: CreateScenterData) => 
     apiClient.post<Scenter>('/api/scenter', data),
   update: (id: number, data: Partial<CreateScenterData>) => 

@@ -33,8 +33,9 @@ export default function RegisterPage() {
   const [newSector, setNewSector] = useState('');
   const [companyOptions, setCompanyOptions] = useState<any[]>([]);
   const [profamilyOptions, setProfamilyOptions] = useState<any[]>([]);
+  const [scenterOptions, setScenterOptions] = useState<any[]>([]);
 
-  // Cargar empresas y familias profesionales al montar el componente
+  // Cargar empresas, familias profesionales y centros educativos al montar el componente
   useEffect(() => {
     const fetchCompanies = async () => {
       try {
@@ -56,8 +57,19 @@ export default function RegisterPage() {
       }
     };
 
+    const fetchScenters = async () => {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/scenter/active`);
+        const data = await response.json();
+        setScenterOptions(data.success ? data.data : []);
+      } catch (err) {
+        setScenterOptions([]);
+      }
+    };
+
     fetchCompanies();
     fetchProfamilies();
+    fetchScenters();
   }, []);
   
   // Estados del formulario
@@ -79,7 +91,8 @@ export default function RegisterPage() {
     companyRole: 'manager', // Rol para empresa existente
     // 🆕 CAMPOS ESPECÍFICOS PARA ESTUDIANTES
     hasCar: null as boolean | null, // Si tiene auto (null inicialmente)
-    disp: '' // Disponibilidad para prácticas
+    disp: '', // Disponibilidad para prácticas
+    scenterId: '' // Centro educativo para usuarios de scenter
   });
 
   const handleInputChange = (field: string, value: string) => {
@@ -143,6 +156,15 @@ export default function RegisterPage() {
       }
     }
 
+    // 🆕 VALIDACIONES ESPECÍFICAS PARA CENTROS EDUCATIVOS
+    if (formData.role === 'scenter') {
+      if (!formData.scenterId) {
+        setError('Debes seleccionar un centro educativo');
+        setIsLoading(false);
+        return;
+      }
+    }
+
     try {
       // Preparar datos del usuario
       const userData = {
@@ -157,6 +179,11 @@ export default function RegisterPage() {
         countryCode: formData.countryCode,
         cityId: formData.cityId
       };
+
+      // 🆕 AGREGAR SCENTERID PARA USUARIOS DE CENTRO EDUCATIVO
+      if (formData.role === 'scenter') {
+        (userData as any).scenterId = formData.scenterId;
+      }
 
       // 🆕 AGREGAR DATOS DEL ESTUDIANTE SI ES ESTUDIANTE
       if (formData.role === 'student') {
@@ -207,6 +234,22 @@ export default function RegisterPage() {
               // Nunca mostrar el modal, redirigir directo
               setShowCompanyModal(false);
               router.push('/dashboard');
+            }
+          } else if (formData.role === 'scenter' && formData.scenterId) {
+            // Asociar usuario con centro educativo
+            try {
+              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user-scenter`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${data.token}`
+                },
+                body: JSON.stringify({ userId: data.user.id, scenterId: formData.scenterId }),
+              });
+              router.push('/dashboard');
+            } catch (err) {
+              console.error('Error asociando usuario con centro:', err);
+              router.push('/dashboard'); // Redirigir de todos modos
             }
           } else {
             router.push('/dashboard');
@@ -477,6 +520,44 @@ export default function RegisterPage() {
                           </Select>
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Scenter Selection - Only for scenter role */}
+                {formData.role === 'scenter' && (
+                  <div className="bg-gradient-to-r from-purple-100 to-indigo-100 rounded-xl p-6 border border-purple-200">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 bg-purple-700 text-white rounded-full flex items-center justify-center font-semibold text-sm">
+                        1.1
+                      </div>
+                      <h3 className="text-lg font-semibold text-purple-950">
+                        Centro Educativo
+                      </h3>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-purple-800 font-medium">Selecciona tu centro educativo</Label>
+                        <Select
+                          value={formData.scenterId}
+                          onValueChange={(value) => setFormData(prev => ({ ...prev, scenterId: value }))}
+                        >
+                          <SelectTrigger className="border-purple-300 focus:border-purple-500">
+                            <SelectValue placeholder="Selecciona el centro educativo al que perteneces" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {scenterOptions.map((scenter: any) => (
+                              <SelectItem key={scenter.id} value={String(scenter.id)}>
+                                {scenter.name} - {scenter.city || 'Sin ciudad especificada'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-purple-700 mt-1">
+                          Solo podrás gestionar estudiantes y datos de este centro educativo
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}

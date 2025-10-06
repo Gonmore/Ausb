@@ -37,6 +37,8 @@
 | Centro Educativo | Email | Usuario | Tipo |
 |------------------|-------|---------|------|
 | **Escuela Primaria Futuro** | `direccion@escuela-futuro.edu` | escuela_futuro | Centro Educativo Privado |
+  Usuario: admin@ipvalencia.cl
+Contraseña: Valencia2024!
 
 ---
 

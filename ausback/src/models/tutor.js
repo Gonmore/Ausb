@@ -7,6 +7,14 @@ export const Tutor = sequelize.define('tutors', {
         primaryKey: true,
         allowNull: false,
         },
+    tutorId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'scenters',
+            key: 'id'
+        }
+    },
     name:{type: DataTypes.STRING,allowNull: true},
     email:{type: DataTypes.STRING,allowNull: true},
     grade:{type: DataTypes.STRING,allowNull: true},

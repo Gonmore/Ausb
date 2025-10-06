@@ -37,5 +37,13 @@ export const Student = sequelize.define('students', {
             key: 'id'
         }
     },
+    tutorId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        references: {
+            model: 'tutors',
+            key: 'id'
+        }
+    },
 })
 

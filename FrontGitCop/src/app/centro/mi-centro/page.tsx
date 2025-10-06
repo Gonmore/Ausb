@@ -21,79 +21,100 @@ import {
   X
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
+import { scenterService } from '@/lib/services';
 
 interface CenterInfo {
   id: number;
   name: string;
-  description: string;
-  address: string;
-  city: string;
-  postalCode: string;
-  phone: string;
-  email: string;
-  website?: string;
-  director: string;
-  studentsCount: number;
-  tutorsCount: number;
-  departmentsCount: number;
-  foundedYear: number;
+  code?: string;
+  city?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  active: boolean;
+}
+
+interface CenterStats {
+  students: number;
+  pendingVerifications: number;
+  totalVerifications: number;
+  tutors: number;
+  profamilys: number;
+}
+
+interface CenterData {
+  scenter: CenterInfo;
+  stats: CenterStats;
 }
 
 export default function MiCentroPage() {
-  const [centerInfo, setCenterInfo] = useState<CenterInfo | null>(null);
+  const [centerData, setCenterData] = useState<CenterData | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedInfo, setEditedInfo] = useState<CenterInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuthStore();
 
   useEffect(() => {
-    // Simulando datos del centro
-    const mockCenterInfo: CenterInfo = {
-      id: 1,
-      name: 'IES Francisco de Vitoria',
-      description: 'Centro de Formación Profesional especializado en tecnología, administración y sanidad. Comprometidos con la excelencia educativa y la inserción laboral de nuestros estudiantes.',
-      address: 'Calle de la Educación, 123',
-      city: 'Madrid',
-      postalCode: '28001',
-      phone: '+34 91 123 45 67',
-      email: 'info@iesfvitoria.edu',
-      website: 'https://www.iesfvitoria.edu',
-      director: 'Dr. María González López',
-      studentsCount: 245,
-      tutorsCount: 18,
-      departmentsCount: 5,
-      foundedYear: 1995
-    };
-
-    setTimeout(() => {
-      setCenterInfo(mockCenterInfo);
-      setEditedInfo(mockCenterInfo);
-      setIsLoading(false);
-    }, 1000);
+    loadCenterData();
   }, []);
+
+  const loadCenterData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await scenterService.getUserScenterInfo();
+      
+      if (response.data.success) {
+        setCenterData(response.data.data);
+        setEditedInfo(response.data.data.scenter);
+      } else {
+        setError('Error al cargar la información del centro');
+      }
+    } catch (err: any) {
+      console.error('Error loading center data:', err);
+      setError(err.response?.data?.message || 'Error al cargar la información del centro');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleEdit = () => {
     setIsEditing(true);
   };
 
   const handleCancel = () => {
-    setEditedInfo(centerInfo);
+    if (centerData) {
+      setEditedInfo(centerData.scenter);
+    }
     setIsEditing(false);
   };
 
   const handleSave = async () => {
-    setIsSaving(true);
+    if (!editedInfo) return;
     
-    // Simular guardado
-    setTimeout(() => {
-      setCenterInfo(editedInfo);
-      setIsEditing(false);
+    setIsSaving(true);
+    try {
+      // Aquí podríamos implementar la actualización si el backend lo soporta
+      // Por ahora solo simulamos el guardado
+      setTimeout(() => {
+        if (centerData) {
+          setCenterData({
+            ...centerData,
+            scenter: editedInfo
+          });
+        }
+        setIsEditing(false);
+        setIsSaving(false);
+      }, 1000);
+    } catch (error) {
+      console.error('Error saving:', error);
       setIsSaving(false);
-    }, 1000);
+    }
   };
 
-  const handleInputChange = (field: keyof CenterInfo, value: string | number) => {
+  const handleInputChange = (field: keyof CenterInfo, value: string | number | boolean) => {
     if (editedInfo) {
       setEditedInfo({ ...editedInfo, [field]: value });
     }
@@ -112,8 +133,15 @@ export default function MiCentroPage() {
     );
   }
 
-  if (!centerInfo || !editedInfo) {
-    return <div>Error cargando la información del centro</div>;
+  if (error || !centerData || !editedInfo) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error || 'Error cargando la información del centro'}</p>
+          <Button onClick={loadCenterData}>Reintentar</Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -164,7 +192,7 @@ export default function MiCentroPage() {
               <GraduationCap className="h-5 w-5 text-blue-600" />
               <div>
                 <p className="text-sm text-gray-600">Estudiantes</p>
-                <p className="text-2xl font-bold text-blue-700">{centerInfo.studentsCount}</p>
+                <p className="text-2xl font-bold text-blue-700">{centerData.stats.students}</p>
               </div>
             </div>
           </CardContent>
@@ -176,7 +204,7 @@ export default function MiCentroPage() {
               <Users className="h-5 w-5 text-green-600" />
               <div>
                 <p className="text-sm text-gray-600">Tutores</p>
-                <p className="text-2xl font-bold text-green-700">{centerInfo.tutorsCount}</p>
+                <p className="text-2xl font-bold text-green-700">{centerData.stats.tutors}</p>
               </div>
             </div>
           </CardContent>
@@ -187,8 +215,8 @@ export default function MiCentroPage() {
             <div className="flex items-center space-x-2">
               <Building2 className="h-5 w-5 text-purple-600" />
               <div>
-                <p className="text-sm text-gray-600">Departamentos</p>
-                <p className="text-2xl font-bold text-purple-700">{centerInfo.departmentsCount}</p>
+                <p className="text-sm text-gray-600">Familias Profesionales</p>
+                <p className="text-2xl font-bold text-purple-700">{centerData.stats.profamilys}</p>
               </div>
             </div>
           </CardContent>
@@ -199,10 +227,8 @@ export default function MiCentroPage() {
             <div className="flex items-center space-x-2">
               <School className="h-5 w-5 text-orange-600" />
               <div>
-                <p className="text-sm text-gray-600">Años de Historia</p>
-                <p className="text-2xl font-bold text-orange-700">
-                  {new Date().getFullYear() - centerInfo.foundedYear}
-                </p>
+                <p className="text-sm text-gray-600">Verificaciones Pendientes</p>
+                <p className="text-2xl font-bold text-orange-700">{centerData.stats.pendingVerifications}</p>
               </div>
             </div>
           </CardContent>
@@ -229,52 +255,31 @@ export default function MiCentroPage() {
                   className="mt-1"
                 />
               ) : (
-                <p className="mt-1 text-lg font-semibold text-gray-900">{centerInfo.name}</p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">{centerData.scenter.name}</p>
               )}
             </div>
 
             <div>
-              <Label htmlFor="description">Descripción</Label>
-              {isEditing ? (
-                <Textarea
-                  id="description"
-                  value={editedInfo.description}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
-                  className="mt-1"
-                  rows={4}
-                />
-              ) : (
-                <p className="mt-1 text-gray-700">{centerInfo.description}</p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="director">Director/a</Label>
+              <Label htmlFor="code">Código</Label>
               {isEditing ? (
                 <Input
-                  id="director"
-                  value={editedInfo.director}
-                  onChange={(e) => handleInputChange('director', e.target.value)}
+                  id="code"
+                  value={editedInfo.code || ''}
+                  onChange={(e) => handleInputChange('code', e.target.value)}
                   className="mt-1"
                 />
               ) : (
-                <p className="mt-1 text-gray-900">{centerInfo.director}</p>
+                <p className="mt-1 text-gray-900">{centerData.scenter.code || 'No especificado'}</p>
               )}
             </div>
 
             <div>
-              <Label htmlFor="foundedYear">Año de Fundación</Label>
-              {isEditing ? (
-                <Input
-                  id="foundedYear"
-                  type="number"
-                  value={editedInfo.foundedYear}
-                  onChange={(e) => handleInputChange('foundedYear', parseInt(e.target.value))}
-                  className="mt-1"
-                />
-              ) : (
-                <p className="mt-1 text-gray-900">{centerInfo.foundedYear}</p>
-              )}
+              <Label>Estado</Label>
+              <div className="mt-1">
+                <Badge variant={centerData.scenter.active ? "default" : "secondary"}>
+                  {centerData.scenter.active ? 'Activo' : 'Inactivo'}
+                </Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -293,46 +298,30 @@ export default function MiCentroPage() {
               {isEditing ? (
                 <Input
                   id="address"
-                  value={editedInfo.address}
+                  value={editedInfo.address || ''}
                   onChange={(e) => handleInputChange('address', e.target.value)}
                   className="mt-1"
                 />
               ) : (
                 <div className="mt-1 flex items-center space-x-2 text-gray-700">
                   <MapPin className="h-4 w-4" />
-                  <span>{centerInfo.address}</span>
+                  <span>{centerData.scenter.address || 'No especificada'}</span>
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="city">Ciudad</Label>
-                {isEditing ? (
-                  <Input
-                    id="city"
-                    value={editedInfo.city}
-                    onChange={(e) => handleInputChange('city', e.target.value)}
-                    className="mt-1"
-                  />
-                ) : (
-                  <p className="mt-1 text-gray-900">{centerInfo.city}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="postalCode">Código Postal</Label>
-                {isEditing ? (
-                  <Input
-                    id="postalCode"
-                    value={editedInfo.postalCode}
-                    onChange={(e) => handleInputChange('postalCode', e.target.value)}
-                    className="mt-1"
-                  />
-                ) : (
-                  <p className="mt-1 text-gray-900">{centerInfo.postalCode}</p>
-                )}
-              </div>
+            <div>
+              <Label htmlFor="city">Ciudad</Label>
+              {isEditing ? (
+                <Input
+                  id="city"
+                  value={editedInfo.city || ''}
+                  onChange={(e) => handleInputChange('city', e.target.value)}
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-gray-900">{centerData.scenter.city || 'No especificada'}</p>
+              )}
             </div>
 
             <div>
@@ -340,14 +329,14 @@ export default function MiCentroPage() {
               {isEditing ? (
                 <Input
                   id="phone"
-                  value={editedInfo.phone}
+                  value={editedInfo.phone || ''}
                   onChange={(e) => handleInputChange('phone', e.target.value)}
                   className="mt-1"
                 />
               ) : (
                 <div className="mt-1 flex items-center space-x-2 text-gray-700">
                   <Phone className="h-4 w-4" />
-                  <span>{centerInfo.phone}</span>
+                  <span>{centerData.scenter.phone || 'No especificado'}</span>
                 </div>
               )}
             </div>
@@ -358,44 +347,15 @@ export default function MiCentroPage() {
                 <Input
                   id="email"
                   type="email"
-                  value={editedInfo.email}
+                  value={editedInfo.email || ''}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   className="mt-1"
                 />
               ) : (
                 <div className="mt-1 flex items-center space-x-2 text-gray-700">
                   <Mail className="h-4 w-4" />
-                  <span>{centerInfo.email}</span>
+                  <span>{centerData.scenter.email || 'No especificado'}</span>
                 </div>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="website">Sitio Web</Label>
-              {isEditing ? (
-                <Input
-                  id="website"
-                  value={editedInfo.website || ''}
-                  onChange={(e) => handleInputChange('website', e.target.value)}
-                  className="mt-1"
-                  placeholder="https://..."
-                />
-              ) : (
-                centerInfo.website ? (
-                  <div className="mt-1 flex items-center space-x-2 text-gray-700">
-                    <Globe className="h-4 w-4" />
-                    <a 
-                      href={centerInfo.website} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline"
-                    >
-                      {centerInfo.website}
-                    </a>
-                  </div>
-                ) : (
-                  <p className="mt-1 text-gray-500 italic">No especificado</p>
-                )
               )}
             </div>
           </CardContent>
@@ -422,7 +382,7 @@ export default function MiCentroPage() {
             </Button>
             <Button variant="outline" className="h-20 flex-col space-y-2">
               <Building2 className="h-6 w-6" />
-              <span>Ver Empresas Colaboradoras</span>
+              <span>Ver Familias Profesionales</span>
             </Button>
           </div>
         </CardContent>

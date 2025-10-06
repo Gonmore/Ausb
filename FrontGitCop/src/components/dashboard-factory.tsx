@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { AlertCircle, CheckCircle, Clock, TrendingUp, FileText, Users, Building, Loader2, User, MapPin, Car } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, TrendingUp, FileText, Users, Building, Loader2, User, MapPin, Car, GraduationCap, BookOpen, UserCheck, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { UserRole } from '@/types';
 import { apiClient } from '@/lib/api';
@@ -698,28 +698,297 @@ function CompanyDashboard() {
 
 function CenterDashboard() {
   const { user } = useAuthStore();
+  const router = useRouter();
+  const [scenterInfo, setScenterInfo] = useState<any>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [students, setStudents] = useState<any[]>([]);
+  const [profamilys, setProfamilys] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      // Cargar información del centro
+      const infoResponse = await apiClient.get('/api/scenter-user/info');
+      if (infoResponse.data?.success) {
+        setScenterInfo(infoResponse.data.data);
+      }
+
+      // Cargar estadísticas
+      const statsResponse = await apiClient.get('/api/scenter-user/stats');
+      if (statsResponse.data?.success) {
+        setStats(statsResponse.data.data);
+      }
+
+      // Cargar estudiantes (primeros 5)
+      const studentsResponse = await apiClient.get('/api/scenter-user/students?limit=5');
+      if (studentsResponse.data?.success) {
+        setStudents(studentsResponse.data.data || []);
+      }
+
+      // Cargar profamilys
+      const profamilysResponse = await apiClient.get('/api/scenter-user/profamilys');
+      if (profamilysResponse.data?.success) {
+        setProfamilys(profamilysResponse.data.data || []);
+      }
+
+    } catch (err: any) {
+      console.error('Error loading dashboard data:', err);
+      setError('Error al cargar los datos del dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="animate-pulse">
+          <div className="h-32 bg-gray-200 rounded-lg mb-4"></div>
+          <div className="h-64 bg-gray-200 rounded-lg"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Panel de Centro de Estudios 🎓
-          </h1>
-          <p className="text-gray-600">
-            Gestiona tus estudiantes y programas académicos
-          </p>
+    <div className="max-w-7xl mx-auto p-6 space-y-8">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-purple-700 to-indigo-800 rounded-xl p-8 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">
+              ¡Bienvenido, {user?.name}! 🎓
+            </h1>
+            <p className="text-purple-200 text-lg">
+              {scenterInfo ? `Gestionando ${scenterInfo.name}` : 'Panel de Centro Educativo'}
+            </p>
+          </div>
+          <div className="hidden md:block text-right">
+            <div className="text-4xl font-bold mb-1">{stats?.totalStudents || 0}</div>
+            <div className="text-purple-300">Estudiantes</div>
+          </div>
         </div>
       </div>
 
+      {/* Información del Centro */}
+      {scenterInfo && (
+        <Card className="border-l-4 border-l-purple-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building className="w-5 h-5 text-purple-600" />
+              Información del Centro
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-gray-600">Nombre</p>
+                <p className="font-semibold">{scenterInfo.name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Ciudad</p>
+                <p className="font-semibold">{scenterInfo.city || 'No especificada'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Código</p>
+                <p className="font-semibold">{scenterInfo.code || 'No especificado'}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Estadísticas */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Users className="w-6 h-6 text-blue-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Estudiantes</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.totalStudents || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <BookOpen className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Familias Profesionales</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.totalProfamilys || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <UserCheck className="w-6 h-6 text-yellow-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Estudiantes Verificados</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.verifiedStudents || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <GraduationCap className="w-6 h-6 text-purple-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Aplicaciones</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.totalApplications || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Acciones Rápidas */}
       <Card>
         <CardHeader>
-          <CardTitle>Bienvenido, {user?.name}</CardTitle>
+          <CardTitle>Acciones Rápidas</CardTitle>
           <CardDescription>
-            Dashboard dinámico para centros de estudios será implementado aquí
+            Gestiona estudiantes, familias profesionales y verificaciones académicas
           </CardDescription>
         </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Button
+              onClick={() => router.push('/centro/tablon-alumnos')}
+              className="flex items-center gap-2 h-auto p-4"
+              variant="outline"
+            >
+              <Plus className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-semibold">Agregar Estudiante</div>
+                <div className="text-sm text-gray-600">Crear estudiante verificado</div>
+              </div>
+            </Button>
+
+            <Button
+              onClick={() => router.push('/centro/gestion')}
+              className="flex items-center gap-2 h-auto p-4"
+              variant="outline"
+            >
+              <BookOpen className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-semibold">Gestionar Familias</div>
+                <div className="text-sm text-gray-600">Administrar familias profesionales</div>
+              </div>
+            </Button>
+
+            <Button
+              onClick={() => router.push('/centro/verificaciones')}
+              className="flex items-center gap-2 h-auto p-4"
+              variant="outline"
+            >
+              <UserCheck className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-semibold">Verificaciones</div>
+                <div className="text-sm text-gray-600">Revisar datos académicos</div>
+              </div>
+            </Button>
+          </div>
+        </CardContent>
       </Card>
+
+      {/* Estudiantes Recientes */}
+      {students.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Estudiantes Recientes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {students.slice(0, 5).map((student: any) => (
+                <div key={student.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <User className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold">{student.user?.name} {student.user?.surname}</p>
+                      <p className="text-sm text-gray-600">{student.user?.email}</p>
+                    </div>
+                  </div>
+                  <Badge variant={student.verified ? "default" : "secondary"}>
+                    {student.verified ? "Verificado" : "Pendiente"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+            {students.length > 5 && (
+              <Button
+                onClick={() => router.push('/centro/tablon-alumnos')}
+                variant="outline"
+                className="w-full mt-4"
+              >
+                Ver todos los estudiantes
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Familias Profesionales */}
+      {profamilys.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5" />
+              Familias Profesionales
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {profamilys.map((profamily: any) => (
+                <div key={profamily.id} className="p-4 border rounded-lg">
+                  <h4 className="font-semibold">{profamily.name}</h4>
+                  <p className="text-sm text-gray-600">{profamily.description}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <p className="text-red-700">{error}</p>
+            <Button onClick={loadDashboardData} variant="outline" size="sm" className="mt-2">
+              Reintentar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

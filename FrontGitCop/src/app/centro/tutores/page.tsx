@@ -7,18 +7,27 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { User, Search, Users, Phone, Mail, Plus, Building2 } from 'lucide-react';
+import { tutorsService, scenterService } from '@/lib/services';
 import { useAuthStore } from '@/stores/auth';
 
 interface Tutor {
-  id: number;
+  id: string;
   name: string;
   email: string;
-  phone?: string;
-  department: string;
-  specialization: string[];
-  studentsCount: number;
-  status: 'activo' | 'inactivo';
-  company?: string;
+  grade?: string;
+  degree?: string;
+  tutorId?: number;
+  scenter?: {
+    id: number;
+    name: string;
+    city: string;
+  };
+  profamily?: {
+    id: number;
+    name: string;
+    description: string;
+  };
+  studentsCount?: number;
 }
 
 export default function TutoresPage() {
@@ -26,91 +35,53 @@ export default function TutoresPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('todos');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuthStore();
 
   useEffect(() => {
-    // Simulando datos de tutores
-    const mockTutors: Tutor[] = [
-      {
-        id: 1,
-        name: 'Prof. Elena Martínez',
-        email: 'elena.martinez@centro.edu',
-        phone: '+34 600 111 222',
-        department: 'Informática y Comunicaciones',
-        specialization: ['Desarrollo Web', 'Bases de Datos', 'Redes'],
-        studentsCount: 8,
-        status: 'activo',
-        company: 'TechCorp'
-      },
-      {
-        id: 2,
-        name: 'Prof. Miguel Ruiz',
-        email: 'miguel.ruiz@centro.edu',
-        phone: '+34 600 333 444',
-        department: 'Administración y Gestión',
-        specialization: ['Contabilidad', 'Recursos Humanos'],
-        studentsCount: 12,
-        status: 'activo'
-      },
-      {
-        id: 3,
-        name: 'Prof. Carmen Silva',
-        email: 'carmen.silva@centro.edu',
-        phone: '+34 600 555 666',
-        department: 'Sanidad',
-        specialization: ['Enfermería', 'Auxiliar de Enfermería'],
-        studentsCount: 6,
-        status: 'activo',
-        company: 'Hospital Central'
-      },
-      {
-        id: 4,
-        name: 'Prof. Antonio López',
-        email: 'antonio.lopez@centro.edu',
-        phone: '+34 600 777 888',
-        department: 'Electricidad y Electrónica',
-        specialization: ['Instalaciones Eléctricas', 'Automatización'],
-        studentsCount: 0,
-        status: 'inactivo'
+    const loadTutors = async () => {
+      try {
+        setIsLoading(true);
+        // Obtener el ID del centro del usuario actual
+        const userScenterInfo = await scenterService.getUserScenterInfo();
+        const scenterId = userScenterInfo.data.data.scenter.id;
+        const response = await tutorsService.getByScenter(scenterId);
+        setTutors(response.data || []);
+      } catch (error) {
+        console.error('Error loading tutors:', error);
+        setError('Error al cargar los tutores');
+      } finally {
+        setIsLoading(false);
       }
-    ];
+    };
 
-    setTimeout(() => {
-      setTutors(mockTutors);
-      setIsLoading(false);
-    }, 1000);
+    loadTutors();
   }, []);
 
   const filteredTutors = tutors.filter(tutor => {
     const matchesSearch = tutor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         tutor.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         tutor.specialization.some(spec => spec.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus = filterStatus === 'todos' || tutor.status === filterStatus;
-    return matchesSearch && matchesStatus;
+                         tutor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (tutor.grade && tutor.grade.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         (tutor.degree && tutor.degree.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         (tutor.profamily?.name && tutor.profamily.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesSearch;
   });
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      activo: { label: 'Activo', className: 'bg-green-100 text-green-800' },
-      inactivo: { label: 'Inactivo', className: 'bg-gray-100 text-gray-800' }
-    };
-    
-    const config = statusConfig[status as keyof typeof statusConfig];
+  const getStatusBadge = (tutor: Tutor) => {
+    // Como no tenemos campo status, mostramos un badge genérico
     return (
-      <Badge className={config.className}>
-        {config.label}
+      <Badge className="bg-blue-100 text-blue-800">
+        Tutor
       </Badge>
     );
   };
 
-  if (isLoading) {
+  if (error) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Cargando tutores...</p>
-          </div>
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>Reintentar</Button>
         </div>
       </div>
     );
@@ -148,31 +119,17 @@ export default function TutoresPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   id="search"
-                  placeholder="Nombre, departamento o especialización..."
+                  placeholder="Nombre, email, grado o familia profesional..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
             </div>
-            
-            <div>
-              <Label htmlFor="status">Estado</Label>
-              <select
-                id="status"
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="todos">Todos los estados</option>
-                <option value="activo">Activo</option>
-                <option value="inactivo">Inactivo</option>
-              </select>
-            </div>
 
             <div className="flex items-end">
-              <Button variant="outline" className="w-full">
-                Exportar Lista
+              <Button variant="outline" className="w-full" onClick={() => setSearchTerm('')}>
+                Limpiar búsqueda
               </Button>
             </div>
           </div>
@@ -196,25 +153,11 @@ export default function TutoresPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Badge className="h-5 w-5 text-green-600" />
+              <Users className="h-5 w-5 text-green-600" />
               <div>
-                <p className="text-sm text-gray-600">Activos</p>
+                <p className="text-sm text-gray-600">Con Estudiantes</p>
                 <p className="text-2xl font-bold text-green-700">
-                  {tutors.filter(t => t.status === 'activo').length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Users className="h-5 w-5 text-blue-600" />
-              <div>
-                <p className="text-sm text-gray-600">Estudiantes Total</p>
-                <p className="text-2xl font-bold text-blue-700">
-                  {tutors.reduce((acc, tutor) => acc + tutor.studentsCount, 0)}
+                  {tutors.filter(t => t.studentsCount && t.studentsCount > 0).length}
                 </p>
               </div>
             </div>
@@ -226,9 +169,23 @@ export default function TutoresPage() {
             <div className="flex items-center space-x-2">
               <Building2 className="h-5 w-5 text-purple-600" />
               <div>
-                <p className="text-sm text-gray-600">Departamentos</p>
+                <p className="text-sm text-gray-600">Familias Profesionales</p>
                 <p className="text-2xl font-bold text-purple-700">
-                  {new Set(tutors.map(t => t.department)).size}
+                  {new Set(tutors.map(t => t.profamily?.id).filter(Boolean)).size}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <Mail className="h-5 w-5 text-orange-600" />
+              <div>
+                <p className="text-sm text-gray-600">Con Email</p>
+                <p className="text-2xl font-bold text-orange-700">
+                  {tutors.filter(t => t.email).length}
                 </p>
               </div>
             </div>
@@ -258,8 +215,8 @@ export default function TutoresPage() {
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-3">
                       <h3 className="text-lg font-semibold text-gray-900">{tutor.name}</h3>
-                      {getStatusBadge(tutor.status)}
-                      {tutor.studentsCount > 0 && (
+                      {getStatusBadge(tutor)}
+                      {tutor.studentsCount && tutor.studentsCount > 0 && (
                         <Badge variant="outline" className="text-blue-600">
                           {tutor.studentsCount} estudiantes
                         </Badge>
@@ -272,36 +229,33 @@ export default function TutoresPage() {
                         <span>{tutor.email}</span>
                       </div>
                       
-                      {tutor.phone && (
+                      {tutor.grade && (
                         <div className="flex items-center space-x-2">
-                          <Phone className="h-4 w-4" />
-                          <span>{tutor.phone}</span>
+                          <User className="h-4 w-4" />
+                          <span>Grado: {tutor.grade}</span>
                         </div>
                       )}
                       
-                      <div className="flex items-center space-x-2">
-                        <Building2 className="h-4 w-4" />
-                        <span>{tutor.department}</span>
-                      </div>
-                      
-                      {tutor.company && (
+                      {tutor.degree && (
                         <div className="flex items-center space-x-2">
                           <Building2 className="h-4 w-4" />
-                          <span>Empresa: {tutor.company}</span>
+                          <span>Título: {tutor.degree}</span>
                         </div>
                       )}
-                    </div>
-
-                    {/* Especializaciones */}
-                    <div className="mb-3">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Especializaciones:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {tutor.specialization.map((spec, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {spec}
-                          </Badge>
-                        ))}
-                      </div>
+                      
+                      {tutor.profamily && (
+                        <div className="flex items-center space-x-2">
+                          <Users className="h-4 w-4" />
+                          <span>Familia: {tutor.profamily.name}</span>
+                        </div>
+                      )}
+                      
+                      {tutor.scenter && (
+                        <div className="flex items-center space-x-2">
+                          <Building2 className="h-4 w-4" />
+                          <span>Centro: {tutor.scenter.name}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   
