@@ -6,8 +6,71 @@ import { User } from '../models/users.js';
 import { Profamily } from '../models/profamily.js';
 import { Company } from '../models/company.js';
 import { RevealedCV } from '../models/revealedCV.js';
+import { AcademicVerification } from '../models/academicVerification.js';
 import sequelize from '../database/database.js';
 import logger from '../logs/logger.js';
+
+/**
+ * Función auxiliar para comparar si dos objetos academicBackground son iguales
+ */
+function areAcademicBackgroundsEqual(current, updated) {
+    if (!current && !updated) return true;
+    if (!current || !updated) return false;
+
+    // Comparar los campos relevantes: scenter, profamily, status
+    const fieldsToCompare = ['scenter', 'profamily', 'status'];
+
+    for (const field of fieldsToCompare) {
+        const currentValue = current[field];
+        const updatedValue = updated[field];
+
+        // Si uno es null/undefined y el otro no, son diferentes
+        if ((currentValue == null) !== (updatedValue == null)) {
+            return false;
+        }
+
+        // Si ambos existen, compararlos
+        if (currentValue != null && updatedValue != null) {
+            // Convertir a string para comparación segura
+            if (String(currentValue) !== String(updatedValue)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Función auxiliar para verificar si existe una verificación aprobada para el estado académico actual
+ */
+async function hasApprovedVerificationForCurrentState(studentId, academicBackground, transaction = null) {
+    if (!academicBackground || !academicBackground.scenter || !academicBackground.profamily) {
+        return false;
+    }
+
+    // Buscar todas las verificaciones aprobadas para este estudiante
+    const approvedVerifications = await AcademicVerification.findAll({
+        where: {
+            studentId: studentId,
+            status: 'approved'
+        },
+        transaction
+    });
+
+    // Comparar manualmente con cada verificación aprobada
+    for (const verification of approvedVerifications) {
+        const academicData = verification.academicData;
+        if (academicData &&
+            academicData.scenter === academicBackground.scenter &&
+            String(academicData.profamily) === String(academicBackground.profamily) &&
+            academicData.status === academicBackground.status) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 /**
  * Obtener el CV completo del estudiante actual con toda la información para matching
@@ -246,9 +309,47 @@ async function createOrUpdateCv(req, res) {
                 transaction: t
             });
 
+            // 🔥 LÓGICA DE VERIFICACIÓN ACADÉMICA
+            // Si hay cambios en academicBackground y estaba verificado, resetear estado
+            let newVerificationStatus = cv?.academicVerificationStatus || 'unverified';
+            let shouldCreateNewVerification = false;
+
+            if (cv && cv.academicBackground && academicBackground) {
+                // Comparar si el academicBackground cambió
+                const academicBackgroundChanged = !areAcademicBackgroundsEqual(cv.academicBackground, academicBackground);
+
+                if (academicBackgroundChanged) {
+                    if (cv.academicVerificationStatus === 'verified') {
+                        // Si estaba verificado y cambió, resetear a unverified
+                        newVerificationStatus = 'unverified';
+                        shouldCreateNewVerification = true;
+                        logger.info(`Academic verification reset for student ${student.id} - academic background changed`);
+                    } else {
+                        // Si no estaba verificado, verificar si vuelve a un estado previamente aprobado
+                        const hasPreviousApproval = await hasApprovedVerificationForCurrentState(student.id, academicBackground, t);
+                        if (hasPreviousApproval) {
+                            newVerificationStatus = 'verified';
+                            logger.info(`Academic verification restored for student ${student.id} - returned to previously approved state`);
+                        } else {
+                            shouldCreateNewVerification = true;
+                        }
+                    }
+                }
+            } else if (academicBackground && (!cv || !cv.academicBackground)) {
+                // Nuevo academicBackground - verificar si ya fue aprobado antes
+                const hasPreviousApproval = await hasApprovedVerificationForCurrentState(student.id, academicBackground, t);
+                if (hasPreviousApproval) {
+                    newVerificationStatus = 'verified';
+                    logger.info(`Academic verification restored for student ${student.id} - new academic background matches previous approval`);
+                } else {
+                    shouldCreateNewVerification = true;
+                }
+            }
+
             const cvData = {
                 summary,
                 academicBackground,
+                academicVerificationStatus: newVerificationStatus,
                 contactEmail: student.user.email,
                 contactPhone: student.user.phone,
                 availability,
@@ -265,6 +366,62 @@ async function createOrUpdateCv(req, res) {
                     studentId: student.id,
                     ...cvData
                 }, { transaction: t });
+            }
+
+            // 🔥 CREAR NUEVA SOLICITUD DE VERIFICACIÓN SI ES NECESARIO
+            if (shouldCreateNewVerification && academicBackground && academicBackground.scenter && academicBackground.profamily) {
+                try {
+                    // Buscar si ya existe una solicitud pendiente para este estado académico
+                    const existingPendingVerifications = await AcademicVerification.findAll({
+                        where: {
+                            studentId: student.id,
+                            status: 'pending'
+                        },
+                        transaction: t
+                    });
+
+                    // Verificar manualmente si ya existe una pendiente para estos datos académicos
+                    let hasPendingVerification = false;
+                    for (const verification of existingPendingVerifications) {
+                        const academicData = verification.academicData;
+                        if (academicData &&
+                            academicData.scenter === academicBackground.scenter &&
+                            String(academicData.profamily) === String(academicBackground.profamily) &&
+                            academicData.status === academicBackground.status) {
+                            hasPendingVerification = true;
+                            break;
+                        }
+                    }
+
+                    if (!hasPendingVerification) {
+                        // Buscar el scenter para obtener su ID
+                        const { Scenter } = await import('../models/scenter.js');
+                        const scenter = await Scenter.findOne({
+                            where: { name: academicBackground.scenter },
+                            transaction: t
+                        });
+
+                        if (scenter) {
+                            await AcademicVerification.create({
+                                studentId: student.id,
+                                scenterId: scenter.id,
+                                status: 'pending',
+                                academicData: {
+                                    scenter: academicBackground.scenter,
+                                    profamily: academicBackground.profamily,
+                                    status: academicBackground.status,
+                                    submittedAt: new Date().toISOString()
+                                },
+                                submittedAt: new Date()
+                            }, { transaction: t });
+
+                            logger.info(`New academic verification request created for student ${student.id}`);
+                        }
+                    }
+                } catch (verificationError) {
+                    logger.error('Error creating academic verification request:', verificationError);
+                    // No fallar la transacción por esto
+                }
             }
 
             return cv;
