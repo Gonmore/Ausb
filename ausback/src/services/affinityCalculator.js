@@ -143,9 +143,12 @@
     if (profamilyAffinity.level === "exact_match") {
       // 🔥 PROFAMILY EXACTA: Score MUY ALTO independientemente de skills
       // Dar score alto por profamily + bonus por skills coincidentes
-      const profamilyBaseScore = 8.0; // Score base alto por profamily exacta
+      // 🔥 CORRECCIÓN: Multiplicar por el score de verificación (1.6 para verificado, 1.3 para no verificado)
+      const profamilyBaseScore = 5.0; // Score base = 5.0
+      const verificationMultiplier = profamilyAffinity.score; // 1.6 para verificado, 1.3 para no verificado
+      const profamilyScore = profamilyBaseScore * verificationMultiplier; // 8.0 para verificado, 6.5 para no verificado
       const skillBonus = Math.min(score * 0.2, 1.0); // Bonus pequeño por skills (máximo 1.0)
-      finalScore = profamilyBaseScore + skillBonus;
+      finalScore = profamilyScore + skillBonus;
     } else if (profamilyAffinity.level === "related_match") {
       // PROFAMILY RELACIONADA: Score medio-alto
       finalScore = Math.max(6.0, baseScore + (score > 0 ? Math.min(score * 0.15, 0.8) : 0));

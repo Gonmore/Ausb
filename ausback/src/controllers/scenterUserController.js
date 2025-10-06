@@ -3,6 +3,10 @@ import logger from '../logs/logger.js';
 import { Status } from '../constants/index.js';
 import { encriptar } from '../common/bcrypt.js';
 import sequelize from '../database/database.js';
+import * as XLSX from 'xlsx';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 /**
  * Middleware para verificar que el usuario es de tipo scenter y obtener su scenter
@@ -475,8 +479,230 @@ export async function assignTutorToStudent(req, res) {
 }
 
 /**
- * Obtener estudiantes del scenter con información de postulaciones
+ * Agregar estudiantes desde archivo Excel
  */
+export async function bulkAddVerifiedStudents(req, res) {
+    try {
+        const { scenterUser } = req;
+        const scenter = scenterUser.scenters[0];
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'No se ha proporcionado un archivo Excel'
+            });
+        }
+
+        // Leer el archivo Excel
+        const workbook = XLSX.readFile(req.file.path);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        if (!jsonData || jsonData.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'El archivo Excel está vacío o no tiene el formato correcto'
+            });
+        }
+
+        const results = {
+            success: [],
+            errors: [],
+            total: jsonData.length
+        };
+
+        // Procesar cada fila del Excel
+        for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const rowNumber = i + 2; // +2 porque Excel empieza en 1 y hay headers
+
+            try {
+                // Mapear columnas comunes (pueden variar según el centro)
+                const studentData = {
+                    name: row.Nombre || row.nombre || row.Name || row.name,
+                    surname: row.Apellido || row.apellido || row.Apellidos || row.apellidos || row.Surname || row.surname,
+                    email: row.Email || row.email || row.Correo || row.correo,
+                    phone: row.Telefono || row.telefono || row.Phone || row.phone || row.Teléfono || row.teléfono,
+                    grade: row.Grado || row.grado || row.Titulo || row.titulo || row.Title || row.title,
+                    course: row.Curso || row.curso || row.Course || row.course,
+                    car: row.Vehiculo || row.vehiculo || row.Coche || row.coche || row.Car || row.car || false,
+                    profamilyName: row.FamiliaProfesional || row.familiaprofesional || row.Profamily || row.profamily || row['Familia Profesional'] || row['familia profesional'],
+                    academicBackground: {
+                        grade: row.Grado || row.grado || row.Titulo || row.titulo,
+                        course: row.Curso || row.curso,
+                        enrollmentYear: row.AñoMatricula || row.añoMatricula || row['Año Matrícula'] || row['año matrícula'],
+                        graduationYear: row.AñoGraduacion || row.añoGraduacion || row['Año Graduación'] || row['año graduación'],
+                        gpa: row.NotaMedia || row.notaMedia || row.GPA || row.gpa,
+                        status: 'verified'
+                    }
+                };
+
+                // Validar datos requeridos
+                if (!studentData.name || !studentData.surname || !studentData.email) {
+                    results.errors.push({
+                        row: rowNumber,
+                        message: `Faltan datos requeridos: ${!studentData.name ? 'Nombre, ' : ''}${!studentData.surname ? 'Apellido, ' : ''}${!studentData.email ? 'Email' : ''}`.replace(/, $/, '')
+                    });
+                    continue;
+                }
+
+                // Verificar que no existe un usuario con ese email
+                const existingUser = await User.findOne({
+                    where: { email: studentData.email.trim() }
+                });
+
+                if (existingUser) {
+                    results.errors.push({
+                        row: rowNumber,
+                        message: `Ya existe un usuario con el email: ${studentData.email}`
+                    });
+                    continue;
+                }
+
+                // Buscar o crear familia profesional
+                let profamilyId = null;
+                if (studentData.profamilyName) {
+                    // Buscar familia profesional existente
+                    let profamily = await Profamily.findOne({
+                        where: { name: studentData.profamilyName.trim() }
+                    });
+
+                    if (!profamily) {
+                        // Crear nueva familia profesional
+                        profamily = await Profamily.create({
+                            name: studentData.profamilyName.trim(),
+                            description: `Familia profesional: ${studentData.profamilyName.trim()}`
+                        });
+                        logger.info(`New profamily ${profamily.id} created from Excel import`);
+                    }
+
+                    // Verificar si ya está asociada al centro
+                    const existingRelation = await ScenterProfamily.findOne({
+                        where: { scenterId: scenter.id, profamilyId: profamily.id }
+                    });
+
+                    if (!existingRelation) {
+                        // Asociar al centro
+                        await ScenterProfamily.create({
+                            scenterId: scenter.id,
+                            profamilyId: profamily.id
+                        });
+                    }
+
+                    profamilyId = profamily.id;
+                }
+
+                if (!profamilyId) {
+                    results.errors.push({
+                        row: rowNumber,
+                        message: 'No se pudo determinar la familia profesional'
+                    });
+                    continue;
+                }
+
+                // Generar contraseña temporal
+                const tempPassword = Math.random().toString(36).slice(-8) + 'Temp!';
+                const hashedPassword = await encriptar(tempPassword);
+
+                // Crear usuario
+                const user = await User.create({
+                    username: studentData.email.split('@')[0] + Math.random().toString(36).slice(-4),
+                    email: studentData.email.trim(),
+                    password: hashedPassword,
+                    role: 'student',
+                    name: studentData.name.trim(),
+                    surname: studentData.surname.trim(),
+                    phone: studentData.phone ? studentData.phone.toString().trim() : null,
+                    active: true,
+                    status: 'active'
+                });
+
+                // Crear estudiante
+                const student = await Student.create({
+                    userId: user.id,
+                    grade: studentData.grade || null,
+                    course: studentData.course || null,
+                    car: Boolean(studentData.car),
+                    profamilyId: profamilyId
+                });
+
+                // Crear CV con información académica verificada
+                const cvData = {
+                    studentId: student.id,
+                    academicBackground: {
+                        ...studentData.academicBackground,
+                        scenter: scenter.name,
+                        profamily: profamilyId,
+                        status: 'verified'
+                    },
+                    academicVerificationStatus: 'verified',
+                    academicVerifiedAt: new Date(),
+                    academicVerifiedBy: scenterUser.user.id
+                };
+
+                const cv = await Cv.create(cvData);
+
+                results.success.push({
+                    row: rowNumber,
+                    student: {
+                        id: student.id,
+                        name: user.name,
+                        surname: user.surname,
+                        email: user.email,
+                        tempPassword: tempPassword
+                    }
+                });
+
+                logger.info(`Verified student ${user.id} created from Excel by scenter user ${scenterUser.user.id}`);
+
+            } catch (rowError) {
+                results.errors.push({
+                    row: rowNumber,
+                    message: rowError.message || 'Error procesando la fila'
+                });
+                logger.error(`Error processing row ${rowNumber}:`, rowError);
+            }
+        }
+
+        // Limpiar archivo temporal
+        try {
+            fs.unlinkSync(req.file.path);
+        } catch (fileError) {
+            logger.error('Error deleting temp file:', fileError);
+        }
+
+        res.json({
+            success: true,
+            message: `Procesamiento completado. ${results.success.length} estudiantes creados, ${results.errors.length} errores.`,
+            data: {
+                total: results.total,
+                successCount: results.success.length,
+                errorCount: results.errors.length,
+                success: results.success,
+                errors: results.errors
+            }
+        });
+
+    } catch (error) {
+        logger.error('Error bulkAddVerifiedStudents:', error);
+
+        // Limpiar archivo temporal en caso de error
+        if (req.file && req.file.path) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (fileError) {
+                logger.error('Error deleting temp file on error:', fileError);
+            }
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Error procesando archivo Excel',
+            error: error.message
+        });
+    }
+}
 export async function getScenterStudents(req, res) {
     try {
         const { scenterUser } = req;
@@ -698,6 +924,7 @@ export default {
     addProfamilyToScenter,
     getScenterProfamilys,
     addVerifiedStudent,
+    bulkAddVerifiedStudents,
     assignTutorToStudent,
     getScenterStudents,
     getScenterStats
